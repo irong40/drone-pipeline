@@ -69,38 +69,38 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GAP-10 | — | Pending |
-| GAP-11 | — | Pending |
-| GAP-13 | — | Pending |
-| DEPR-01 | — | Pending |
-| ERR-01 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
-| TEST-03 | — | Pending |
-| UNIT-01 | — | Pending |
-| UNIT-02 | — | Pending |
-| UNIT-03 | — | Pending |
-| UNIT-04 | — | Pending |
-| UNIT-05 | — | Pending |
-| UNIT-06 | — | Pending |
-| UNIT-07 | — | Pending |
-| UNIT-08 | — | Pending |
-| UNIT-09 | — | Pending |
-| UNIT-10 | — | Pending |
-| UNIT-11 | — | Pending |
-| UNIT-12 | — | Pending |
-| UNIT-13 | — | Pending |
-| UNIT-14 | — | Pending |
-| INTG-01 | — | Pending |
-| INTG-02 | — | Pending |
-| INTG-03 | — | Pending |
-| INTG-04 | — | Pending |
+| GAP-10 | Phase 1 | Pending |
+| GAP-11 | Phase 1 | Pending |
+| GAP-13 | Phase 1 | Pending |
+| DEPR-01 | Phase 1 | Pending |
+| ERR-01 | Phase 1 | Pending |
+| TEST-01 | Phase 2 | Pending |
+| TEST-02 | Phase 2 | Pending |
+| TEST-03 | Phase 2 | Pending |
+| UNIT-01 | Phase 3 | Pending |
+| UNIT-02 | Phase 3 | Pending |
+| UNIT-03 | Phase 3 | Pending |
+| UNIT-13 | Phase 3 | Pending |
+| UNIT-14 | Phase 3 | Pending |
+| UNIT-04 | Phase 4 | Pending |
+| UNIT-05 | Phase 4 | Pending |
+| UNIT-06 | Phase 4 | Pending |
+| UNIT-07 | Phase 4 | Pending |
+| UNIT-08 | Phase 4 | Pending |
+| UNIT-09 | Phase 4 | Pending |
+| UNIT-10 | Phase 5 | Pending |
+| UNIT-11 | Phase 5 | Pending |
+| UNIT-12 | Phase 5 | Pending |
+| INTG-01 | Phase 6 | Pending |
+| INTG-02 | Phase 6 | Pending |
+| INTG-03 | Phase 6 | Pending |
+| INTG-04 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 26 total
-- Mapped to phases: 0
-- Unmapped: 26
+- Mapped to phases: 26
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-23 after initial definition*
+*Last updated: 2026-02-23 after roadmap creation — all requirements mapped*
