@@ -26,8 +26,8 @@
 - [x] **UNIT-03**: Unit tests for `folder_watcher.py` — debounce logic, event filtering, webhook payload
 - [x] **UNIT-04**: Unit tests for `video_color_grade.py` — LUT selection, FFmpeg command construction, graded_path update
 - [x] **UNIT-05**: Unit tests for `video_metadata.py` — ffprobe parsing, Supabase upsert payload, platform-specific fields
-- [ ] **UNIT-06**: Unit tests for `srt_telemetry_parser.py` — SRT frame parsing, GPS extraction, telemetry aggregation
-- [ ] **UNIT-07**: Unit tests for `video_qa.py` — threshold checks, pass/fail logic, QA report generation
+- [x] **UNIT-06**: Unit tests for `srt_telemetry_parser.py` — SRT frame parsing, GPS extraction, telemetry aggregation
+- [x] **UNIT-07**: Unit tests for `video_qa.py` — threshold checks, pass/fail logic, QA report generation
 - [ ] **UNIT-08**: Unit tests for `video_proxy_gen.py` — proxy resolution, graded vs full fallback, FFmpeg args
 - [ ] **UNIT-09**: Unit tests for `video_format_export.py` — format template loading, encoding args, Supabase status update
 - [ ] **UNIT-10**: Unit tests for `delivery_packaging.py` — ZIP structure, address naming, photos-only vs video-addendum
@@ -84,8 +84,8 @@
 | UNIT-14 | Phase 3 | Complete |
 | UNIT-04 | Phase 4 | Complete |
 | UNIT-05 | Phase 4 | Complete |
-| UNIT-06 | Phase 4 | Pending |
-| UNIT-07 | Phase 4 | Pending |
+| UNIT-06 | Phase 4 | Complete |
+| UNIT-07 | Phase 4 | Complete |
 | UNIT-08 | Phase 4 | Pending |
 | UNIT-09 | Phase 4 | Pending |
 | UNIT-10 | Phase 5 | Pending |

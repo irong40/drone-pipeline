@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 4 of 6 (Video Pipeline Tests)
-Plan: 1 of 3 complete in current phase (04-01 done; 04-02, 04-03 remain)
-Status: Active — 04-01 complete (UNIT-04 video_color_grade + UNIT-05 video_metadata tests), continuing Phase 4
-Last activity: 2026-02-23 — Plan 04-01 complete: 39 unit tests for video_color_grade.py (UNIT-04) and video_metadata.py (UNIT-05)
+Plan: 2 of 3 complete in current phase (04-01, 04-02 done; 04-03 remains)
+Status: Active — 04-02 complete (UNIT-06 srt_telemetry_parser + UNIT-07 video_qa tests), continuing Phase 4
+Last activity: 2026-02-23 — Plan 04-02 complete: 58 unit tests for srt_telemetry_parser.py (UNIT-06) and video_qa.py (UNIT-07)
 
-Progress: [███████░░░] 35%
+Progress: [████████░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 2.4 min
-- Total execution time: 0.31 hours
+- Total plans completed: 9
+- Average duration: 2.6 min
+- Total execution time: 0.38 hours
 
 **By Phase:**
 
@@ -30,16 +30,17 @@ Progress: [███████░░░] 35%
 | 01-code-hardening | 4 | 10 min | 2.5 min |
 | 02-test-infrastructure | 2 | 5 min | 2.5 min |
 | 03-ingest-layer-tests | 1 | 2 min | 2 min |
-| 04-video-pipeline-tests | 1 | 2 min | 2 min |
+| 04-video-pipeline-tests | 2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (2 min), 02-02 (3 min), 03-02 (2 min), 03-03 (2 min), 04-01 (2 min)
+- Last 5 plans: 02-02 (3 min), 03-02 (2 min), 03-03 (2 min), 04-01 (2 min), 04-02 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
 | Phase 03-ingest-layer-tests P01 | 4 | 1 tasks | 3 files |
 | Phase 03-ingest-layer-tests P03 | 4 | 1 tasks | 3 files |
 | Phase 04-video-pipeline-tests P01 | 2 | 3 tasks | 3 files |
+| Phase 04-video-pipeline-tests P02 | 4 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,9 @@ Recent decisions affecting current work:
 - [Phase 04-01]: sys.modules injection for supabase: mocker.patch("supabase.create_client") requires the module to be importable — use types.ModuleType stub via autouse fixture when package not installed in CI
 - [Phase 04-01]: Module-level constant patching: mocker.patch("video_color_grade.SUPABASE_URL", value) patches already-evaluated module constant; os.environ patching does not work after import
 - [Phase 04-01]: conftest .single() chain stub added non-breakingly for video_qa plan 04-02
+- [Phase 04-video-pipeline-tests]: stub_supabase_module autouse fixture per test file (not conftest) — maintains no-autouse-in-conftest principle; uses types.ModuleType + mocker.patch.dict(sys.modules) pattern
+- [Phase 04-video-pipeline-tests]: GPS drift guard confirmed: check_gps_drift only fires when duration_seconds < 30; tests must use duration_seconds=10 to trigger
+- [Phase 04-video-pipeline-tests]: Banker's rounding tolerance: use abs= with pytest.approx when testing round() results at .5 boundaries (round(0.066,2)=0.07, round(30.25,1)=30.2)
 
 ### Pending Todos
 
@@ -90,5 +94,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 04-01-PLAN.md — 39 unit tests for video_color_grade.py (UNIT-04) and video_metadata.py (UNIT-05). sys.modules supabase stub pattern established.
+Stopped at: Completed 04-02-PLAN.md — 58 unit tests for srt_telemetry_parser.py (UNIT-06) and video_qa.py (UNIT-07). GPS drift guard and banker's rounding patterns confirmed.
 Resume file: None
