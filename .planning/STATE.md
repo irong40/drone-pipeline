@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 2 of 6 (Test Infrastructure)
-Plan: 1 of 2 in current phase (COMPLETE)
-Status: Phase 2 Plan 01 complete — ready for Phase 2 Plan 02
-Last activity: 2026-02-23 — Plan 02-01 complete: pytest.ini + tests/conftest.py with three shared fixtures
+Plan: 2 of 2 in current phase (COMPLETE)
+Status: Phase 2 complete — both plans done, ready for Phase 3 (ingest tests) or Phase 4 (video tests)
+Last activity: 2026-02-23 — Plan 02-02 complete: 15 test stub files + Dev/Testing deps in requirements.txt
 
-Progress: [█████░░░░░] 21%
+Progress: [█████░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 2.4 min
-- Total execution time: 0.20 hours
+- Total plans completed: 6
+- Average duration: 2.5 min
+- Total execution time: 0.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-code-hardening | 4 | 10 min | 2.5 min |
-| 02-test-infrastructure | 1 | 2 min | 2 min |
+| 02-test-infrastructure | 2 | 5 min | 2.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 01-03 (3 min), 01-04 (1 min), 02-01 (2 min)
+- Last 5 plans: 01-02 (3 min), 01-03 (3 min), 01-04 (1 min), 02-01 (2 min), 02-02 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -60,6 +60,8 @@ Recent decisions affecting current work:
 - [Phase 02-01]: Lazy-import patch target is 'supabase.create_client' not call-site module — scripts never bind create_client at module level
 - [Phase 02-01]: No autouse=True on any fixture — opt-in only, prevents silent subprocess.run mocking in pure-Python tests
 - [Phase 02-01]: pytest>=7.0 pinned because pythonpath= config option was added in 7.0
+- [Phase 02-02]: pytest-tmp-files declared to satisfy TEST-02 literally; built-in tmp_path fixture used in practice
+- [Phase 02-02]: importorskip pattern extended to ingest/ingest_sorter/folder_watcher stubs — scripts with module-level sys.exit() or bare third-party imports must use importorskip guard not bare import
 
 ### Pending Todos
 
@@ -74,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 02-01-PLAN.md — pytest infrastructure setup (pytest.ini, tests/__init__.py, tests/conftest.py with three shared fixtures). Phase 2 Plan 01 complete.
+Stopped at: Completed 02-02-PLAN.md — 15 test stub files + Dev/Testing deps (pytest>=7.4, pytest-mock>=3.12, pytest-cov>=4.1, pytest-tmp-files). Phase 2 fully complete.
 Resume file: None

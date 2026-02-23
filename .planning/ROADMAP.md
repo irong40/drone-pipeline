@@ -13,7 +13,7 @@ Close the remaining gaps from the initial build (GAP-10, GAP-11, GAP-13, plus de
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Code Hardening** - Fix the 5 active gaps across all scripts (completed 2026-02-23)
-- [ ] **Phase 2: Test Infrastructure** - Configure pytest, fixtures, and mock scaffolding
+- [x] **Phase 2: Test Infrastructure** - Configure pytest, fixtures, and mock scaffolding (completed 2026-02-23)
 - [ ] **Phase 3: Ingest Layer Tests** - Unit tests for ingest_sorter, platform_detect, folder_watcher
 - [ ] **Phase 4: Video Pipeline Tests** - Unit tests for all 6 video processing scripts
 - [ ] **Phase 5: Delivery Layer Tests** - Unit tests for delivery_packaging, gdrive_upload, archive_sync
@@ -124,7 +124,7 @@ Phases 3, 4, 5 all depend on Phase 2. Phases 3 and 4 can run in parallel if desi
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Code Hardening | 4/4 | Complete    | 2026-02-23 |
-| 2. Test Infrastructure | 1/2 | In Progress|  |
+| 2. Test Infrastructure | 2/2 | Complete   | 2026-02-23 |
 | 3. Ingest Layer Tests | 0/3 | Not started | - |
 | 4. Video Pipeline Tests | 0/3 | Not started | - |
 | 5. Delivery Layer Tests | 0/2 | Not started | - |

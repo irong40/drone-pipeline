@@ -16,8 +16,8 @@
 ### Test Infrastructure
 
 - [x] **TEST-01**: pytest framework configured with `conftest.py`, shared fixtures for mock Supabase client, mock Google Drive client, mock FFmpeg subprocess
-- [ ] **TEST-02**: pytest-mock and pytest-tmp-files added to `requirements.txt` dev dependencies
-- [ ] **TEST-03**: `tests/` directory structure mirrors script layout with `test_{script_name}.py` per script
+- [x] **TEST-02**: pytest-mock and pytest-tmp-files added to `requirements.txt` dev dependencies
+- [x] **TEST-03**: `tests/` directory structure mirrors script layout with `test_{script_name}.py` per script
 
 ### Unit Tests
 
@@ -75,8 +75,8 @@
 | DEPR-01 | Phase 1 | Complete |
 | ERR-01 | Phase 1 | Complete |
 | TEST-01 | Phase 2 | Complete |
-| TEST-02 | Phase 2 | Pending |
-| TEST-03 | Phase 2 | Pending |
+| TEST-02 | Phase 2 | Complete |
+| TEST-03 | Phase 2 | Complete |
 | UNIT-01 | Phase 3 | Pending |
 | UNIT-02 | Phase 3 | Pending |
 | UNIT-03 | Phase 3 | Pending |
