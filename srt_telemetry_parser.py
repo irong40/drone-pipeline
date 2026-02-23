@@ -23,6 +23,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -324,6 +326,8 @@ Examples:
                         help="Drone platform (default: mini4pro)")
     parser.add_argument("--upload", action="store_true", help="Upload results to Supabase video_assets")
     parser.add_argument("--dump-json", action="store_true", help="Output parsed data as JSON")
+    parser.add_argument("--force", action="store_true",
+                        help="Clear checkpoint and re-process all SRT files from scratch")
     args = parser.parse_args()
 
     log = setup_logging()
@@ -347,6 +351,15 @@ Examples:
     log.info(f"Platform: {args.platform}")
     log.info(f"Found {len(srt_files)} SRT file(s)")
 
+    # Checkpoint resume
+    SCRIPT_NAME = "srt_telemetry_parser"
+    if args.force:
+        clear_checkpoint(mission_path, SCRIPT_NAME)
+        log.info("--force: checkpoint cleared, re-processing all files")
+    completed = load_checkpoint(mission_path, SCRIPT_NAME)
+    if completed:
+        log.info(f"Resuming: {len(completed)} file(s) already completed")
+
     all_clips = []
     results = []
 
@@ -354,6 +367,12 @@ Examples:
         filename = os.path.basename(srt_path)
         # Derive video filename (DJI_0015.SRT → DJI_0015.MP4)
         video_filename = os.path.splitext(filename)[0] + ".MP4"
+
+        item_key = srt_path
+        if item_key in completed:
+            log.info(f"  Skip (checkpoint): {filename}")
+            results.append({"file": filename, "status": "ok"})
+            continue
 
         log.info(f"  Parsing: {filename}")
 
@@ -384,11 +403,21 @@ Examples:
                     result = upload_to_supabase(clip, args.mission_id)
                     log.info(f"    Uploaded to Supabase: {result}")
                     results.append({"file": filename, "status": "ok"})
+                    completed.add(item_key)
+                    try:
+                        save_checkpoint(mission_path, SCRIPT_NAME, completed)
+                    except OSError as e:
+                        log.warning(f"    Checkpoint write failed (non-fatal): {e}")
                 except Exception as e:
                     log.error(f"    Upload failed: {e}")
                     results.append({"file": filename, "status": "failed"})
             else:
                 results.append({"file": filename, "status": "ok"})
+                completed.add(item_key)
+                try:
+                    save_checkpoint(mission_path, SCRIPT_NAME, completed)
+                except OSError as e:
+                    log.warning(f"    Checkpoint write failed (non-fatal): {e}")
         else:
             log.warning(f"    No aggregate data produced for {filename}")
             results.append({"file": filename, "status": "failed"})

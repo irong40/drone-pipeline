@@ -22,6 +22,8 @@ import argparse
 import subprocess
 import logging
 
+from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -214,6 +216,8 @@ Examples:
     parser.add_argument("--formats", help="Override formats as JSON array")
     parser.add_argument("--input-file", help="Override master video path")
     parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
+    parser.add_argument("--force", action="store_true",
+                        help="Clear checkpoint and re-process all formats from scratch")
     args = parser.parse_args()
 
     log = setup_logging()
@@ -249,6 +253,15 @@ Examples:
 
     log.info(f"Formats: {len(formats)}")
 
+    # Checkpoint resume
+    SCRIPT_NAME = "video_format_export"
+    if args.force:
+        clear_checkpoint(mission_path, SCRIPT_NAME)
+        log.info("--force: checkpoint cleared, re-processing all formats")
+    completed = load_checkpoint(mission_path, SCRIPT_NAME)
+    if completed:
+        log.info(f"Resuming: {len(completed)} format(s) already completed")
+
     # Create exports directory
     exports_dir = os.path.join(mission_path, "video", "exports")
     os.makedirs(exports_dir, exist_ok=True)
@@ -257,8 +270,14 @@ Examples:
     results = []
     for fmt in formats:
         name = fmt["name"]
+        item_key = name
         max_dur = fmt.get("max_duration_sec")
         truncated = max_dur and source_duration > max_dur
+
+        if item_key in completed:
+            log.info(f"\n  Skip (checkpoint): {name}")
+            results.append({"format": name, "path": None, "status": "ok"})
+            continue
 
         log.info(f"\n  Exporting: {name}")
         log.info(f"    Resolution: {fmt.get('resolution', 'copy')}")
@@ -277,6 +296,11 @@ Examples:
             size_mb = os.path.getsize(output_path) / (1024 * 1024)
             log.info(f"    OK: {output_path} ({size_mb:.1f} MB)")
             results.append({"format": name, "path": output_path, "status": "ok"})
+            completed.add(item_key)
+            try:
+                save_checkpoint(mission_path, SCRIPT_NAME, completed)
+            except OSError as e:
+                log.warning(f"    Checkpoint write failed (non-fatal): {e}")
         else:
             log.error(f"    FAILED: {name}")
             if error:

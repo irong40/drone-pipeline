@@ -22,6 +22,8 @@ import argparse
 import subprocess
 import logging
 
+from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 FFMPEG_BIN = "ffmpeg"
@@ -136,6 +138,8 @@ Examples:
                         choices=["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"],
                         help=f"FFmpeg preset (default: {PROXY_PRESET})")
     parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
+    parser.add_argument("--force", action="store_true",
+                        help="Clear checkpoint and re-process all files from scratch")
     args = parser.parse_args()
 
     log = setup_logging()
@@ -163,6 +167,15 @@ Examples:
     log.info(f"Preset:     {args.preset}")
     log.info(f"Found {len(videos)} video(s)")
 
+    # Checkpoint resume
+    SCRIPT_NAME = "video_proxy_gen"
+    if args.force:
+        clear_checkpoint(mission_path, SCRIPT_NAME)
+        log.info("--force: checkpoint cleared, re-processing all files")
+    completed = load_checkpoint(mission_path, SCRIPT_NAME)
+    if completed:
+        log.info(f"Resuming: {len(completed)} file(s) already completed")
+
     # Create proxy output directory
     proxy_dir = os.path.join(mission_path, "video", "proxy")
     os.makedirs(proxy_dir, exist_ok=True)
@@ -176,7 +189,13 @@ Examples:
         clean_name = re.sub(r"_graded$", "", name)
         output_path = os.path.join(proxy_dir, f"{clean_name}_proxy{ext}")
 
-        # Skip if proxy already exists and is non-empty
+        item_key = video_path
+        if item_key in completed:
+            log.info(f"  Skip (checkpoint): {filename}")
+            results.append({"input": video_path, "output": output_path, "status": "exists"})
+            continue
+
+        # Secondary guard: skip if proxy already exists and is non-empty
         if os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
             log.info(f"  Skip (exists): {clean_name}_proxy{ext}")
             results.append({"input": video_path, "output": output_path, "status": "exists"})
@@ -197,6 +216,11 @@ Examples:
             size_mb = os.path.getsize(output_path) / (1024 * 1024)
             log.info(f"    OK: {output_path} ({size_mb:.1f} MB)")
             results.append({"input": video_path, "output": output_path, "status": "ok"})
+            completed.add(item_key)
+            try:
+                save_checkpoint(mission_path, SCRIPT_NAME, completed)
+            except OSError as e:
+                log.warning(f"    Checkpoint write failed (non-fatal): {e}")
         else:
             log.error(f"    FAILED: {filename}")
             if stderr:

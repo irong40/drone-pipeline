@@ -18,6 +18,8 @@ import subprocess
 import logging
 from pathlib import Path
 
+from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 LUT_DIR = r"E:\Sentinel\LUTs"
@@ -139,6 +141,8 @@ Examples:
     parser.add_argument("--crf", type=int, default=CRF_QUALITY, help=f"FFmpeg CRF quality (default: {CRF_QUALITY})")
     parser.add_argument("--codec", default=VIDEO_CODEC, help=f"Video codec (default: {VIDEO_CODEC})")
     parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
+    parser.add_argument("--force", action="store_true",
+                        help="Clear checkpoint and re-process all files from scratch")
     args = parser.parse_args()
 
     log = setup_logging()
@@ -157,6 +161,15 @@ Examples:
     log.info(f"Mission:  {mission_path}")
     log.info(f"Platform: {args.platform}")
     log.info(f"LUT:      {lut_path}")
+
+    # Checkpoint resume
+    SCRIPT_NAME = "video_color_grade"
+    if args.force:
+        clear_checkpoint(mission_path, SCRIPT_NAME)
+        log.info("--force: checkpoint cleared, re-processing all files")
+    completed = load_checkpoint(mission_path, SCRIPT_NAME)
+    if completed:
+        log.info(f"Resuming: {len(completed)} file(s) already completed")
 
     # Find videos
     videos = find_videos(mission_path)
@@ -177,6 +190,12 @@ Examples:
         name, ext = os.path.splitext(filename)
         output_path = os.path.join(graded_dir, f"{name}_graded{ext}")
 
+        item_key = video_path
+        if item_key in completed:
+            log.info(f"  Skip (checkpoint): {filename}")
+            results.append({"input": video_path, "output": output_path, "status": "ok"})
+            continue
+
         log.info(f"  Grading: {filename}")
 
         if args.dry_run:
@@ -189,6 +208,11 @@ Examples:
             size_mb = os.path.getsize(output_path) / (1024 * 1024)
             log.info(f"  OK: {output_path} ({size_mb:.1f} MB)")
             results.append({"input": video_path, "output": output_path, "status": "ok"})
+            completed.add(item_key)
+            try:
+                save_checkpoint(mission_path, SCRIPT_NAME, completed)
+            except OSError as e:
+                log.warning(f"  Checkpoint write failed (non-fatal): {e}")
         else:
             log.error(f"  FAILED: {filename}")
             log.error(f"  FFmpeg stderr: {stderr[-500:]}")

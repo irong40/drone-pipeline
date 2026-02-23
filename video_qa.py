@@ -24,6 +24,8 @@ import math
 import argparse
 import logging
 
+from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -258,11 +260,17 @@ Examples:
         """,
     )
     parser.add_argument("--mission-id", required=True, help="Supabase mission UUID")
+    parser.add_argument("--mission-path", default=None,
+                        help="Path to mission folder (for checkpoint file storage; defaults to CWD)")
     parser.add_argument("--thresholds", help="Override thresholds as JSON string")
     parser.add_argument("--dry-run", action="store_true", help="Analyze without updating Supabase")
+    parser.add_argument("--force", action="store_true",
+                        help="Clear checkpoint and re-process all assets from scratch")
     args = parser.parse_args()
 
     log = setup_logging()
+
+    mission_path = os.path.abspath(args.mission_path) if args.mission_path else os.getcwd()
 
     # Connect to Supabase
     try:
@@ -280,6 +288,15 @@ Examples:
     log.info(f"Mission: {args.mission_id}")
     log.info(f"Video assets: {len(assets)}")
 
+    # Checkpoint resume
+    SCRIPT_NAME = "video_qa"
+    if args.force:
+        clear_checkpoint(mission_path, SCRIPT_NAME)
+        log.info("--force: checkpoint cleared, re-processing all assets")
+    completed = load_checkpoint(mission_path, SCRIPT_NAME)
+    if completed:
+        log.info(f"Resuming: {len(completed)} asset(s) already completed")
+
     # Get thresholds
     if args.thresholds:
         thresholds = {**DEFAULT_THRESHOLDS, **json.loads(args.thresholds)}
@@ -295,7 +312,15 @@ Examples:
     mission_flags = []
     per_asset_status = []
     for asset in assets:
-        filename = asset.get("filename", "unknown")
+        filename = asset.get("filename", asset["id"])
+        item_key = asset["id"]
+
+        if item_key in completed:
+            log.info(f"\n  Skip (checkpoint): {filename}")
+            # Count checkpointed assets as pass for mission summary
+            per_asset_status.append("pass")
+            continue
+
         log.info(f"\n  Checking: {filename}")
 
         flags = run_qa_checks(asset, thresholds)
@@ -311,6 +336,11 @@ Examples:
             qa_flags_json = {f["flag"]: f for f in flags}
             update_qa_status(client, asset["id"], qa_status, qa_flags_json)
             log.info(f"    Updated in Supabase")
+            completed.add(item_key)
+            try:
+                save_checkpoint(mission_path, SCRIPT_NAME, completed)
+            except OSError as e:
+                log.warning(f"    Checkpoint write failed (non-fatal): {e}")
 
         mission_flags.extend(flags)
 
