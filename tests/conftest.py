@@ -32,6 +32,7 @@ def mock_supabase_client():
     # MagicMock auto-chains for any attribute/call not listed here.
     mock_table.select.return_value.execute.return_value.data = []
     mock_table.select.return_value.eq.return_value.execute.return_value.data = []
+    mock_table.select.return_value.eq.return_value.single.return_value.execute.return_value.data = None
     mock_table.insert.return_value.execute.return_value.data = [{"id": "test-id"}]
     mock_table.upsert.return_value.execute.return_value.data = [{"id": "test-id"}]
     mock_table.update.return_value.eq.return_value.execute.return_value.data = []
