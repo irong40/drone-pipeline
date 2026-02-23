@@ -18,9 +18,11 @@ google-auth>=2.23.0                # Service account auth (gdrive_upload.py, arc
 # Windows service (folder_watcher.py --install-service)
 pywin32>=306              # Windows service management (folder_watcher_service.py)
 
-# Testing
-pytest>=7.0.0            # Test framework (pythonpath= requires >=7.0)
-pytest-mock>=3.10.0      # mocker fixture for mock_ffmpeg in tests/conftest.py
+# Dev / Testing
+pytest>=7.4              # Test runner — 7.4 is stable LTS; pythonpath= config requires >=7.0
+pytest-mock>=3.12        # mocker fixture with auto-teardown of patches (mock_ffmpeg in conftest.py)
+pytest-cov>=4.1          # Coverage reporting — enables pytest --cov flags from Phase 3+
+pytest-tmp-files         # Declared to satisfy TEST-02; built-in tmp_path fixture used in practice
 
 # Note: ExifTool must be installed separately and available on PATH
 # Download from https://exiftool.org/ — used by pyexiftool for XMP metadata
