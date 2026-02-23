@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** Phase 3 — Ingest Layer Tests
+**Current focus:** Phase 4 — Video Pipeline Tests
 
 ## Current Position
 
-Phase: 3 of 6 (Ingest Layer Tests)
-Plan: 3 of 4 complete in current phase (03-01, 03-02, 03-03 done; 03-04 remains)
-Status: Active — 03-03 complete (UNIT-03 folder_watcher + UNIT-13 folder_watcher_service tests), continuing Phase 3
-Last activity: 2026-02-23 — Plan 03-03 complete: 27 unit tests for folder_watcher.py (UNIT-03) and folder_watcher_service.py (UNIT-13)
+Phase: 4 of 6 (Video Pipeline Tests)
+Plan: 1 of 3 complete in current phase (04-01 done; 04-02, 04-03 remain)
+Status: Active — 04-01 complete (UNIT-04 video_color_grade + UNIT-05 video_metadata tests), continuing Phase 4
+Last activity: 2026-02-23 — Plan 04-01 complete: 39 unit tests for video_color_grade.py (UNIT-04) and video_metadata.py (UNIT-05)
 
-Progress: [██████░░░░] 30%
+Progress: [███████░░░] 35%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 2.4 min
-- Total execution time: 0.28 hours
+- Total execution time: 0.31 hours
 
 **By Phase:**
 
@@ -30,14 +30,16 @@ Progress: [██████░░░░] 30%
 | 01-code-hardening | 4 | 10 min | 2.5 min |
 | 02-test-infrastructure | 2 | 5 min | 2.5 min |
 | 03-ingest-layer-tests | 1 | 2 min | 2 min |
+| 04-video-pipeline-tests | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-04 (1 min), 02-01 (2 min), 02-02 (3 min), 03-02 (2 min)
+- Last 5 plans: 02-01 (2 min), 02-02 (3 min), 03-02 (2 min), 03-03 (2 min), 04-01 (2 min)
 - Trend: Stable
 
 *Updated after each plan completion*
 | Phase 03-ingest-layer-tests P01 | 4 | 1 tasks | 3 files |
 | Phase 03-ingest-layer-tests P03 | 4 | 1 tasks | 3 files |
+| Phase 04-video-pipeline-tests P01 | 2 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -71,6 +73,9 @@ Recent decisions affecting current work:
 - [Phase 03-ingest-layer-tests]: gimbal_to_orientation zero-gimbal expected [1,0,0,0,0,-1,0,1,0] — not identity matrix; verified against formula (03-01)
 - [Phase 03-ingest-layer-tests]: SentinelFolderWatcherService instantiated via __new__ to bypass pywin32 Win32 API calls in tests
 - [Phase 03-ingest-layer-tests]: datetime.UTC does not exist as class attribute in Python 3.14 — must use timezone.utc (folder_watcher.py build_inventory fixed)
+- [Phase 04-01]: sys.modules injection for supabase: mocker.patch("supabase.create_client") requires the module to be importable — use types.ModuleType stub via autouse fixture when package not installed in CI
+- [Phase 04-01]: Module-level constant patching: mocker.patch("video_color_grade.SUPABASE_URL", value) patches already-evaluated module constant; os.environ patching does not work after import
+- [Phase 04-01]: conftest .single() chain stub added non-breakingly for video_qa plan 04-02
 
 ### Pending Todos
 
@@ -85,5 +90,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 03-03-PLAN.md — 27 unit tests for folder_watcher.py (UNIT-03) and folder_watcher_service.py (UNIT-13). Auto-fixed datetime.UTC bug in build_inventory.
+Stopped at: Completed 04-01-PLAN.md — 39 unit tests for video_color_grade.py (UNIT-04) and video_metadata.py (UNIT-05). sys.modules supabase stub pattern established.
 Resume file: None

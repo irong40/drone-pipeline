@@ -126,6 +126,6 @@ Phases 3, 4, 5 all depend on Phase 2. Phases 3 and 4 can run in parallel if desi
 | 1. Code Hardening | 4/4 | Complete    | 2026-02-23 |
 | 2. Test Infrastructure | 2/2 | Complete    | 2026-02-23 |
 | 3. Ingest Layer Tests | 3/3 | Complete    | 2026-02-23 |
-| 4. Video Pipeline Tests | 0/3 | Planned     | - |
+| 4. Video Pipeline Tests | 1/3 | In Progress|  |
 | 5. Delivery Layer Tests | 0/2 | Not started | - |
 | 6. Integration Tests | 0/3 | Not started | - |
