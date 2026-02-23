@@ -1,0 +1,30 @@
+# Sentinel Aerial Inspections — Drone Pipeline Dependencies
+
+# Core
+Pillow>=10.0.0           # EXIF extraction fallback (ingest.py, platform_detect.py)
+pyexiftool>=0.5.6        # XMP-drone-dji metadata, M4E/M3E disambiguation (platform_detect.py)
+requests>=2.31.0         # HTTP webhooks (ingest_sorter.py, folder_watcher.py)
+
+# File watching
+watchdog>=4.0.0          # Filesystem monitoring (folder_watcher.py)
+
+# Supabase
+supabase>=2.0.0          # Database client (srt_telemetry_parser.py, video_qa.py, video_format_export.py)
+
+# Google Drive
+google-api-python-client>=2.100.0  # Drive API (gdrive_upload.py, archive_sync.py)
+google-auth>=2.23.0                # Service account auth (gdrive_upload.py, archive_sync.py)
+
+# Windows service (folder_watcher.py --install-service)
+pywin32>=306              # Windows service management (folder_watcher_service.py)
+
+# Testing
+pytest>=7.0.0            # Test framework (pythonpath= requires >=7.0)
+pytest-mock>=3.10.0      # mocker fixture for mock_ffmpeg in tests/conftest.py
+
+# Note: ExifTool must be installed separately and available on PATH
+# Download from https://exiftool.org/ — used by pyexiftool for XMP metadata
+# Note: FFmpeg/ffprobe must be installed separately and available on PATH
+# Download from https://ffmpeg.org/download.html
+# Used by: video_color_grade.py, video_format_export.py, video_proxy_gen.py,
+#          video_metadata.py, platform_detect.py
