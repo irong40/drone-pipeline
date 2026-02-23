@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Code Hardening** - Fix the 5 active gaps across all scripts (completed 2026-02-23)
 - [x] **Phase 2: Test Infrastructure** - Configure pytest, fixtures, and mock scaffolding (completed 2026-02-23)
 - [x] **Phase 3: Ingest Layer Tests** - Unit tests for ingest_sorter, platform_detect, folder_watcher (completed 2026-02-23)
-- [ ] **Phase 4: Video Pipeline Tests** - Unit tests for all 6 video processing scripts
+- [x] **Phase 4: Video Pipeline Tests** - Unit tests for all 6 video processing scripts (completed 2026-02-23)
 - [ ] **Phase 5: Delivery Layer Tests** - Unit tests for delivery_packaging, gdrive_upload, archive_sync
 - [ ] **Phase 6: Integration Tests** - End-to-end flow tests with checkpointing verification
 
@@ -126,6 +126,6 @@ Phases 3, 4, 5 all depend on Phase 2. Phases 3 and 4 can run in parallel if desi
 | 1. Code Hardening | 4/4 | Complete    | 2026-02-23 |
 | 2. Test Infrastructure | 2/2 | Complete    | 2026-02-23 |
 | 3. Ingest Layer Tests | 3/3 | Complete    | 2026-02-23 |
-| 4. Video Pipeline Tests | 2/3 | In Progress|  |
+| 4. Video Pipeline Tests | 3/3 | Complete   | 2026-02-23 |
 | 5. Delivery Layer Tests | 0/2 | Not started | - |
 | 6. Integration Tests | 0/3 | Not started | - |

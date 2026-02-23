@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** Phase 4 — Video Pipeline Tests
+**Current focus:** Phase 5 — Delivery and Archive Tests
 
 ## Current Position
 
-Phase: 4 of 6 (Video Pipeline Tests)
-Plan: 2 of 3 complete in current phase (04-01, 04-02 done; 04-03 remains)
-Status: Active — 04-02 complete (UNIT-06 srt_telemetry_parser + UNIT-07 video_qa tests), continuing Phase 4
-Last activity: 2026-02-23 — Plan 04-02 complete: 58 unit tests for srt_telemetry_parser.py (UNIT-06) and video_qa.py (UNIT-07)
+Phase: 4 of 6 (Video Pipeline Tests) — COMPLETE
+Plan: 3 of 3 complete in Phase 4 (04-01, 04-02, 04-03 done)
+Status: Phase 4 complete — 224 tests passing; ready to start Phase 5
+Last activity: 2026-02-23 — Plan 04-03 complete: 33 unit tests for video_proxy_gen.py (UNIT-08) and video_format_export.py (UNIT-09). Full suite 224 passed.
 
-Progress: [████████░░] 40%
+Progress: [█████████░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 2.6 min
-- Total execution time: 0.38 hours
+- Total plans completed: 10
+- Average duration: 2.5 min
+- Total execution time: 0.42 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [████████░░] 40%
 | 01-code-hardening | 4 | 10 min | 2.5 min |
 | 02-test-infrastructure | 2 | 5 min | 2.5 min |
 | 03-ingest-layer-tests | 1 | 2 min | 2 min |
-| 04-video-pipeline-tests | 2 | 6 min | 3 min |
+| 04-video-pipeline-tests | 3 | 8 min | 2.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (3 min), 03-02 (2 min), 03-03 (2 min), 04-01 (2 min), 04-02 (4 min)
+- Last 5 plans: 03-02 (2 min), 03-03 (2 min), 04-01 (2 min), 04-02 (4 min), 04-03 (2 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -41,6 +41,7 @@ Progress: [████████░░] 40%
 | Phase 03-ingest-layer-tests P03 | 4 | 1 tasks | 3 files |
 | Phase 04-video-pipeline-tests P01 | 2 | 3 tasks | 3 files |
 | Phase 04-video-pipeline-tests P02 | 4 | 3 tasks | 2 files |
+| Phase 04-video-pipeline-tests P03 | 2 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Recent decisions affecting current work:
 - [Phase 04-video-pipeline-tests]: stub_supabase_module autouse fixture per test file (not conftest) — maintains no-autouse-in-conftest principle; uses types.ModuleType + mocker.patch.dict(sys.modules) pattern
 - [Phase 04-video-pipeline-tests]: GPS drift guard confirmed: check_gps_drift only fires when duration_seconds < 30; tests must use duration_seconds=10 to trigger
 - [Phase 04-video-pipeline-tests]: Banker's rounding tolerance: use abs= with pytest.approx when testing round() results at .5 boundaries (round(0.066,2)=0.07, round(30.25,1)=30.2)
+- [Phase 04-video-pipeline-tests]: sys.modules stub required for supabase test (not installed) — consistent with Phase 04-01/02 pattern
+- [Phase 04-video-pipeline-tests]: build_ffmpeg_command tested as pure function — no subprocess mock needed for UNIT-09 core coverage
 
 ### Pending Todos
 
@@ -94,5 +97,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 04-02-PLAN.md — 58 unit tests for srt_telemetry_parser.py (UNIT-06) and video_qa.py (UNIT-07). GPS drift guard and banker's rounding patterns confirmed.
+Stopped at: Completed 04-03-PLAN.md — 33 unit tests for video_proxy_gen.py (UNIT-08) and video_format_export.py (UNIT-09). Full suite 224 tests passed. Phase 4 complete.
 Resume file: None
