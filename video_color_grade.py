@@ -145,12 +145,14 @@ Examples:
 
     mission_path = os.path.abspath(args.mission_path)
     if not os.path.isdir(mission_path):
-        sys.exit(f"Mission folder not found: {mission_path}")
+        log.error(f"Mission folder not found: {mission_path}")
+        sys.exit(2)
 
     # Resolve LUT
     lut_path = get_lut_path(args.platform, lut_override=args.lut, lut_dir=args.lut_dir)
     if not lut_path:
-        sys.exit(f"LUT not found for platform '{args.platform}' in {args.lut_dir}")
+        log.error(f"LUT not found for platform '{args.platform}' in {args.lut_dir}")
+        sys.exit(2)
 
     log.info(f"Mission:  {mission_path}")
     log.info(f"Platform: {args.platform}")

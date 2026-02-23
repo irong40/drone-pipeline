@@ -142,11 +142,13 @@ Examples:
 
     # Pre-flight: check FFmpeg
     if not args.dry_run and not check_ffmpeg():
-        sys.exit("FFmpeg not found. Install from https://ffmpeg.org/download.html and add to PATH.")
+        log.error("FFmpeg not found. Install from https://ffmpeg.org/download.html and add to PATH.")
+        sys.exit(2)
 
     mission_path = os.path.abspath(args.mission_path)
     if not os.path.isdir(mission_path):
-        sys.exit(f"Mission folder not found: {mission_path}")
+        log.error(f"Mission folder not found: {mission_path}")
+        sys.exit(2)
 
     # Find source videos
     videos, source_dir = find_source_videos(mission_path)

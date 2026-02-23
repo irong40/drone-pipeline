@@ -263,7 +263,8 @@ def upload_to_supabase(clip_data, mission_id):
     try:
         from supabase import create_client
     except ImportError:
-        sys.exit("pip install supabase")
+        logging.getLogger(__name__).error("supabase package not installed. Run: pip install supabase")
+        sys.exit(2)
 
     client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
@@ -371,7 +372,7 @@ Examples:
             if args.upload:
                 if not args.mission_id:
                     log.error("--mission-id required for --upload")
-                    sys.exit(1)
+                    sys.exit(2)
                 try:
                     result = upload_to_supabase(clip, args.mission_id)
                     log.info(f"    Uploaded to Supabase: {result}")

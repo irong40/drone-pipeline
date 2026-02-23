@@ -220,12 +220,14 @@ Examples:
 
     mission_path = os.path.abspath(args.mission_path)
     if not os.path.isdir(mission_path):
-        sys.exit(f"Mission folder not found: {mission_path}")
+        log.error(f"Mission folder not found: {mission_path}")
+        sys.exit(2)
 
     # Find master video
     master_video = args.input_file or find_master_video(mission_path)
     if not master_video:
-        sys.exit("No master video found in video/master/. Complete Step V5 (manual edit) first.")
+        log.error("No master video found in video/master/. Complete Step V5 (manual edit) first.")
+        sys.exit(2)
 
     log.info(f"Mission: {mission_path}")
     log.info(f"Master:  {master_video}")

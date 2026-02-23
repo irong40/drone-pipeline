@@ -66,7 +66,8 @@ def get_supabase_client():
     try:
         from supabase import create_client
     except ImportError:
-        sys.exit("pip install supabase")
+        logging.getLogger(__name__).error("supabase package not installed. Run: pip install supabase")
+        sys.exit(2)
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
@@ -264,7 +265,11 @@ Examples:
     log = setup_logging()
 
     # Connect to Supabase
-    client = get_supabase_client()
+    try:
+        client = get_supabase_client()
+    except ValueError as e:
+        log.error(f"Supabase configuration error: {e}")
+        sys.exit(2)
 
     # Fetch video assets
     assets = fetch_video_assets(client, args.mission_id)
