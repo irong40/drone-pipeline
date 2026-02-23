@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 3 of 6 (Ingest Layer Tests)
-Plan: 1 of 4 complete in current phase
-Status: Active — 03-02 complete (UNIT-02 platform_detect.py tests), continuing Phase 3
-Last activity: 2026-02-23 — Plan 03-02 complete: 21 unit tests for platform_detect.py (UNIT-02)
+Plan: 1 of 4 complete in current phase (03-01 done; 03-02 and beyond remain)
+Status: Active — 03-01 complete (UNIT-01 ingest_sorter + UNIT-14 ingest tests), continuing Phase 3
+Last activity: 2026-02-23 — Plan 03-01 complete: 42 unit tests for ingest_sorter.py (UNIT-01) and ingest.py (UNIT-14)
 
 Progress: [██████░░░░] 30%
 
@@ -36,6 +36,7 @@ Progress: [██████░░░░] 30%
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 03-ingest-layer-tests P01 | 4 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -50,7 +51,7 @@ Recent decisions affecting current work:
 - pytest for testing: Industry standard, rich assertion introspection, fixture support
 - Mock external services in tests: Can't call real Supabase/Drive/FFmpeg in CI
 - Logging pattern: LOG_DIR constant + dual FileHandler+StreamHandler in setup_logging(log_dir=LOG_DIR) (01-01)
-- datetime.UTC class attribute used (not timezone.utc) — Python 3.11+ compatible, no extra imports (01-01)
+- datetime.UTC class attribute DOES NOT exist — must use timezone.utc; fixed in ingest_sorter.py fire_webhook (03-01 auto-fix)
 - Z-suffix preserved in webhook payloads via .replace("+00:00","Z") — n8n expects Z not +00:00 (01-01)
 - Exit code semantics: 0=full success, 1=partial failure, 2=fatal/all-failed — maps to n8n retry/alert/continue (01-02)
 - Fatal exit pattern: log.error(msg) + sys.exit(2) — never sys.exit(string) (01-02)
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 02-02]: importorskip pattern extended to ingest/ingest_sorter/folder_watcher stubs — scripts with module-level sys.exit() or bare third-party imports must use importorskip guard not bare import
 - [Phase 03-02]: sys.modules injection required for exiftool mock — mocker.patch("exiftool.ExifToolHelper") fails with ModuleNotFoundError when package not installed; use types.ModuleType + mocker.patch.dict("sys.modules") instead
 - [Phase 03-02]: _extract_metadata_text does not process side_data_list — only format.tags, stream.tags, codec_long_name, encoder fields
+- [Phase 03-ingest-layer-tests]: datetime.UTC is a module-level constant not a class attribute — fire_webhook fixed to use timezone.utc (03-01)
+- [Phase 03-ingest-layer-tests]: gimbal_to_orientation zero-gimbal expected [1,0,0,0,0,-1,0,1,0] — not identity matrix; verified against formula (03-01)
 
 ### Pending Todos
 
@@ -79,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 03-02-PLAN.md — 21 unit tests for platform_detect.py (UNIT-02), sys.modules injection pattern for pyexiftool.
+Stopped at: Completed 03-01-PLAN.md — 42 unit tests for ingest_sorter.py (UNIT-01) and ingest.py (UNIT-14). Auto-fixed datetime.UTC bug in fire_webhook.
 Resume file: None

@@ -21,7 +21,7 @@
 
 ### Unit Tests
 
-- [ ] **UNIT-01**: Unit tests for `ingest_sorter.py` — file sorting, sequence assignment, mission config parsing
+- [x] **UNIT-01**: Unit tests for `ingest_sorter.py` — file sorting, sequence assignment, mission config parsing
 - [x] **UNIT-02**: Unit tests for `platform_detect.py` — EXIF detection, ffprobe fallback, Mini 4 Pro vs M4E vs M3E
 - [ ] **UNIT-03**: Unit tests for `folder_watcher.py` — debounce logic, event filtering, webhook payload
 - [ ] **UNIT-04**: Unit tests for `video_color_grade.py` — LUT selection, FFmpeg command construction, graded_path update
@@ -34,7 +34,7 @@
 - [ ] **UNIT-11**: Unit tests for `gdrive_upload.py` — folder creation, file upload, Drive API calls
 - [ ] **UNIT-12**: Unit tests for `archive_sync.py` — sync logic, cleanup safety, age-based filtering
 - [ ] **UNIT-13**: Unit tests for `folder_watcher_service.py` — service install/remove, start/stop lifecycle
-- [ ] **UNIT-14**: Unit tests for `ingest.py` — MipMap photogrammetry ingest (existing script)
+- [x] **UNIT-14**: Unit tests for `ingest.py` — MipMap photogrammetry ingest (existing script)
 
 ### Integration Tests
 
@@ -77,11 +77,11 @@
 | TEST-01 | Phase 2 | Complete |
 | TEST-02 | Phase 2 | Complete |
 | TEST-03 | Phase 2 | Complete |
-| UNIT-01 | Phase 3 | Pending |
+| UNIT-01 | Phase 3 | Complete |
 | UNIT-02 | Phase 3 | Complete |
 | UNIT-03 | Phase 3 | Pending |
 | UNIT-13 | Phase 3 | Pending |
-| UNIT-14 | Phase 3 | Pending |
+| UNIT-14 | Phase 3 | Complete |
 | UNIT-04 | Phase 4 | Pending |
 | UNIT-05 | Phase 4 | Pending |
 | UNIT-06 | Phase 4 | Pending |
