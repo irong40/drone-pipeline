@@ -22,7 +22,7 @@
 ### Unit Tests
 
 - [ ] **UNIT-01**: Unit tests for `ingest_sorter.py` — file sorting, sequence assignment, mission config parsing
-- [ ] **UNIT-02**: Unit tests for `platform_detect.py` — EXIF detection, ffprobe fallback, Mini 4 Pro vs M4E vs M3E
+- [x] **UNIT-02**: Unit tests for `platform_detect.py` — EXIF detection, ffprobe fallback, Mini 4 Pro vs M4E vs M3E
 - [ ] **UNIT-03**: Unit tests for `folder_watcher.py` — debounce logic, event filtering, webhook payload
 - [ ] **UNIT-04**: Unit tests for `video_color_grade.py` — LUT selection, FFmpeg command construction, graded_path update
 - [ ] **UNIT-05**: Unit tests for `video_metadata.py` — ffprobe parsing, Supabase upsert payload, platform-specific fields
@@ -78,7 +78,7 @@
 | TEST-02 | Phase 2 | Complete |
 | TEST-03 | Phase 2 | Complete |
 | UNIT-01 | Phase 3 | Pending |
-| UNIT-02 | Phase 3 | Pending |
+| UNIT-02 | Phase 3 | Complete |
 | UNIT-03 | Phase 3 | Pending |
 | UNIT-13 | Phase 3 | Pending |
 | UNIT-14 | Phase 3 | Pending |
