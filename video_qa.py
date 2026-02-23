@@ -317,11 +317,18 @@ Examples:
     # Mission-level summary (use cached results, don't re-run checks)
     overall = determine_qa_status(mission_flags)
     pass_count = sum(1 for s in per_asset_status if s == "pass")
+    ok_count = sum(1 for s in per_asset_status if s in ("pass", "review"))
+    fail_count = sum(1 for s in per_asset_status if s == "fail")
 
     log.info(f"\n{'=' * 50}")
     log.info(f"QA Summary: {pass_count}/{len(assets)} clips passed")
     log.info(f"Mission QA: {overall}")
     log.info(f"Flags: {len(mission_flags)}")
+
+    if fail_count > 0 and ok_count > 0:
+        sys.exit(1)   # Partial failure
+    elif fail_count > 0:
+        sys.exit(2)   # All failed — fatal
 
 
 if __name__ == "__main__":

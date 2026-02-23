@@ -348,6 +348,7 @@ Examples:
     log.info(f"Found {len(srt_files)} SRT file(s)")
 
     all_clips = []
+    results = []
 
     for srt_path in srt_files:
         filename = os.path.basename(srt_path)
@@ -356,7 +357,13 @@ Examples:
 
         log.info(f"  Parsing: {filename}")
 
-        frames = parse_srt_file(srt_path)
+        try:
+            frames = parse_srt_file(srt_path)
+        except Exception as e:
+            log.error(f"    Failed to parse {filename}: {e}")
+            results.append({"file": filename, "status": "failed"})
+            continue
+
         log.info(f"    Frames: {len(frames)}")
 
         clip = aggregate_clip(frames, video_filename, source_platform=args.platform)
@@ -376,8 +383,15 @@ Examples:
                 try:
                     result = upload_to_supabase(clip, args.mission_id)
                     log.info(f"    Uploaded to Supabase: {result}")
+                    results.append({"file": filename, "status": "ok"})
                 except Exception as e:
                     log.error(f"    Upload failed: {e}")
+                    results.append({"file": filename, "status": "failed"})
+            else:
+                results.append({"file": filename, "status": "ok"})
+        else:
+            log.warning(f"    No aggregate data produced for {filename}")
+            results.append({"file": filename, "status": "failed"})
 
     if args.dump_json:
         # Clean up frames for JSON output
@@ -387,7 +401,14 @@ Examples:
             output.append(c)
         print(json.dumps(output, indent=2))
 
-    log.info(f"\nParsed {len(all_clips)} clip(s)")
+    ok_count = sum(1 for r in results if r["status"] == "ok")
+    fail_count = sum(1 for r in results if r["status"] == "failed")
+    log.info(f"\nParsed {len(all_clips)} clip(s): {ok_count} ok, {fail_count} failed")
+
+    if fail_count > 0 and ok_count > 0:
+        sys.exit(1)   # Partial failure
+    elif fail_count > 0:
+        sys.exit(2)   # All failed — fatal
 
 
 if __name__ == "__main__":

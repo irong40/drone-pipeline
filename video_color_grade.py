@@ -199,6 +199,11 @@ Examples:
     fail_count = sum(1 for r in results if r["status"] == "failed")
     log.info(f"\nColor grading complete: {ok_count} ok, {fail_count} failed")
 
+    if fail_count > 0 and ok_count > 0:
+        sys.exit(1)   # Partial failure
+    elif fail_count > 0:
+        sys.exit(2)   # All failed — fatal
+
 
 if __name__ == "__main__":
     main()

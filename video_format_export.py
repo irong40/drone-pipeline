@@ -289,6 +289,11 @@ Examples:
     log.info(f"\n{'=' * 50}")
     log.info(f"Export complete: {ok_count} ok, {fail_count} failed")
 
+    if fail_count > 0 and ok_count > 0:
+        sys.exit(1)   # Partial failure
+    elif fail_count > 0:
+        sys.exit(2)   # All failed — fatal
+
 
 if __name__ == "__main__":
     main()
