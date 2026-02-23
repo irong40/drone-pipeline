@@ -78,12 +78,12 @@ Plans:
   2. `pytest tests/test_video_metadata.py` and `test_srt_telemetry_parser.py` pass — ffprobe parsing, Supabase upsert payloads, and SRT frame aggregation are verified
   3. `pytest tests/test_video_qa.py` passes — threshold checks, pass/warn/fail classification, and QA report structure are verified
   4. `pytest tests/test_video_proxy_gen.py` and `test_video_format_export.py` pass — proxy resolution selection, graded fallback, format template loading, and encoding args are verified
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: Unit tests for video_color_grade.py and video_metadata.py
-- [ ] 04-02: Unit tests for srt_telemetry_parser.py and video_qa.py
-- [ ] 04-03: Unit tests for video_proxy_gen.py and video_format_export.py
+- [ ] 04-01-PLAN.md — Unit tests for video_color_grade.py (UNIT-04) and video_metadata.py (UNIT-05) + conftest .single() extension
+- [ ] 04-02-PLAN.md — Unit tests for srt_telemetry_parser.py (UNIT-06) and video_qa.py (UNIT-07)
+- [ ] 04-03-PLAN.md — Unit tests for video_proxy_gen.py (UNIT-08) and video_format_export.py (UNIT-09)
 
 ### Phase 5: Delivery Layer Tests
 **Goal**: Delivery layer scripts have unit test coverage for packaging, Drive API interactions, and archive sync logic
@@ -126,6 +126,6 @@ Phases 3, 4, 5 all depend on Phase 2. Phases 3 and 4 can run in parallel if desi
 | 1. Code Hardening | 4/4 | Complete    | 2026-02-23 |
 | 2. Test Infrastructure | 2/2 | Complete    | 2026-02-23 |
 | 3. Ingest Layer Tests | 3/3 | Complete    | 2026-02-23 |
-| 4. Video Pipeline Tests | 0/3 | Not started | - |
+| 4. Video Pipeline Tests | 0/3 | Planned     | - |
 | 5. Delivery Layer Tests | 0/2 | Not started | - |
 | 6. Integration Tests | 0/3 | Not started | - |
