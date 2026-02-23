@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 3 of 6 (Ingest Layer Tests)
-Plan: 1 of 4 complete in current phase (03-01 done; 03-02 and beyond remain)
-Status: Active — 03-01 complete (UNIT-01 ingest_sorter + UNIT-14 ingest tests), continuing Phase 3
-Last activity: 2026-02-23 — Plan 03-01 complete: 42 unit tests for ingest_sorter.py (UNIT-01) and ingest.py (UNIT-14)
+Plan: 3 of 4 complete in current phase (03-01, 03-02, 03-03 done; 03-04 remains)
+Status: Active — 03-03 complete (UNIT-03 folder_watcher + UNIT-13 folder_watcher_service tests), continuing Phase 3
+Last activity: 2026-02-23 — Plan 03-03 complete: 27 unit tests for folder_watcher.py (UNIT-03) and folder_watcher_service.py (UNIT-13)
 
 Progress: [██████░░░░] 30%
 
@@ -37,6 +37,7 @@ Progress: [██████░░░░] 30%
 
 *Updated after each plan completion*
 | Phase 03-ingest-layer-tests P01 | 4 | 1 tasks | 3 files |
+| Phase 03-ingest-layer-tests P03 | 4 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Recent decisions affecting current work:
 - [Phase 03-02]: _extract_metadata_text does not process side_data_list — only format.tags, stream.tags, codec_long_name, encoder fields
 - [Phase 03-ingest-layer-tests]: datetime.UTC is a module-level constant not a class attribute — fire_webhook fixed to use timezone.utc (03-01)
 - [Phase 03-ingest-layer-tests]: gimbal_to_orientation zero-gimbal expected [1,0,0,0,0,-1,0,1,0] — not identity matrix; verified against formula (03-01)
+- [Phase 03-ingest-layer-tests]: SentinelFolderWatcherService instantiated via __new__ to bypass pywin32 Win32 API calls in tests
+- [Phase 03-ingest-layer-tests]: datetime.UTC does not exist as class attribute in Python 3.14 — must use timezone.utc (folder_watcher.py build_inventory fixed)
 
 ### Pending Todos
 
@@ -82,5 +85,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 03-01-PLAN.md — 42 unit tests for ingest_sorter.py (UNIT-01) and ingest.py (UNIT-14). Auto-fixed datetime.UTC bug in fire_webhook.
+Stopped at: Completed 03-03-PLAN.md — 27 unit tests for folder_watcher.py (UNIT-03) and folder_watcher_service.py (UNIT-13). Auto-fixed datetime.UTC bug in build_inventory.
 Resume file: None
