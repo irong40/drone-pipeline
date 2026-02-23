@@ -62,12 +62,12 @@ Plans:
   2. `pytest tests/test_platform_detect.py` passes — Mini 4 Pro, M4E, and M3E are correctly identified from EXIF fixtures, and the ffprobe fallback path is covered
   3. `pytest tests/test_folder_watcher.py` and `test_folder_watcher_service.py` pass — debounce logic, event filtering, and service lifecycle are verified
   4. `pytest tests/test_ingest.py` passes — MipMap photogrammetry ingest logic is covered
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Unit tests for ingest_sorter.py and ingest.py
-- [ ] 03-02: Unit tests for platform_detect.py
-- [ ] 03-03: Unit tests for folder_watcher.py and folder_watcher_service.py
+- [ ] 03-01-PLAN.md — TDD unit tests for ingest_sorter.py (UNIT-01) and ingest.py (UNIT-14)
+- [ ] 03-02-PLAN.md — TDD unit tests for platform_detect.py (UNIT-02)
+- [ ] 03-03-PLAN.md — TDD unit tests for folder_watcher.py (UNIT-03) and folder_watcher_service.py (UNIT-13)
 
 ### Phase 4: Video Pipeline Tests
 **Goal**: All 6 video processing scripts have unit test coverage verifying FFmpeg command construction, Supabase payloads, and processing logic
