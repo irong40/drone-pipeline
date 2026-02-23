@@ -30,7 +30,7 @@ import shutil
 import argparse
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
 
@@ -336,7 +336,7 @@ def fire_webhook(mission_config, inventory, source_platform, webhook_url=N8N_WEB
         "video_count": inventory["video_count"],
         "has_ppk_data": inventory["has_ppk_data"],
         "source_platform": source_platform,
-        "ingested_at": datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
+        "ingested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     try:
         resp = requests.post(webhook_url, json=payload, timeout=10)
