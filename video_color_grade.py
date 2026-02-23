@@ -28,6 +28,9 @@ FFMPEG_BIN = "ffmpeg"  # Assumes ffmpeg is on PATH
 CRF_QUALITY = 18  # Lower = better quality, 18 is visually lossless
 VIDEO_CODEC = "libx264"
 
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
 # Platform → LUT mapping
 PLATFORM_LUTS = {
     "m4e": "Sentinel_DLogM.cube",
@@ -36,6 +39,34 @@ PLATFORM_LUTS = {
 }
 
 VIDEO_EXTENSIONS = {"*.mp4", "*.MP4", "*.mov", "*.MOV"}
+
+
+# ─── SUPABASE ────────────────────────────────────────────────────────────────
+
+def update_graded_path(mission_id, filename, graded_path):
+    """Update video_assets.graded_path after successful color grading.
+
+    Uses upsert so this is safe to call even if the row does not yet exist
+    (video_metadata.py may not have run yet).
+    Returns True on success, False on failure (failure is non-fatal).
+    """
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return False
+    try:
+        from supabase import create_client
+        client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        client.table("video_assets").upsert(
+            {
+                "mission_id": mission_id,
+                "filename": filename,
+                "graded_path": graded_path,
+            },
+            on_conflict="mission_id,filename",
+        ).execute()
+        return True
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Supabase graded_path update failed: {e}")
+        return False
 
 
 # ─── LOGGING ─────────────────────────────────────────────────────────────────
@@ -140,6 +171,9 @@ Examples:
     parser.add_argument("--lut-dir", default=LUT_DIR, help=f"LUT directory (default: {LUT_DIR})")
     parser.add_argument("--crf", type=int, default=CRF_QUALITY, help=f"FFmpeg CRF quality (default: {CRF_QUALITY})")
     parser.add_argument("--codec", default=VIDEO_CODEC, help=f"Video codec (default: {VIDEO_CODEC})")
+    parser.add_argument("--mission-id", help="Supabase mission UUID (required for --upload)")
+    parser.add_argument("--upload", action="store_true",
+                        help="Update graded_path in Supabase video_assets after each successful grade")
     parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
     parser.add_argument("--force", action="store_true",
                         help="Clear checkpoint and re-process all files from scratch")
@@ -208,6 +242,14 @@ Examples:
             size_mb = os.path.getsize(output_path) / (1024 * 1024)
             log.info(f"  OK: {output_path} ({size_mb:.1f} MB)")
             results.append({"input": video_path, "output": output_path, "status": "ok"})
+            # GAP-10: update Supabase graded_path
+            if args.upload and args.mission_id:
+                updated = update_graded_path(args.mission_id, filename, output_path)
+                if updated:
+                    log.info(f"  Supabase: graded_path updated")
+                # else: warning already logged in update_graded_path()
+            elif args.upload and not args.mission_id:
+                log.warning("  --upload requires --mission-id; skipping Supabase update")
             completed.add(item_key)
             try:
                 save_checkpoint(mission_path, SCRIPT_NAME, completed)
