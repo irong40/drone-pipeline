@@ -31,13 +31,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. After `video_color_grade.py` grades a clip, the `graded_path` column in Supabase `video_assets` is updated immediately without requiring a separate metadata run
   4. All scripts exit with consistent codes (0=success, 1=partial failure, 2=fatal) and log to stderr on error
   5. Running `python -W error` against all 3 affected files produces no DeprecationWarning for datetime usage
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: Add file logging to 5 video scripts (GAP-13) + fix datetime deprecation in 3 files (DEPR-01)
-- [ ] 01-02: Standardize error handling across all scripts (ERR-01)
-- [ ] 01-03: Add checkpoint-based resume to all processing scripts (GAP-11)
-- [ ] 01-04: Add Supabase graded_path update to video_color_grade.py (GAP-10)
+- [ ] 01-01-PLAN.md — Add file logging to 5 video scripts (GAP-13) + fix datetime deprecation in 3 files (DEPR-01)
+- [ ] 01-02-PLAN.md — Standardize exit codes and fatal error handling across 5 video scripts (ERR-01)
+- [ ] 01-03-PLAN.md — Create checkpoint.py utility + integrate checkpoint resume into 5 video scripts (GAP-11)
+- [ ] 01-04-PLAN.md — Add Supabase graded_path update to video_color_grade.py (GAP-10)
 
 ### Phase 2: Test Infrastructure
 **Goal**: pytest framework is configured with shared fixtures and mock scaffolding that all subsequent test phases can build on
