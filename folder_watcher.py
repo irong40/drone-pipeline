@@ -19,7 +19,7 @@ import logging
 import threading
 import requests
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import defaultdict
 
 try:
@@ -106,7 +106,7 @@ def build_inventory(folder_path):
         "video_count": video_count,
         "has_ppk_data": has_ppk,
         "total_size_bytes": total_size,
-        "detected_at": datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
+        "detected_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
 
