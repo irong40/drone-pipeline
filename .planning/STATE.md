@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 1 of 6 (Code Hardening)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-23 — Plan 01-02 complete: exit code standardization across 5 video scripts
+Last activity: 2026-02-23 — Plan 01-03 complete: checkpoint/resume utility + integration into 5 video scripts
 
-Progress: [██░░░░░░░░] 8%
+Progress: [███░░░░░░░] 12%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: 3 min
-- Total execution time: 0.10 hours
+- Total execution time: 0.15 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-code-hardening | 2 | 6 min | 3 min |
+| 01-code-hardening | 3 | 9 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min)
+- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 01-03 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -42,7 +42,9 @@ Progress: [██░░░░░░░░] 8%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Checkpoint files for resume (GAP-11): JSON manifest per mission dir, atomic writes, skip completed items
+- Checkpoint files for resume (GAP-11): JSON manifest per mission dir, atomic writes, skip completed items — IMPLEMENTED (01-03)
+- video_qa.py --mission-path optional arg: defaults to CWD since script has no positional mission_path (01-03)
+- checkpoint key for video_qa: Supabase asset UUID, not file path — stable across file renames (01-03)
 - pytest for testing: Industry standard, rich assertion introspection, fixture support
 - Mock external services in tests: Can't call real Supabase/Drive/FFmpeg in CI
 - Logging pattern: LOG_DIR constant + dual FileHandler+StreamHandler in setup_logging(log_dir=LOG_DIR) (01-01)
@@ -59,11 +61,11 @@ None yet.
 ### Blockers/Concerns
 
 - Phase 3 and 4 both depend on Phase 2 but are independent of each other — can run in parallel
-- GAP-11 (checkpoint resume) is the most complex hardening task; estimate 3-5 hrs per script, plan accordingly
+- ~~GAP-11 (checkpoint resume) is the most complex hardening task~~ RESOLVED — completed in 3 min (01-03)
 - `platform_detect.py` unit tests (UNIT-02) require EXIF fixture files or mock pyexiftool — plan for fixture setup time
 
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 01-02-PLAN.md — exit code standardization across 5 video scripts
+Stopped at: Completed 01-03-PLAN.md — checkpoint/resume utility + integration into 5 video scripts
 Resume file: None

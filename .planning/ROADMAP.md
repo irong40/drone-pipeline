@@ -123,7 +123,7 @@ Phases 3, 4, 5 all depend on Phase 2. Phases 3 and 4 can run in parallel if desi
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Code Hardening | 2/4 | In Progress|  |
+| 1. Code Hardening | 3/4 | In Progress|  |
 | 2. Test Infrastructure | 0/2 | Not started | - |
 | 3. Ingest Layer Tests | 0/3 | Not started | - |
 | 4. Video Pipeline Tests | 0/3 | Not started | - |
