@@ -9,8 +9,8 @@
 
 - [ ] **GAP-10**: `video_color_grade.py` updates `graded_path` in Supabase `video_assets` after successful grading
 - [ ] **GAP-11**: All processing scripts support checkpoint-based resume (skip already-completed files on re-run)
-- [ ] **GAP-13**: 5 video pipeline scripts write logs to `E:\Sentinel\logs\{script_name}.log` with both file and stdout handlers
-- [ ] **DEPR-01**: Replace `datetime.utcnow()` with `datetime.now(datetime.UTC)` in `archive_sync.py`, `ingest_sorter.py`, `folder_watcher.py`
+- [x] **GAP-13**: 5 video pipeline scripts write logs to `E:\Sentinel\logs\{script_name}.log` with both file and stdout handlers
+- [x] **DEPR-01**: Replace `datetime.utcnow()` with `datetime.now(datetime.UTC)` in `archive_sync.py`, `ingest_sorter.py`, `folder_watcher.py`
 - [ ] **ERR-01**: Standardize error handling across all scripts — consistent exit codes (0=success, 1=partial failure, 2=fatal), structured log format, stderr capture to log files
 
 ### Test Infrastructure
@@ -71,8 +71,8 @@
 |-------------|-------|--------|
 | GAP-10 | Phase 1 | Pending |
 | GAP-11 | Phase 1 | Pending |
-| GAP-13 | Phase 1 | Pending |
-| DEPR-01 | Phase 1 | Pending |
+| GAP-13 | Phase 1 | Complete |
+| DEPR-01 | Phase 1 | Complete |
 | ERR-01 | Phase 1 | Pending |
 | TEST-01 | Phase 2 | Pending |
 | TEST-02 | Phase 2 | Pending |
