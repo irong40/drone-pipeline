@@ -47,11 +47,11 @@ Plans:
   1. Running `pytest tests/` from the repo root completes without import errors or configuration failures
   2. A test can import `mock_supabase_client`, `mock_drive_client`, and `mock_ffmpeg` fixtures from conftest.py without additional setup
   3. Every script has a corresponding `test_{script_name}.py` stub file in the `tests/` directory
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Create tests/ directory structure, configure pytest with conftest.py and shared fixtures
-- [ ] 02-02: Add dev dependencies to requirements.txt (pytest, pytest-mock, pytest-tmp-files)
+- [ ] 02-01-PLAN.md — Create pytest.ini + tests/__init__.py + tests/conftest.py with 3 shared fixtures (TEST-01)
+- [ ] 02-02-PLAN.md — Add dev dependencies to requirements.txt + create 15 test stub files (TEST-02, TEST-03)
 
 ### Phase 3: Ingest Layer Tests
 **Goal**: Ingest layer scripts have verified unit test coverage for all critical logic paths
