@@ -1,12 +1,27 @@
-# Sentinel Drone Pipeline — Hardening & Testing
+# Sentinel Drone Pipeline
 
 ## What This Is
 
-Post-flight processing pipeline for Sentinel Aerial Inspections (Faith & Harmony LLC). 14 Python CLI scripts handle everything from SD card ingest to client delivery for DJI drones (Mini 4 Pro, Matrice 4E, Mavic 3 Enterprise). v1.0 ships with all scripts hardened (logging, error handling, checkpoint resume) and a comprehensive 282-test suite.
+Post-flight processing pipeline for Sentinel Aerial Inspections (Faith & Harmony LLC). 14 Python CLI scripts handle everything from SD card ingest to client delivery for DJI drones (Mini 4 Pro, Matrice 4E, Mavic 3 Enterprise). v1.0 shipped with all scripts hardened (logging, error handling, checkpoint resume) and a 282-test suite. v2.0 adds Path E — automated vegetation analysis from orthomosaic imagery.
 
 ## Core Value
 
 Every script runs reliably, recovers from failures, and has tests proving it works — so the pipeline can be trusted in production without manual babysitting.
+
+## Current Milestone: v2.0 Vegetation Analysis Pipeline
+
+**Goal:** Add Path E — automated vegetation identification, species classification, and health assessment as a new service offering that extracts additional revenue from existing orthomosaic imagery.
+
+**Target features:**
+- Canopy detection from RGB orthomosaic using DeepForest (GPU accelerated)
+- Species classification via OpenAI Vision + PlantNet cross-validation
+- RGB health assessment (VARI, ExG indices) with optional Vision API qualitative assessment
+- Branded PDF report with annotated maps, charts, and Folium interactive web map
+- Supabase schema for vegetation data (detections, summaries, processing steps)
+- n8n Path E workflow integration with operator review gate
+- Delivery packaging with vegetation subfolder in client ZIP
+
+**PRD:** `.planning/PRD-vegetation-analysis.md`
 
 ## Requirements
 
@@ -23,7 +38,7 @@ Every script runs reliably, recovers from failures, and has tests proving it wor
 
 ### Active
 
-(None — start next milestone with `/gsd:new-milestone`)
+See `.planning/REQUIREMENTS.md` for v2.0 requirements.
 
 ### Out of Scope
 
@@ -62,4 +77,4 @@ Every script runs reliably, recovers from failures, and has tests proving it wor
 | googleapiclient sys.modules stub | Lazy imports need importable module | ✓ Good — tests run without google packages |
 
 ---
-*Last updated: 2026-02-24 after v1.0 milestone*
+*Last updated: 2026-02-24 after v2.0 milestone start*
