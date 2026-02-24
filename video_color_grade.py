@@ -19,6 +19,7 @@ import logging
 from pathlib import Path
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_status import PipelineStatusReporter, add_pipeline_args
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,7 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
     parser.add_argument("--force", action="store_true",
                         help="Clear checkpoint and re-process all files from scratch")
+    add_pipeline_args(parser)
     args = parser.parse_args()
 
     log = setup_logging()
@@ -196,6 +198,12 @@ Examples:
     log.info(f"Platform: {args.platform}")
     log.info(f"LUT:      {lut_path}")
 
+    reporter = PipelineStatusReporter(
+        processing_job_id=getattr(args, "processing_job_id", None),
+        step_name="video_color_grade",
+    )
+    reporter.start()
+
     # Checkpoint resume
     SCRIPT_NAME = "video_color_grade"
     if args.force:
@@ -209,6 +217,7 @@ Examples:
     videos = find_videos(mission_path)
     if not videos:
         log.info("No video files found in video/full/")
+        reporter.complete(output="No video files found — skipped")
         return
 
     log.info(f"Found {len(videos)} video(s)")
@@ -266,9 +275,13 @@ Examples:
     log.info(f"\nColor grading complete: {ok_count} ok, {fail_count} failed")
 
     if fail_count > 0 and ok_count > 0:
+        reporter.fail(f"Partial failure: {fail_count} video(s) failed to grade")
         sys.exit(1)   # Partial failure
     elif fail_count > 0:
+        reporter.fail(f"All {fail_count} video(s) failed to grade")
         sys.exit(2)   # All failed — fatal
+    else:
+        reporter.complete(output=f"{ok_count} video(s) graded successfully")
 
 
 if __name__ == "__main__":
