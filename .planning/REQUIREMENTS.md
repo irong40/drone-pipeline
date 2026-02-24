@@ -110,13 +110,62 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| ENV-01 | Phase 7 | Pending |
+| ENV-02 | Phase 7 | Pending |
+| ENV-03 | Phase 7 | Pending |
+| ENV-04 | Phase 7 | Pending |
+| ENV-05 | Phase 7 | Pending |
+| DET-01 | Phase 8 | Pending |
+| DET-02 | Phase 8 | Pending |
+| DET-03 | Phase 8 | Pending |
+| DET-04 | Phase 8 | Pending |
+| DET-05 | Phase 8 | Pending |
+| DET-06 | Phase 8 | Pending |
+| DET-07 | Phase 8 | Pending |
+| SPE-01 | Phase 9 | Pending |
+| SPE-02 | Phase 9 | Pending |
+| SPE-03 | Phase 9 | Pending |
+| SPE-04 | Phase 9 | Pending |
+| SPE-05 | Phase 9 | Pending |
+| SPE-06 | Phase 9 | Pending |
+| SPE-07 | Phase 9 | Pending |
+| SPE-08 | Phase 9 | Pending |
+| HLT-01 | Phase 10 | Pending |
+| HLT-02 | Phase 10 | Pending |
+| HLT-03 | Phase 10 | Pending |
+| HLT-04 | Phase 10 | Pending |
+| HLT-05 | Phase 10 | Pending |
+| HLT-06 | Phase 10 | Pending |
+| RPT-01 | Phase 11 | Pending |
+| RPT-02 | Phase 11 | Pending |
+| RPT-03 | Phase 11 | Pending |
+| RPT-04 | Phase 11 | Pending |
+| RPT-05 | Phase 11 | Pending |
+| RPT-06 | Phase 11 | Pending |
+| RPT-07 | Phase 11 | Pending |
+| RPT-08 | Phase 11 | Pending |
+| RPT-09 | Phase 11 | Pending |
+| INT-01 | Phase 12 | Pending |
+| INT-02 | Phase 12 | Pending |
+| INT-03 | Phase 12 | Pending |
+| INT-04 | Phase 12 | Pending |
+| INT-05 | Phase 12 | Pending |
+| INT-06 | Phase 12 | Pending |
+| INT-07 | Phase 12 | Pending |
+| TST-01 | Phase 13 | Pending |
+| TST-02 | Phase 13 | Pending |
+| TST-03 | Phase 13 | Pending |
+| TST-04 | Phase 13 | Pending |
+| TST-05 | Phase 13 | Pending |
+| TST-06 | Phase 13 | Pending |
 
 **Coverage:**
-- v2.0 requirements: 37 total
-- Mapped to phases: 0
-- Unmapped: 37
+- v2.0 requirements: 48 total (ENV×5 + DET×7 + SPE×8 + HLT×6 + RPT×9 + INT×7 + TST×6)
+- Mapped to phases: 48
+- Unmapped: 0
+
+*Note: REQUIREMENTS.md originally stated 37 total. Actual count after enumerating all defined requirements is 48. The stated count was a pre-write placeholder.*
 
 ---
 *Requirements defined: 2026-02-24*
-*Last updated: 2026-02-24 after initial definition*
+*Last updated: 2026-02-24 — traceability populated, all 48 requirements mapped*
