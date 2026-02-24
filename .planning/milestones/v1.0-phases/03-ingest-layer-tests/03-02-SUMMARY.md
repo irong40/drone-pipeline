@@ -110,6 +110,13 @@ None - no external service configuration required. All tests run in isolation wi
 - The `sys.modules` injection pattern is now documented and can be reused for any script that lazy-imports optional packages (useful for Phase 4 video pipeline tests that mock ffmpeg/PIL)
 - Remaining Phase 3 plans: ingest_sorter.py, folder_watcher.py, ingest.py (Path C / WebODM)
 
+## Self-Check: PASSED
+
+- FOUND: tests/test_platform_detect.py
+- FOUND: .planning/phases/03-ingest-layer-tests/03-02-SUMMARY.md
+- FOUND: commit a4a3d5e (feat: UNIT-02 platform_detect tests)
+- FOUND: commit 3405b71 (docs: plan metadata)
+
 ---
 *Phase: 03-ingest-layer-tests*
 *Completed: 2026-02-23*

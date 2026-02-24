@@ -111,3 +111,9 @@ None - no external service configuration required.
 ---
 *Phase: 01-code-hardening*
 *Completed: 2026-02-23*
+
+## Self-Check: PASSED
+
+- All 8 modified files confirmed present on disk
+- Both task commits (9e01d71, 4c75421) confirmed in git log
+- All verification commands passed (FileHandler x5, LOG_DIR x5, 0 utcnow, 0 DeprecationWarnings)
