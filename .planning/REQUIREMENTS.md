@@ -1,0 +1,122 @@
+# Requirements: Sentinel Drone Pipeline v2.0
+
+**Defined:** 2026-02-24
+**Core Value:** Every script runs reliably, recovers from failures, and has tests proving it works — so the pipeline can be trusted in production without manual babysitting.
+
+## v2.0 Requirements
+
+Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
+
+### Environment & Setup
+
+- [ ] **ENV-01**: Pipeline runs in a dedicated Python 3.12 virtual environment with CUDA-verified PyTorch 2.9.1+cu128 on the RTX 5070
+- [ ] **ENV-02**: Supabase migration creates vegetation_detections and vegetation_analysis_summary tables with RLS policies
+- [ ] **ENV-03**: Supabase migration adds vegetation_analysis and vegetation_status columns to missions table
+- [ ] **ENV-04**: Supabase migration adds vegetation_enabled and vegetation_config columns to processing_templates table
+- [ ] **ENV-05**: Processing steps enum extended with 4 new step_name values (veg_canopy_detection, veg_species_classification, veg_health_assessment, veg_report_generation)
+
+### Canopy Detection (E1)
+
+- [ ] **DET-01**: canopy_detection.py tiles orthomosaic GeoTIFF into 1024px chunks with 128px overlap and runs DeepForest on each tile using CUDA acceleration
+- [ ] **DET-02**: Cross-tile non-maximum suppression (IoU 0.3) removes duplicate detections from overlap zones in full-ortho coordinate space
+- [ ] **DET-03**: Canopy polygons exported as GeoPackage and GeoJSON with area (sqm), width, height, centroid GPS, and detection confidence
+- [ ] **DET-04**: Each detected canopy written to vegetation_detections table in Supabase with geometry and dimensional attributes
+- [ ] **DET-05**: Detection parameters (tile_size, score_threshold, iou_threshold) are configurable via CLI args and processing_templates.vegetation_config
+- [ ] **DET-06**: Script clears PROJ_LIB/PROJ_DATA env vars at startup before importing rasterio to prevent QGIS conflicts
+- [ ] **DET-07**: Script sets GDAL_CACHEMAX=256 and manages tile memory to handle 1GB+ orthomosaics without OOM
+
+### Species Classification (E2)
+
+- [ ] **SPE-01**: species_classification.py crops each canopy polygon from orthomosaic with 15% padding and resizes to 512px max dimension
+- [ ] **SPE-02**: Each crop sent to OpenAI Vision API (gpt-4o) with Hampton Roads species identification prompt covering 20 species
+- [ ] **SPE-03**: Each crop sent to PlantNet API for independent cross-validation (skippable via --skip-plantnet flag)
+- [ ] **SPE-04**: Confidence reconciliation: genus match between APIs boosts confidence +0.1, disagreement reduces -0.15
+- [ ] **SPE-05**: Per-canopy checkpoint resume prevents re-billing for already-classified canopies on script restart
+- [ ] **SPE-06**: max_canopies cap (default 200) limits API cost by selecting largest canopies by area
+- [ ] **SPE-07**: 0.5-second delay between API calls respects rate limits; PlantNet remainingIdentificationRequests checked and acted on
+- [ ] **SPE-08**: Species tag, confidence, vegetation type, cross-validation status, and classification details written to vegetation_detections
+
+### Health Assessment (E3)
+
+- [ ] **HLT-01**: health_assessment.py calculates VARI, ExG, Green Fraction, and Stress Fraction indices for every detected canopy using rasterio and NumPy
+- [ ] **HLT-02**: Configurable sample (default 30%) of canopies sent to OpenAI Vision API for qualitative health assessment (skippable via --skip-vision)
+- [ ] **HLT-03**: Combined health score weights 40% index + 60% vision when both available; index-only when vision skipped
+- [ ] **HLT-04**: Health status categorized: healthy (0.80-1.00), moderate_stress (0.60-0.79), stressed (0.40-0.59), severe_decline (0.20-0.39), dead (0.00-0.19)
+- [ ] **HLT-05**: Health score, status, and details (VARI data, vision results, observations, recommended action) written to vegetation_detections
+- [ ] **HLT-06**: Per-canopy checkpoint resume prevents re-billing for already-assessed canopies
+
+### Report Generation (E4)
+
+- [ ] **RPT-01**: vegetation_report.py generates branded PDF report with executive summary, species distribution table, health overview, annotated maps, attention list, and methodology disclaimer
+- [ ] **RPT-02**: Species overlay map PNG rendered on orthomosaic with color-coded canopy polygons by species
+- [ ] **RPT-03**: Health overlay map PNG rendered on orthomosaic with color-coded canopy polygons by health status
+- [ ] **RPT-04**: GeoJSON export with all canopy attributes for QGIS/ArcGIS/web mapping import
+- [ ] **RPT-05**: Interactive Folium HTML map with satellite basemap, clickable canopy popups (species, confidence, health, action), layer toggle, under 10MB
+- [ ] **RPT-06**: PDF carries Sentinel branding, FAA Part 107 statement, veteran-owned designation, forest green (#1B4332) headers
+- [ ] **RPT-07**: Methodology disclaimer states classifications are AI-generated and do not replace ground-level arborist assessment
+- [ ] **RPT-08**: vegetation_analysis_summary row written to Supabase with aggregate statistics (canopy count, coverage, species distribution, health distribution, API costs, processing time, file paths)
+- [ ] **RPT-09**: Folium map uses single GeoJson layer, smooth_factor=1, coordinate precision reduced to 6 decimals, geometry simplified for performance
+
+### Integration & Delivery
+
+- [ ] **INT-01**: n8n Path E workflow triggers when mission.vegetation_analysis=true AND Path C orthomosaic exists
+- [ ] **INT-02**: Package Router updated: site_survey and environmental_survey enable vegetation by default; construction_hybrid optional
+- [ ] **INT-03**: Operator review gate pauses processing after E4 with approve/exclude/flag-for-arborist actions per detection
+- [ ] **INT-04**: Review resume webhook (POST /sentinel-vegetation-resume) accepts decisions array and regenerates report excluding excluded detections
+- [ ] **INT-05**: delivery_packaging.py adds vegetation/ subfolder to client ZIP with PDF, species map, health map, GeoJSON, and optional interactive map
+- [ ] **INT-06**: Path E failure never blocks main delivery package; --include-vegetation flag gated on vegetation_status='complete'
+- [ ] **INT-07**: All 4 scripts follow v1.0 contract: argparse inputs, processing_steps row updates, JSON stdout, exit codes 0/1/2, setup_logging()
+
+### Testing
+
+- [ ] **TST-01**: Unit tests for canopy_detection.py covering tiling, NMS, polygon export, and Supabase writes with mocked GPU/rasterio
+- [ ] **TST-02**: Unit tests for species_classification.py covering crop extraction, API calls, confidence reconciliation, checkpoint resume with mocked APIs
+- [ ] **TST-03**: Unit tests for health_assessment.py covering VARI/ExG calculation, vision sampling, score combination with mocked APIs
+- [ ] **TST-04**: Unit tests for vegetation_report.py covering PDF generation, map rendering, Folium output, summary writes
+- [ ] **TST-05**: Integration test: E1 → E2 → E3 → E4 end-to-end with sample orthomosaic and mocked APIs
+- [ ] **TST-06**: Integration test: delivery_packaging.py includes vegetation subfolder when --include-vegetation is set
+
+## v3.0 Requirements (Deferred)
+
+### Local Classifier
+
+- **LC-01**: Fine-tuned EfficientNet/ResNet classifier trained on 50+ ground truth missions for Hampton Roads species
+- **LC-02**: Local model runs on RTX 5070 with zero API cost per canopy
+- **LC-03**: OpenAI Vision becomes fallback for low-confidence predictions
+
+### Advanced Analysis
+
+- **ADV-01**: Multispectral NDVI health mapping (requires multispectral camera)
+- **ADV-02**: Change detection between repeat surveys of same property
+- **ADV-03**: 3D canopy height models from photogrammetric DSM/DTM
+- **ADV-04**: ADIAT Color Range for invasive species detection
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Multispectral NDVI analysis | Requires hardware not yet acquired |
+| Invasive species treatment recommendations | Outside aviation service scope |
+| Certified arborist report certification | Requires licensed arborist, not an AI capability |
+| Tree risk assessment (TRA) ratings | Requires ground-level and structural assessment |
+| Ground level trunk diameter measurements | Cannot measure from aerial imagery |
+| Historical growth tracking | Requires repeat surveys — v3.0 |
+| Client-facing vegetation portal UI | Trestle app scope, not pipeline |
+| Local fine-tuned classification model | Requires 50+ ground truth missions first — v3.0 |
+| Change detection between surveys | Requires repeat data — v3.0 |
+| GUI/web interface for pipeline | CLI-only pipeline architecture |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| (populated during roadmap creation) | | |
+
+**Coverage:**
+- v2.0 requirements: 37 total
+- Mapped to phases: 0
+- Unmapped: 37
+
+---
+*Requirements defined: 2026-02-24*
+*Last updated: 2026-02-24 after initial definition*
