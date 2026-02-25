@@ -23,7 +23,7 @@ import argparse
 import logging
 import time
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Set
 
 # ─── THIRD PARTY ─────────────────────────────────────────────────────────────
 import numpy as np
@@ -46,6 +46,8 @@ SCRIPT_NAME = "canopy_detection"
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+SUPABASE_BATCH_SIZE = 50  # Rows per upsert request to stay under payload limits
 
 
 # ─── LOGGING ─────────────────────────────────────────────────────────────────
@@ -312,6 +314,182 @@ def cross_tile_nms(
     return kept
 
 
+# ─── OUTPUT: GEOPACKAGE + GEOJSON ────────────────────────────────────────────
+
+def write_output_files(
+    detections: List[Dict],
+    output_dir: str,
+    crs,
+    log: logging.Logger,
+) -> Tuple[str, str]:
+    """Write canopy detection polygons to GeoPackage and GeoJSON.
+
+    Handles zero-canopy case: writes empty files with correct schema so
+    downstream tools (QGIS, n8n) can always expect the files to exist.
+
+    Args:
+        detections: List of detection dicts from detect_canopies().
+        output_dir: Directory to write output files.
+        crs: rasterio CRS from the source orthomosaic.
+        log: Logger instance.
+
+    Returns:
+        (gpkg_path, geojson_path) as absolute strings.
+    """
+    gpkg_path = os.path.join(output_dir, "canopy_detections.gpkg")
+    geojson_path = os.path.join(output_dir, "canopy_detections.geojson")
+
+    if detections:
+        gdf = gpd.GeoDataFrame(
+            {
+                "detection_index": list(range(len(detections))),
+                "centroid_lat": [d["centroid_y"] for d in detections],
+                "centroid_lon": [d["centroid_x"] for d in detections],
+                "canopy_area_sqm": [d["area_m2"] for d in detections],
+                "canopy_width_m": [d["width_m"] for d in detections],
+                "canopy_height_m": [d["height_m"] for d in detections],
+                "detection_confidence": [d["confidence"] for d in detections],
+                "label": [d["label"] for d in detections],
+            },
+            geometry=[d["polygon"] for d in detections],
+            crs=crs,
+        )
+    else:
+        # Zero-canopy: empty GDF with correct schema — still write valid files
+        gdf = gpd.GeoDataFrame(
+            columns=[
+                "detection_index", "centroid_lat", "centroid_lon",
+                "canopy_area_sqm", "canopy_width_m", "canopy_height_m",
+                "detection_confidence", "label",
+            ],
+            geometry=[],
+            crs=crs,
+        )
+        # Ensure geometry column has the right dtype
+        import pandas as pd
+        gdf = gdf.astype({
+            "detection_index": "int64",
+            "centroid_lat": "float64",
+            "centroid_lon": "float64",
+            "canopy_area_sqm": "float64",
+            "canopy_width_m": "float64",
+            "canopy_height_m": "float64",
+            "detection_confidence": "float64",
+            "label": "object",
+        })
+
+    try:
+        gdf.to_file(gpkg_path, driver="GPKG")
+        log.info(f"GeoPackage written: {gpkg_path} ({len(detections)} features)")
+    except Exception as e:
+        log.error(f"GeoPackage write failed: {e}")
+        raise
+
+    try:
+        gdf.to_file(geojson_path, driver="GeoJSON")
+        log.info(f"GeoJSON written: {geojson_path} ({len(detections)} features)")
+    except Exception as e:
+        log.error(f"GeoJSON write failed: {e}")
+        raise
+
+    return gpkg_path, geojson_path
+
+
+# ─── OUTPUT: SUPABASE UPSERT ─────────────────────────────────────────────────
+
+def _get_supabase_client(log: logging.Logger):
+    """Return a Supabase client or None if credentials are missing."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        log.warning(
+            "Supabase credentials not set (SUPABASE_URL / SUPABASE_SERVICE_KEY). "
+            "Skipping vegetation_detections upsert."
+        )
+        return None
+    try:
+        from supabase import create_client
+        return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    except ImportError:
+        log.warning("supabase package not installed. Skipping upsert.")
+        return None
+    except Exception as e:
+        log.warning(f"Supabase client creation failed: {e}. Skipping upsert.")
+        return None
+
+
+def upsert_detections_to_supabase(
+    detections: List[Dict],
+    mission_id: str,
+    log: logging.Logger,
+) -> bool:
+    """Upsert canopy detections to vegetation_detections table.
+
+    Non-fatal: logs warnings and returns False on failure rather than crashing.
+    Batches in chunks of SUPABASE_BATCH_SIZE (50) to stay under payload limits.
+    Conflict key: (mission_id, detection_index) — allows clean re-runs.
+
+    Args:
+        detections: List of detection dicts from detect_canopies().
+        mission_id: Supabase drone_jobs.id UUID.
+        log: Logger instance.
+
+    Returns:
+        True if all batches succeeded, False if any batch failed.
+    """
+    if not detections:
+        log.info("Zero canopies — skipping Supabase upsert")
+        return True
+
+    client = _get_supabase_client(log)
+    if client is None:
+        return False
+
+    rows = []
+    for idx, det in enumerate(detections):
+        polygon = det["polygon"]
+        rows.append({
+            "mission_id": mission_id,
+            "detection_index": idx,
+            "geometry_wkt": polygon.wkt,
+            "centroid_lat": round(det["centroid_y"], 8),
+            "centroid_lon": round(det["centroid_x"], 8),
+            "canopy_area_sqm": round(det["area_m2"], 4),
+            "canopy_width_m": round(det["width_m"], 4),
+            "canopy_height_m": round(det["height_m"], 4),
+            "detection_confidence": round(det["confidence"], 4),
+        })
+
+    success = True
+    total_rows = len(rows)
+    upserted = 0
+
+    for batch_start in range(0, total_rows, SUPABASE_BATCH_SIZE):
+        batch = rows[batch_start : batch_start + SUPABASE_BATCH_SIZE]
+        try:
+            client.table("vegetation_detections").upsert(
+                batch,
+                on_conflict="mission_id,detection_index",
+            ).execute()
+            upserted += len(batch)
+            log.info(
+                f"Supabase: upserted rows {batch_start + 1}-{upserted} / {total_rows}"
+            )
+        except Exception as e:
+            log.warning(
+                f"Supabase upsert failed for batch {batch_start}-{batch_start + len(batch)}: {e}"
+            )
+            success = False
+
+    if success:
+        log.info(f"Supabase: all {total_rows} detections written to vegetation_detections")
+    else:
+        log.warning(
+            f"Supabase: partial write — {upserted}/{total_rows} rows upserted. "
+            "Remaining rows can be re-upserted by re-running with --force."
+        )
+
+    return success
+
+
 # ─── MAIN DETECTION PIPELINE ─────────────────────────────────────────────────
 
 def detect_canopies(
@@ -320,15 +498,19 @@ def detect_canopies(
     overlap: int,
     score_threshold: float,
     iou_threshold: float,
+    completed_tiles: Set[str],
+    mission_dir: str,
     log: logging.Logger,
-) -> List[Dict]:
+) -> Tuple[List[Dict], bool, object]:
     """Run full canopy detection pipeline on a GeoTIFF.
 
     1. Opens GeoTIFF with rasterio, reads CRS and transform.
     2. Computes tile grid with overlap.
-    3. Runs DeepForest inference per tile (CUDA).
-    4. Transforms pixel bounding boxes to geographic coordinates.
-    5. Applies cross-tile NMS to remove duplicates.
+    3. Skips tiles already in completed_tiles (checkpoint resume).
+    4. Runs DeepForest inference per tile (CUDA).
+    5. Transforms pixel bounding boxes to geographic coordinates.
+    6. Saves per-tile checkpoint after each successful tile.
+    7. Applies cross-tile NMS to remove duplicates.
 
     Args:
         ortho_path: Path to source GeoTIFF orthomosaic.
@@ -336,31 +518,48 @@ def detect_canopies(
         overlap: Overlap padding in pixels per side.
         score_threshold: Minimum confidence threshold for detections.
         iou_threshold: IoU threshold for NMS suppression.
+        completed_tiles: Set of tile keys already processed (for resume).
+        mission_dir: Directory where checkpoint file is stored.
         log: Logger instance.
 
     Returns:
-        List of detection dicts with keys:
-            polygon, geo_xmin, geo_ymin, geo_xmax, geo_ymax,
-            centroid_x, centroid_y, confidence, label,
-            width_m, height_m, area_m2
+        Tuple of:
+            - List of detection dicts with keys:
+              polygon, geo_xmin, geo_ymin, geo_xmax, geo_ymax,
+              centroid_x, centroid_y, confidence, label,
+              width_m, height_m, area_m2
+            - had_partial_failure (bool): True if any tile failed inference
+            - dataset CRS (for GeoDataFrame construction)
     """
     model = load_deepforest_model(log)
 
     all_detections: List[Dict] = []
+    had_partial_failure = False
+    dataset_crs = None
 
     with rasterio.open(ortho_path) as dataset:
-        crs = dataset.crs
-        transform = dataset.transform
+        dataset_crs = dataset.crs
         width = dataset.width
         height = dataset.height
         band_count = dataset.count
 
-        log.info(f"Ortho: {width}x{height}px, {band_count} bands, CRS={crs.to_epsg()}")
+        log.info(f"Ortho: {width}x{height}px, {band_count} bands, CRS={dataset_crs.to_epsg()}")
 
         tiles = compute_tile_windows(width, height, tile_size, overlap)
-        log.info(f"Tiling: {len(tiles)} tiles ({tile_size}px core, {overlap}px overlap)")
+        skipped = sum(1 for _, col, row in tiles if f"tile_{col}_{row}" in completed_tiles)
+        log.info(
+            f"Tiling: {len(tiles)} tiles ({tile_size}px core, {overlap}px overlap)"
+            + (f", {skipped} skipped (checkpoint resume)" if skipped else "")
+        )
 
         for tile_idx, (win, core_col, core_row) in enumerate(tiles):
+            tile_key = f"tile_{core_col}_{core_row}"
+
+            # Checkpoint resume: skip tiles already processed
+            if tile_key in completed_tiles:
+                log.info(f"  Tile {tile_idx + 1}/{len(tiles)} col={core_col} row={core_row} [SKIPPED — checkpoint]")
+                continue
+
             log.info(f"  Tile {tile_idx + 1}/{len(tiles)} col={core_col} row={core_row}")
 
             # Read tile as CHW array (bands, height, width)
@@ -381,40 +580,46 @@ def detect_canopies(
 
             if results_df is None:
                 log.info(f"    No detections")
-                continue
+            else:
+                log.info(f"    {len(results_df)} detections above threshold")
 
-            log.info(f"    {len(results_df)} detections above threshold")
+                # Convert each detection to geographic coordinates
+                for _, row in results_df.iterrows():
+                    geo_xmin, geo_ymin, geo_xmax, geo_ymax = pixel_box_to_geo(
+                        dataset, win,
+                        float(row["xmin"]), float(row["ymin"]),
+                        float(row["xmax"]), float(row["ymax"]),
+                    )
 
-            # Convert each detection to geographic coordinates
-            for _, row in results_df.iterrows():
-                geo_xmin, geo_ymin, geo_xmax, geo_ymax = pixel_box_to_geo(
-                    dataset, win,
-                    float(row["xmin"]), float(row["ymin"]),
-                    float(row["xmax"]), float(row["ymax"]),
-                )
+                    polygon = shapely_box(geo_xmin, geo_ymin, geo_xmax, geo_ymax)
+                    centroid = polygon.centroid
 
-                polygon = shapely_box(geo_xmin, geo_ymin, geo_xmax, geo_ymax)
-                centroid = polygon.centroid
+                    # Width/height in CRS units (meters for UTM projections)
+                    width_m = geo_xmax - geo_xmin
+                    height_m = geo_ymax - geo_ymin
+                    area_m2 = polygon.area
 
-                # Width/height in CRS units (meters for UTM projections)
-                width_m = geo_xmax - geo_xmin
-                height_m = geo_ymax - geo_ymin
-                area_m2 = polygon.area
+                    all_detections.append({
+                        "polygon": polygon,
+                        "geo_xmin": geo_xmin,
+                        "geo_ymin": geo_ymin,
+                        "geo_xmax": geo_xmax,
+                        "geo_ymax": geo_ymax,
+                        "centroid_x": centroid.x,
+                        "centroid_y": centroid.y,
+                        "confidence": float(row["score"]),
+                        "label": str(row.get("label", "Tree")),
+                        "width_m": width_m,
+                        "height_m": height_m,
+                        "area_m2": area_m2,
+                    })
 
-                all_detections.append({
-                    "polygon": polygon,
-                    "geo_xmin": geo_xmin,
-                    "geo_ymin": geo_ymin,
-                    "geo_xmax": geo_xmax,
-                    "geo_ymax": geo_ymax,
-                    "centroid_x": centroid.x,
-                    "centroid_y": centroid.y,
-                    "confidence": float(row["score"]),
-                    "label": str(row.get("label", "Tree")),
-                    "width_m": width_m,
-                    "height_m": height_m,
-                    "area_m2": area_m2,
-                })
+            # Save checkpoint after each tile (non-fatal if write fails)
+            completed_tiles.add(tile_key)
+            try:
+                save_checkpoint(mission_dir, SCRIPT_NAME, completed_tiles)
+            except OSError as e:
+                log.warning(f"Checkpoint save failed for {tile_key}: {e}")
 
     log.info(f"Pre-NMS detections: {len(all_detections)}")
 
@@ -423,7 +628,7 @@ def detect_canopies(
     suppressed_count = len(all_detections) - len(deduped)
     log.info(f"Post-NMS detections: {len(deduped)} ({suppressed_count} suppressed)")
 
-    return deduped
+    return deduped, had_partial_failure, dataset_crs
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
@@ -434,6 +639,11 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Detects individual tree canopies from orthomosaic GeoTIFF using DeepForest.
+
+Exit codes:
+  0 — Success: all tiles processed, output files written
+  1 — Fatal error: can't open ortho, CUDA unavailable, output write failure
+  2 — Partial success: some tiles failed, output produced from successful tiles
 
 Examples:
   python canopy_detection.py --mission-id abc-123 --ortho-path E:\\Sentinel\\Output\\abc-123\\mapping\\orthomosaic.tif
@@ -504,21 +714,25 @@ Examples:
         log.info(f"CUDA verified:  {device_name} sm_{cap[0] * 10}")
     except AssertionError as e:
         log.error(f"CUDA check failed: {e}")
-        sys.exit(2)
+        sys.exit(1)  # Fatal — cannot proceed without CUDA
 
     # ── Input validation ────────────────────────────────────────────────────
     if not os.path.isfile(args.ortho_path):
         log.error(f"Ortho file not found: {args.ortho_path}")
-        sys.exit(2)
+        sys.exit(1)  # Fatal — no input, no output
 
     output_dir = args.output_dir or os.path.dirname(os.path.abspath(args.ortho_path))
     os.makedirs(output_dir, exist_ok=True)
 
-    # ── Checkpoint resume ────────────────────────────────────────────────────
+    # ── Checkpoint setup ─────────────────────────────────────────────────────
     mission_dir = os.path.dirname(os.path.abspath(args.ortho_path))
     if args.force:
         clear_checkpoint(mission_dir, SCRIPT_NAME)
         log.info("--force: checkpoint cleared, reprocessing from scratch")
+
+    completed_tiles = load_checkpoint(mission_dir, SCRIPT_NAME)
+    if completed_tiles:
+        log.info(f"Resuming from checkpoint: {len(completed_tiles)} tiles already complete")
 
     # ── Pipeline status reporter ─────────────────────────────────────────────
     reporter = PipelineStatusReporter(
@@ -530,12 +744,14 @@ Examples:
     # ── Run detection ────────────────────────────────────────────────────────
     start_time = time.time()
     try:
-        detections = detect_canopies(
+        detections, had_partial_failure, dataset_crs = detect_canopies(
             ortho_path=args.ortho_path,
             tile_size=args.tile_size,
             overlap=args.overlap,
             score_threshold=args.score_threshold,
             iou_threshold=args.iou_threshold,
+            completed_tiles=completed_tiles,
+            mission_dir=mission_dir,
             log=log,
         )
     except Exception as e:
@@ -546,8 +762,52 @@ Examples:
     elapsed = time.time() - start_time
     log.info(f"Detection complete: {len(detections)} canopies in {elapsed:.1f}s")
 
-    reporter.complete(output=f"{len(detections)} canopies detected")
+    # ── Write output files ───────────────────────────────────────────────────
+    try:
+        gpkg_path, geojson_path = write_output_files(
+            detections=detections,
+            output_dir=output_dir,
+            crs=dataset_crs,
+            log=log,
+        )
+    except Exception as e:
+        log.exception(f"Output write failed: {e}")
+        reporter.fail(str(e))
+        sys.exit(1)  # Fatal — can't complete without output files
+
+    # ── Supabase upsert (non-fatal) ──────────────────────────────────────────
+    supabase_ok = upsert_detections_to_supabase(
+        detections=detections,
+        mission_id=args.mission_id,
+        log=log,
+    )
+
+    # ── JSON stdout ──────────────────────────────────────────────────────────
+    confidences = [d["confidence"] for d in detections] if detections else []
+    result = {
+        "canopy_count": len(detections),
+        "processing_time_seconds": round(elapsed, 1),
+        "min_confidence": round(min(confidences), 2) if confidences else None,
+        "max_confidence": round(max(confidences), 2) if confidences else None,
+        "gpkg_path": gpkg_path,
+        "geojson_path": geojson_path,
+        "supabase_ok": supabase_ok,
+    }
+    print(json.dumps(result))
+
+    # ── Determine exit code ──────────────────────────────────────────────────
+    if had_partial_failure:
+        # Some tiles failed but output was produced from successful tiles
+        reporter.complete(output=f"{len(detections)} canopies detected (partial run)")
+        sys.exit(2)
+    else:
+        reporter.complete(output=f"{len(detections)} canopies detected")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.getLogger(__name__).exception(f"Fatal: {e}")
+        sys.exit(1)
