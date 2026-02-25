@@ -47,14 +47,14 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 ### Report Generation (E4)
 
-- [ ] **RPT-01**: vegetation_report.py generates branded PDF report with executive summary, species distribution table, health overview, annotated maps, attention list, and methodology disclaimer
+- [x] **RPT-01**: vegetation_report.py generates branded PDF report with executive summary, species distribution table, health overview, annotated maps, attention list, and methodology disclaimer
 - [x] **RPT-02**: Species overlay map PNG rendered on orthomosaic with color-coded canopy polygons by species
 - [x] **RPT-03**: Health overlay map PNG rendered on orthomosaic with color-coded canopy polygons by health status
 - [x] **RPT-04**: GeoJSON export with all canopy attributes for QGIS/ArcGIS/web mapping import
-- [ ] **RPT-05**: Interactive Folium HTML map with satellite basemap, clickable canopy popups (species, confidence, health, action), layer toggle, under 10MB
-- [ ] **RPT-06**: PDF carries Sentinel branding, FAA Part 107 statement, veteran-owned designation, forest green (#1B4332) headers
-- [ ] **RPT-07**: Methodology disclaimer states classifications are AI-generated and do not replace ground-level arborist assessment
-- [ ] **RPT-08**: vegetation_analysis_summary row written to Supabase with aggregate statistics (canopy count, coverage, species distribution, health distribution, API costs, processing time, file paths)
+- [x] **RPT-05**: Interactive Folium HTML map with satellite basemap, clickable canopy popups (species, confidence, health, action), layer toggle, under 10MB
+- [x] **RPT-06**: PDF carries Sentinel branding, FAA Part 107 statement, veteran-owned designation, forest green (#1B4332) headers
+- [x] **RPT-07**: Methodology disclaimer states classifications are AI-generated and do not replace ground-level arborist assessment
+- [x] **RPT-08**: vegetation_analysis_summary row written to Supabase with aggregate statistics (canopy count, coverage, species distribution, health distribution, API costs, processing time, file paths)
 - [x] **RPT-09**: Folium map uses single GeoJson layer, smooth_factor=1, coordinate precision reduced to 6 decimals, geometry simplified for performance
 
 ### Integration & Delivery
@@ -136,15 +136,15 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | HLT-04 | Phase 10 | Complete (10-01) |
 | HLT-05 | Phase 10 | Complete (10-01) |
 | HLT-06 | Phase 10 | Complete (10-01) |
-| RPT-01 | Phase 11 | Pending |
-| RPT-02 | Phase 11 | Complete |
-| RPT-03 | Phase 11 | Complete |
-| RPT-04 | Phase 11 | Complete |
-| RPT-05 | Phase 11 | Pending |
-| RPT-06 | Phase 11 | Pending |
-| RPT-07 | Phase 11 | Pending |
-| RPT-08 | Phase 11 | Pending |
-| RPT-09 | Phase 11 | Complete |
+| RPT-01 | Phase 11 | Complete (11-02) |
+| RPT-02 | Phase 11 | Complete (11-01) |
+| RPT-03 | Phase 11 | Complete (11-01) |
+| RPT-04 | Phase 11 | Complete (11-01) |
+| RPT-05 | Phase 11 | Complete (11-01) |
+| RPT-06 | Phase 11 | Complete (11-02) |
+| RPT-07 | Phase 11 | Complete (11-02) |
+| RPT-08 | Phase 11 | Complete (11-02) |
+| RPT-09 | Phase 11 | Complete (11-01) |
 | INT-01 | Phase 12 | Pending |
 | INT-02 | Phase 12 | Pending |
 | INT-03 | Phase 12 | Pending |

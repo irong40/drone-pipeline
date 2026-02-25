@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 11 (Report Generation) — Plan 01 complete
+**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 11 (Report Generation) — COMPLETE
 
 ## Current Position
 
 Phase: 11 of 13 (Report Generation)
-Plan: 1 of 2 in current phase (PLAN 01 COMPLETE)
-Status: Phase 11 Plan 01 complete — map generation done; 11-02 (PDF report) next
-Last activity: 2026-02-25 — 11-01 complete: vegetation_report.py (species map PNG, health map PNG, GeoJSON, Folium interactive map, Supabase summary write)
+Plan: 2 of 2 in current phase (PHASE 11 COMPLETE)
+Status: Phase 11 complete — vegetation_report.py (E4) done with PDF, maps, GeoJSON, Folium, Supabase summary; Phase 12 (Integration and Delivery) next
+Last activity: 2026-02-25 — 11-02 complete: PDF with species pie chart, GPS attention list, methodology disclaimer; Supabase summary with site_area/coverage/api_calls fields
 
-Progress: [████████░░░░░░░░░░░░] 45% (Phases 7+8+9+10 complete; Phase 11 in progress)
+Progress: [█████████░░░░░░░░░░░] 50% (Phases 7+8+9+10+11 complete; Phase 12 next)
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [████████░░░░░░░░░░░░] 45% (Ph
 | 9. Species Classification | 09-01 (species_classification.py) | 25 min | 1 | 2026-02-25 |
 | 10. Health Assessment | 10-01 (health_assessment.py) | 3 min | 1 | 2026-02-25 |
 | 11. Report Generation | 11-01 (vegetation_report.py maps) | 3 min | 1 | 2026-02-25 |
+| 11. Report Generation | 11-02 (PDF + Supabase summary) | 3 min | 1 | 2026-02-25 |
 
 ## Accumulated Context
 
@@ -83,6 +84,9 @@ Recent decisions affecting v2.0 work:
 - [Phase 11-report-generation]: matplotlib Agg backend set before pyplot import for headless rendering — avoids TkAgg/Qt errors in server/n8n context
 - [Phase 11-report-generation]: Folium two-pass simplification: FOLIUM_SIMPLIFY_INITIAL=5e-6 first, FOLIUM_SIMPLIFY_AGGRESSIVE=2e-5 only if file > 10MB
 - [Phase 11-report-generation]: Folium interactive map tier-gated: extended/comprehensive only per PRD delivery spec
+- [11-02]: Pie chart temp PNG deferred cleanup — _pie_cleanup list populated at append time, files deleted after doc.build() (ReportLab reads file during build, not at story append)
+- [11-02]: site_area_sqm auto-derived from ortho pixel dimensions when not provided — geographic CRS uses cos(lat) correction; projected CRS uses direct meter units
+- [11-02]: GPS in attention list uses centroid_lat/centroid_lon from vegetation_detections (already WGS84 from E1)
 
 ### Pending Todos
 
@@ -98,5 +102,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 11-01-PLAN.md — vegetation_report.py: species map PNG (20-species SPECIES_COLORS palette, rasterio.plot basemap, legend/north arrow/scale/branding), health map PNG (5-status HEALTH_COLORS, severity-ordered legend), GeoJSON export (EPSG:4326, 6-decimal precision via shapely.set_precision), Folium interactive map (Esri satellite, clickable popups, LayerControl, 10MB guard with 2-pass simplification), tier-aware orchestrator, Supabase vegetation_analysis_summary write. RPT-02/03/04/09 satisfied.
+Stopped at: Completed 11-02-PLAN.md — vegetation_report.py (E4) complete: PDF with species pie chart (_generate_species_pie_chart via matplotlib Agg, top-8+Other, SPECIES_COLORS palette), GPS column in attention list (centroid_lat/lon), Supabase vegetation_analysis_summary with site_area_sqm/acres/canopy_coverage_pct/api_calls_total/processing_time_seconds. --site-area and --api-calls CLI args added. RPT-01/05/06/07/08 satisfied. Phase 11 complete.
 Resume file: None

@@ -173,6 +173,6 @@ Plans:
 | 8. Canopy Detection | 2/2 | Complete    | 2026-02-25 | - |
 | 9. Species Classification | 1/2 | In Progress|  | - |
 | 10. Health Assessment | v2.0 | Complete    | 2026-02-25 | 2026-02-25 |
-| 11. Report Generation | 1/2 | In Progress|  | - |
+| 11. Report Generation | 2/2 | Complete    | 2026-02-25 | 2026-02-25 |
 | 12. Integration and Delivery | v2.0 | 0/TBD | Not started | - |
 | 13. Test Suite and Acceptance | v2.0 | 0/TBD | Not started | - |
