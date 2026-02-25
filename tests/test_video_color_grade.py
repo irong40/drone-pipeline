@@ -80,7 +80,7 @@ def test_grade_video_builds_correct_command(mock_ffmpeg, tmp_path):
     output_path = str(tmp_path / "DJI_0001_graded.MP4")
 
     from video_color_grade import grade_video
-    ok, stderr = grade_video(input_path, output_path, str(lut_file))
+    ok, stderr = grade_video(input_path, output_path, str(lut_file), lut_dir=str(tmp_path))
 
     assert ok is True
     assert stderr == ""
@@ -108,7 +108,7 @@ def test_grade_video_lut_path_escaped_for_ffmpeg(mock_ffmpeg, tmp_path):
     output_path = str(tmp_path / "DJI_0001_graded.MP4")
 
     from video_color_grade import grade_video
-    grade_video(input_path, output_path, str(lut_file))
+    grade_video(input_path, output_path, str(lut_file), lut_dir=str(tmp_path))
 
     cmd = mock_ffmpeg.call_args[0][0]
     vf_idx = cmd.index("-vf")
@@ -123,7 +123,7 @@ def test_grade_video_returns_false_on_ffmpeg_failure(mock_ffmpeg, tmp_path):
     lut_file.write_bytes(b"")
 
     from video_color_grade import grade_video
-    ok, stderr = grade_video("/input.mp4", "/output.mp4", str(lut_file))
+    ok, stderr = grade_video("/input.mp4", "/output.mp4", str(lut_file), lut_dir=str(tmp_path))
     assert ok is False
     assert stderr == "FFmpeg error"
 
@@ -132,7 +132,7 @@ def test_grade_video_custom_crf_and_codec(mock_ffmpeg, tmp_path):
     lut_file.write_bytes(b"")
 
     from video_color_grade import grade_video
-    grade_video("/input.mp4", "/output.mp4", str(lut_file), crf=23, codec="libx265")
+    grade_video("/input.mp4", "/output.mp4", str(lut_file), crf=23, codec="libx265", lut_dir=str(tmp_path))
 
     cmd = mock_ffmpeg.call_args[0][0]
     assert "23" in cmd

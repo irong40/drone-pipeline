@@ -17,7 +17,7 @@ import json
 import argparse
 import logging
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ def cleanup_old_delivered(service, folder_id, synced_results, days=CLEANUP_DAYS,
     """
     log = logging.getLogger(__name__)
     files = list_files_in_folder(service, folder_id)
-    cutoff = datetime.now(datetime.UTC) - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     removed = 0
 
     # Build set of safely archived file names

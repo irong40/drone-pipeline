@@ -122,13 +122,19 @@ def get_lut_path(platform, lut_override=None, lut_dir=LUT_DIR):
     return None
 
 
-def grade_video(input_path, output_path, lut_path, crf=CRF_QUALITY, codec=VIDEO_CODEC):
+def grade_video(input_path, output_path, lut_path, crf=CRF_QUALITY, codec=VIDEO_CODEC, lut_dir=None):
     """Apply LUT to a single video file using FFmpeg.
 
     Command: ffmpeg -i input.mp4 -vf lut3d=LUT_PATH -c:v libx264 -crf 18 output.mp4
     """
-    # Escape LUT path for FFmpeg filter syntax (backslashes and colons are special)
-    escaped_lut = lut_path.replace("\\", "/").replace(":", "\\:")
+    # Validate LUT path is inside expected LUT directory
+    lut_abs = os.path.abspath(lut_path)
+    lut_dir_abs = os.path.abspath(lut_dir or LUT_DIR)
+    if not lut_abs.startswith(lut_dir_abs + os.sep) and lut_abs != lut_dir_abs:
+        raise ValueError(f"LUT path escapes LUT directory: {lut_abs}")
+
+    # Escape LUT path for FFmpeg filter syntax (backslashes, colons, single quotes)
+    escaped_lut = lut_path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
 
     cmd = [
         FFMPEG_BIN,
@@ -245,7 +251,7 @@ Examples:
             log.info(f"  [DRY RUN] → {output_path}")
             continue
 
-        ok, stderr = grade_video(video_path, output_path, lut_path, crf=args.crf, codec=args.codec)
+        ok, stderr = grade_video(video_path, output_path, lut_path, crf=args.crf, codec=args.codec, lut_dir=args.lut_dir)
 
         if ok:
             size_mb = os.path.getsize(output_path) / (1024 * 1024)

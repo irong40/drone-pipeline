@@ -82,7 +82,7 @@ def test_color_grade_creates_graded_files(mission_folder, mock_ffmpeg_success):
         name, ext = os.path.splitext(filename)
         output_path = str(graded_dir / f"{name}_graded{ext}")
 
-        ok, stderr = grade_video(video_path, output_path, lut_path)
+        ok, stderr = grade_video(video_path, output_path, lut_path, lut_dir=str(mission_folder / "LUTs"))
         assert ok is True
         assert os.path.isfile(output_path)
         completed.add(video_path)
@@ -116,7 +116,9 @@ def test_color_grade_checkpoint_skips_completed(mission_folder, mock_ffmpeg_succ
             continue
         name, ext = os.path.splitext(os.path.basename(video_path))
         output_path = str(mission_folder / "video" / "graded" / f"{name}_graded{ext}")
-        grade_video(video_path, output_path, "fake_lut.cube")
+        lut_file = mission_folder / "LUTs" / "fake_lut.cube"
+        lut_file.write_bytes(b"")
+        grade_video(video_path, output_path, str(lut_file), lut_dir=str(mission_folder / "LUTs"))
         processed_count += 1
 
     assert processed_count == 1  # Only DJI_0002 processed
