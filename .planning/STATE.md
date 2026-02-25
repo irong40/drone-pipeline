@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 8 of 13 (Canopy Detection)
-Plan: 1 of TBD in current phase
-Status: In progress (08-01 complete)
-Last activity: 2026-02-25 — 08-01 complete: canopy_detection.py with tiling, DeepForest CUDA inference, cross-tile NMS, geographic coordinate transform
+Plan: 2 of 2 in current phase (PHASE COMPLETE)
+Status: Phase 8 complete — moving to Phase 9 (Species Classification)
+Last activity: 2026-02-25 — 08-02 complete: canopy_detection.py output layer (GeoPackage/GeoJSON, Supabase upsert, checkpoint resume, JSON stdout, exit codes)
 
 Progress: [███████░░░░░░░░░░░░░] 35% (6/13 phases complete — v1.0 shipped; Phase 7 in progress)
 
@@ -43,6 +43,7 @@ Progress: [███████░░░░░░░░░░░░░] 35% (6/
 | 7. Environment and Foundation | 07-01 (venv+GPU) | 11 min | 2 | 2026-02-25 |
 | 7. Environment and Foundation | 07-02 (schema) | 2 min | 2 | 2026-02-25 |
 | 8. Canopy Detection | 08-01 (detection engine) | 15 min | 1 | 2026-02-25 |
+| 8. Canopy Detection | 08-02 (output layer) | 15 min | 1 | 2026-02-25 |
 
 ## Accumulated Context
 
@@ -63,6 +64,9 @@ Recent decisions affecting v2.0 work:
 - [08-01]: DeepForest v2 import path is `from deepforest import main as deepforest_main` — top-level module does not auto-expose submodules
 - [08-01]: predict_image() used per tile (not predict_tile()) — we pre-tile for overlap control; predict_tile() would re-tile internally
 - [08-01]: NMS operates in geographic space (CRS units) not pixel space — avoids coordinate errors from CRS skew in UTM projections
+- [Phase 08-canopy-detection]: detect_canopies() returns (detections, had_partial_failure, dataset_crs) tuple — main() owns all I/O so core function stays testable
+- [Phase 08-canopy-detection]: CUDA failure exit code is 1 (fatal), not 2 (partial) — CUDA unavailable = zero tiles, zero output, unrecoverable
+- [Phase 08-canopy-detection]: Supabase upsert on_conflict='mission_id,detection_index' — idempotent re-runs; partial write failures safe to retry
 
 ### Pending Todos
 
@@ -78,5 +82,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 08-01-PLAN.md — canopy_detection.py with GeoTIFF tiling, DeepForest CUDA inference, cross-tile NMS, geographic coordinate transform
+Stopped at: Completed 08-02-PLAN.md — canopy_detection.py output layer: GeoPackage/GeoJSON export, Supabase upsert, per-tile checkpoint resume, JSON stdout, v1 exit codes. Phase 8 COMPLETE.
 Resume file: None

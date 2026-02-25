@@ -19,8 +19,8 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 - [x] **DET-01**: canopy_detection.py tiles orthomosaic GeoTIFF into 1024px chunks with 128px overlap and runs DeepForest on each tile using CUDA acceleration
 - [x] **DET-02**: Cross-tile non-maximum suppression (IoU 0.3) removes duplicate detections from overlap zones in full-ortho coordinate space
-- [ ] **DET-03**: Canopy polygons exported as GeoPackage and GeoJSON with area (sqm), width, height, centroid GPS, and detection confidence
-- [ ] **DET-04**: Each detected canopy written to vegetation_detections table in Supabase with geometry and dimensional attributes
+- [x] **DET-03**: Canopy polygons exported as GeoPackage and GeoJSON with area (sqm), width, height, centroid GPS, and detection confidence
+- [x] **DET-04**: Each detected canopy written to vegetation_detections table in Supabase with geometry and dimensional attributes
 - [x] **DET-05**: Detection parameters (tile_size, score_threshold, iou_threshold) are configurable via CLI args and processing_templates.vegetation_config
 - [x] **DET-06**: Script clears PROJ_LIB/PROJ_DATA env vars at startup before importing rasterio to prevent QGIS conflicts
 - [x] **DET-07**: Script sets GDAL_CACHEMAX=256 and manages tile memory to handle 1GB+ orthomosaics without OOM
@@ -117,8 +117,8 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | ENV-05 | Phase 7 | Complete (07-02) |
 | DET-01 | Phase 8 | Complete |
 | DET-02 | Phase 8 | Complete |
-| DET-03 | Phase 8 | Pending |
-| DET-04 | Phase 8 | Pending |
+| DET-03 | Phase 8 | Complete |
+| DET-04 | Phase 8 | Complete |
 | DET-05 | Phase 8 | Complete |
 | DET-06 | Phase 8 | Complete |
 | DET-07 | Phase 8 | Complete |
