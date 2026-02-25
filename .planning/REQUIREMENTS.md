@@ -73,8 +73,8 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 - [x] **TST-02**: Unit tests for species_classification.py covering crop extraction, API calls, confidence reconciliation, checkpoint resume with mocked APIs
 - [x] **TST-03**: Unit tests for health_assessment.py covering VARI/ExG calculation, vision sampling, score combination with mocked APIs
 - [x] **TST-04**: Unit tests for vegetation_report.py covering PDF generation, map rendering, Folium output, summary writes
-- [ ] **TST-05**: Integration test: E1 → E2 → E3 → E4 end-to-end with sample orthomosaic and mocked APIs
-- [ ] **TST-06**: Integration test: delivery_packaging.py includes vegetation subfolder when --include-vegetation is set
+- [x] **TST-05**: Integration test: E1 → E2 → E3 → E4 end-to-end with sample orthomosaic and mocked APIs
+- [x] **TST-06**: Integration test: delivery_packaging.py includes vegetation subfolder when --include-vegetation is set
 
 ## v3.0 Requirements (Deferred)
 
@@ -156,8 +156,8 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | TST-02 | Phase 13 | Complete |
 | TST-03 | Phase 13 | Complete |
 | TST-04 | Phase 13 | Complete |
-| TST-05 | Phase 13 | Pending |
-| TST-06 | Phase 13 | Pending |
+| TST-05 | Phase 13 | Complete |
+| TST-06 | Phase 13 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 48 total (ENV×5 + DET×7 + SPE×8 + HLT×6 + RPT×9 + INT×7 + TST×6)

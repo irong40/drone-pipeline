@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 13 of 13 (Test Suite and Acceptance)
-Plan: 1 of 4 in current phase (13-01 COMPLETE)
-Status: 13-01 complete — E1/E2 unit tests (50 tests); Phase 13 Plans 02-04 remain
-Last activity: 2026-02-25 — 13-01 complete: test_canopy_detection.py (26 E1 tests), test_species_classification.py (24 E2 tests), full module stubs for system Python, PLANTNET_QUOTA_EXHAUSTED sentinel committed
+Plan: 3 of 4 in current phase (13-01, 13-02, 13-03 Task 1 COMPLETE — checkpoint at 13-03 Task 2)
+Status: 13-03 Task 1 complete — 7 integration tests (E1→E4 + delivery vegetation); AWAITING checkpoint: operator real-ortho review
+Last activity: 2026-02-25 — 13-03 Task 1: test_vegetation_integration.py (7 tests), delivery_packaging --include-vegetation, vegetation/.status convention; 339 total tests pass
 
 Progress: [████████████░░░░░░░░] 60% (Phases 7+8+9+10+11+12 complete; Phase 13 in progress)
 
@@ -36,6 +36,8 @@ Progress: [████████████░░░░░░░░] 60% (Ph
 | 11. Report Generation | 11-01 (vegetation_report.py maps) | 3 min | 1 | 2026-02-25 |
 | 11. Report Generation | 11-02 (PDF + Supabase summary) | 3 min | 1 | 2026-02-25 |
 | 13. Test Suite | 13-01 (E1/E2 unit tests) | 35 min | 3 | 2026-02-25 |
+| 13. Test Suite | 13-02 (E3/E4 unit tests) | — | 3 | 2026-02-25 |
+| 13. Test Suite | 13-03 Task 1 (integration tests) | 25 min | 2 | 2026-02-25 |
 
 ## Accumulated Context
 
@@ -67,6 +69,8 @@ Recent decisions affecting v2.0 work:
 - [13-01]: FakePolygon with real AABB geometry replaces shapely for IoU/intersection tests
 - [13-01]: Lazy-imported symbols patched via sys.modules[mod].attr not patch("module.Symbol")
 - [13-01]: numpy stub needs np.bool_, np.isscalar for pytest.approx compatibility
+- [Phase 13]: vegetation/.status sentinel file convention — writable by E4, read by delivery_packaging for delivery gate
+- [Phase 13]: collect_vegetation() returns [] for any non-complete status — safe default, no partial outputs in ZIP
 
 ### Pending Todos
 
@@ -82,5 +86,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 13-01-PLAN.md — test_canopy_detection.py (26 E1 tests) and test_species_classification.py (24 E2 tests); TST-01/TST-02 satisfied.
+Stopped at: Checkpoint 13-03 Task 2 — real-ortho acceptance test; awaiting operator to run full E1→E4 on real orthomosaic and review PDF
 Resume file: None
