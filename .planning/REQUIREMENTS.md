@@ -38,12 +38,12 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 ### Health Assessment (E3)
 
-- [ ] **HLT-01**: health_assessment.py calculates VARI, ExG, Green Fraction, and Stress Fraction indices for every detected canopy using rasterio and NumPy
-- [ ] **HLT-02**: Configurable sample (default 30%) of canopies sent to OpenAI Vision API for qualitative health assessment (skippable via --skip-vision)
-- [ ] **HLT-03**: Combined health score weights 40% index + 60% vision when both available; index-only when vision skipped
-- [ ] **HLT-04**: Health status categorized: healthy (0.80-1.00), moderate_stress (0.60-0.79), stressed (0.40-0.59), severe_decline (0.20-0.39), dead (0.00-0.19)
-- [ ] **HLT-05**: Health score, status, and details (VARI data, vision results, observations, recommended action) written to vegetation_detections
-- [ ] **HLT-06**: Per-canopy checkpoint resume prevents re-billing for already-assessed canopies
+- [x] **HLT-01**: health_assessment.py calculates VARI, ExG, Green Fraction, and Stress Fraction indices for every detected canopy using rasterio and NumPy
+- [x] **HLT-02**: Configurable sample (default 30%) of canopies sent to OpenAI Vision API for qualitative health assessment (skippable via --skip-vision)
+- [x] **HLT-03**: Combined health score weights 40% index + 60% vision when both available; index-only when vision skipped
+- [x] **HLT-04**: Health status categorized: healthy (0.80-1.00), moderate_stress (0.60-0.79), stressed (0.40-0.59), severe_decline (0.20-0.39), dead (0.00-0.19)
+- [x] **HLT-05**: Health score, status, and details (VARI data, vision results, observations, recommended action) written to vegetation_detections
+- [x] **HLT-06**: Per-canopy checkpoint resume prevents re-billing for already-assessed canopies
 
 ### Report Generation (E4)
 
@@ -130,12 +130,12 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | SPE-06 | Phase 9 | Pending |
 | SPE-07 | Phase 9 | Pending |
 | SPE-08 | Phase 9 | Pending |
-| HLT-01 | Phase 10 | Pending |
-| HLT-02 | Phase 10 | Pending |
-| HLT-03 | Phase 10 | Pending |
-| HLT-04 | Phase 10 | Pending |
-| HLT-05 | Phase 10 | Pending |
-| HLT-06 | Phase 10 | Pending |
+| HLT-01 | Phase 10 | Complete (10-01) |
+| HLT-02 | Phase 10 | Complete (10-01) |
+| HLT-03 | Phase 10 | Complete (10-01) |
+| HLT-04 | Phase 10 | Complete (10-01) |
+| HLT-05 | Phase 10 | Complete (10-01) |
+| HLT-06 | Phase 10 | Complete (10-01) |
 | RPT-01 | Phase 11 | Pending |
 | RPT-02 | Phase 11 | Pending |
 | RPT-03 | Phase 11 | Pending |

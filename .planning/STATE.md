@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 8 (Canopy Detection)
+**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 10 (Health Assessment)
 
 ## Current Position
 
-Phase: 8 of 13 (Canopy Detection)
-Plan: 2 of 2 in current phase (PHASE COMPLETE)
-Status: Phase 8 complete — moving to Phase 9 (Species Classification)
-Last activity: 2026-02-25 — 08-02 complete: canopy_detection.py output layer (GeoPackage/GeoJSON, Supabase upsert, checkpoint resume, JSON stdout, exit codes)
+Phase: 10 of 13 (Health Assessment)
+Plan: 1 of 1 in current phase (PHASE COMPLETE)
+Status: Phase 10 complete — moving to Phase 11 (Report Generation)
+Last activity: 2026-02-25 — 10-01 complete: health_assessment.py (VARI/ExG indices, health scoring, OpenAI Vision sampling, checkpoint resume, Supabase update, JSON stdout)
 
-Progress: [███████░░░░░░░░░░░░░] 35% (6/13 phases complete — v1.0 shipped; Phase 7 in progress)
+Progress: [████████░░░░░░░░░░░░] 40% (8/13 phases complete — v1.0 shipped; Phases 7+8+9+10 complete)
 
 ## Performance Metrics
 
@@ -44,6 +44,7 @@ Progress: [███████░░░░░░░░░░░░░] 35% (6/
 | 7. Environment and Foundation | 07-02 (schema) | 2 min | 2 | 2026-02-25 |
 | 8. Canopy Detection | 08-01 (detection engine) | 15 min | 1 | 2026-02-25 |
 | 8. Canopy Detection | 08-02 (output layer) | 15 min | 1 | 2026-02-25 |
+| 10. Health Assessment | 10-01 (health_assessment.py) | 3 min | 1 | 2026-02-25 |
 
 ## Accumulated Context
 
@@ -67,6 +68,10 @@ Recent decisions affecting v2.0 work:
 - [Phase 08-canopy-detection]: detect_canopies() returns (detections, had_partial_failure, dataset_crs) tuple — main() owns all I/O so core function stays testable
 - [Phase 08-canopy-detection]: CUDA failure exit code is 1 (fatal), not 2 (partial) — CUDA unavailable = zero tiles, zero output, unrecoverable
 - [Phase 08-canopy-detection]: Supabase upsert on_conflict='mission_id,detection_index' — idempotent re-runs; partial write failures safe to retry
+- [10-01]: Vision sample selects bottom vision_sample_pct by index_score ascending — worst-looking trees get Vision API confirmation
+- [10-01]: update_health_batch uses individual UPDATE per row (not upsert) since E1 rows already exist in vegetation_detections
+- [10-01]: Checkpoint key format canopy_{detection_index} — per-canopy granularity prevents re-billing on vision API calls after partial run
+- [10-01]: Cost threshold guard runs before vision loop — aborts if estimated_cost > cost_threshold ($2.00 default)
 
 ### Pending Todos
 
@@ -82,5 +87,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 08-02-PLAN.md — canopy_detection.py output layer: GeoPackage/GeoJSON export, Supabase upsert, per-tile checkpoint resume, JSON stdout, v1 exit codes. Phase 8 COMPLETE.
+Stopped at: Completed 10-01-PLAN.md — health_assessment.py: VARI/ExG vegetation indices, health scoring (40/60 index/vision), OpenAI Vision sampling for bottom 30%, checkpoint resume, Supabase batch update, JSON stdout. Phase 10 COMPLETE.
 Resume file: None
