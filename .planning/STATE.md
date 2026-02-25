@@ -38,6 +38,8 @@ Progress: [████████████░░░░░░░░] 60% (Ph
 | 13. Test Suite | 13-01 (E1/E2 unit tests) | 35 min | 3 | 2026-02-25 |
 | 13. Test Suite | 13-02 (E3/E4 unit tests) | — | 3 | 2026-02-25 |
 | 13. Test Suite | 13-03 Task 1 (integration tests) | 25 min | 2 | 2026-02-25 |
+| 9. Species Classification | 09-02 (safety controls + JSON stdout) | 8 min | 1 | 2026-02-25 |
+| 12. Integration and Delivery | 12-02 (delivery veg subfolder + review gate docs) | 5 min | 2 | 2026-02-25 |
 
 ## Accumulated Context
 
@@ -71,6 +73,11 @@ Recent decisions affecting v2.0 work:
 - [13-01]: numpy stub needs np.bool_, np.isscalar for pytest.approx compatibility
 - [Phase 13]: vegetation/.status sentinel file convention — writable by E4, read by delivery_packaging for delivery gate
 - [Phase 13]: collect_vegetation() returns [] for any non-complete status — safe default, no partial outputs in ZIP
+- [Phase 09]: PLANTNET_QUOTA_EXHAUSTED is a module-level sentinel dict — identity check (is) distinguishes it from normal None returns
+- [Phase 09]: time.sleep(0.5) placed at END of per-canopy block to rate-limit both OpenAI and PlantNet calls
+- [12-02]: collect_vegetation() returns [] for any non-complete status — two-gate safety: CLI flag (opt-in) + vegetation_status=complete (data guard)
+- [12-02]: Decisions array for review gate contains only non-default overrides; omitting detection_index implicitly approves it
+- [12-02]: REVIEW_GATE.md in repo root (not embedded in delivery_packaging.py) — contract is for Trestle admin UI (separate project)
 
 ### Pending Todos
 
@@ -86,5 +93,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Checkpoint 13-03 Task 2 — real-ortho acceptance test; awaiting operator to run full E1→E4 on real orthomosaic and review PDF
+Stopped at: Completed 12-02-PLAN.md — delivery vegetation subfolder + review gate docs; Phase 12 fully complete. Phase 13 still at checkpoint 13-03 Task 2.
 Resume file: None

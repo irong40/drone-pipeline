@@ -31,10 +31,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 - [x] **SPE-02**: Each crop sent to OpenAI Vision API (gpt-4o) with Hampton Roads species identification prompt covering 20 species
 - [x] **SPE-03**: Each crop sent to PlantNet API for independent cross-validation (skippable via --skip-plantnet flag)
 - [x] **SPE-04**: Confidence reconciliation: genus match between APIs boosts confidence +0.1, disagreement reduces -0.15
-- [ ] **SPE-05**: Per-canopy checkpoint resume prevents re-billing for already-classified canopies on script restart
-- [ ] **SPE-06**: max_canopies cap (default 200) limits API cost by selecting largest canopies by area
-- [ ] **SPE-07**: 0.5-second delay between API calls respects rate limits; PlantNet remainingIdentificationRequests checked and acted on
-- [ ] **SPE-08**: Species tag, confidence, vegetation type, cross-validation status, and classification details written to vegetation_detections
+- [x] **SPE-05**: Per-canopy checkpoint resume prevents re-billing for already-classified canopies on script restart
+- [x] **SPE-06**: max_canopies cap (default 200) limits API cost by selecting largest canopies by area
+- [x] **SPE-07**: 0.5-second delay between API calls respects rate limits; PlantNet remainingIdentificationRequests checked and acted on
+- [x] **SPE-08**: Species tag, confidence, vegetation type, cross-validation status, and classification details written to vegetation_detections
 
 ### Health Assessment (E3)
 
@@ -61,10 +61,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 - [ ] **INT-01**: n8n Path E workflow triggers when mission.vegetation_analysis=true AND Path C orthomosaic exists
 - [ ] **INT-02**: Package Router updated: site_survey and environmental_survey enable vegetation by default; construction_hybrid optional
-- [ ] **INT-03**: Operator review gate pauses processing after E4 with approve/exclude/flag-for-arborist actions per detection
-- [ ] **INT-04**: Review resume webhook (POST /sentinel-vegetation-resume) accepts decisions array and regenerates report excluding excluded detections
-- [ ] **INT-05**: delivery_packaging.py adds vegetation/ subfolder to client ZIP with PDF, species map, health map, GeoJSON, and optional interactive map
-- [ ] **INT-06**: Path E failure never blocks main delivery package; --include-vegetation flag gated on vegetation_status='complete'
+- [x] **INT-03**: Operator review gate pauses processing after E4 with approve/exclude/flag-for-arborist actions per detection
+- [x] **INT-04**: Review resume webhook (POST /sentinel-vegetation-resume) accepts decisions array and regenerates report excluding excluded detections
+- [x] **INT-05**: delivery_packaging.py adds vegetation/ subfolder to client ZIP with PDF, species map, health map, GeoJSON, and optional interactive map
+- [x] **INT-06**: Path E failure never blocks main delivery package; --include-vegetation flag gated on vegetation_status='complete'
 - [ ] **INT-07**: All 4 scripts follow v1.0 contract: argparse inputs, processing_steps row updates, JSON stdout, exit codes 0/1/2, setup_logging()
 
 ### Testing
@@ -126,10 +126,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | SPE-02 | Phase 9 | Complete |
 | SPE-03 | Phase 9 | Complete |
 | SPE-04 | Phase 9 | Complete |
-| SPE-05 | Phase 9 | Pending |
-| SPE-06 | Phase 9 | Pending |
-| SPE-07 | Phase 9 | Pending |
-| SPE-08 | Phase 9 | Pending |
+| SPE-05 | Phase 9 | Complete |
+| SPE-06 | Phase 9 | Complete |
+| SPE-07 | Phase 9 | Complete |
+| SPE-08 | Phase 9 | Complete |
 | HLT-01 | Phase 10 | Complete (10-01) |
 | HLT-02 | Phase 10 | Complete (10-01) |
 | HLT-03 | Phase 10 | Complete (10-01) |
@@ -147,10 +147,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | RPT-09 | Phase 11 | Complete (11-01) |
 | INT-01 | Phase 12 | Pending |
 | INT-02 | Phase 12 | Pending |
-| INT-03 | Phase 12 | Pending |
-| INT-04 | Phase 12 | Pending |
-| INT-05 | Phase 12 | Pending |
-| INT-06 | Phase 12 | Pending |
+| INT-03 | Phase 12 | Complete |
+| INT-04 | Phase 12 | Complete |
+| INT-05 | Phase 12 | Complete |
+| INT-06 | Phase 12 | Complete |
 | INT-07 | Phase 12 | Pending |
 | TST-01 | Phase 13 | Complete |
 | TST-02 | Phase 13 | Complete |
