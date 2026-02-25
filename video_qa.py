@@ -299,7 +299,11 @@ Examples:
 
     # Get thresholds
     if args.thresholds:
-        thresholds = {**DEFAULT_THRESHOLDS, **json.loads(args.thresholds)}
+        try:
+            thresholds = {**DEFAULT_THRESHOLDS, **json.loads(args.thresholds)}
+        except json.JSONDecodeError as e:
+            log.error(f"Invalid --thresholds JSON: {e}")
+            sys.exit(2)
     else:
         try:
             thresholds = fetch_thresholds(client, args.mission_id)

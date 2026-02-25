@@ -291,15 +291,8 @@ def upload_to_supabase(clip_data, mission_id):
     }
 
     # Sequence number from filename (platform-aware)
-    # M4E/M3E: DJI_YYYYMMDDHHMMSS_NNNN_X.EXT → extract NNNN after timestamp
-    seq_match = re.match(r"DJI_\d{14}_(\d{4})_", clip_data["filename"], re.IGNORECASE)
-    if not seq_match:
-        # Mini 4 Pro: DJI_NNNN.EXT → extract NNNN
-        seq_match = re.match(r"DJI_(\d{4})\.", clip_data["filename"], re.IGNORECASE)
-    if seq_match:
-        record["sequence_number"] = int(seq_match.group(1))
-    else:
-        record["sequence_number"] = 0
+    from pipeline_utils import extract_sequence_number
+    record["sequence_number"] = extract_sequence_number(clip_data["filename"])
 
     result = client.table("video_assets").insert(record).execute()
     return result.data

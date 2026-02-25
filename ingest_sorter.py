@@ -328,6 +328,12 @@ def count_inventory(mission_path):
 
 def fire_webhook(mission_config, inventory, source_platform, webhook_url=N8N_WEBHOOK_URL):
     """POST mission completion data to n8n webhook."""
+    from pipeline_utils import validate_webhook_url
+    try:
+        validate_webhook_url(webhook_url)
+    except ValueError as e:
+        logging.getLogger(__name__).error(f"Webhook blocked: {e}")
+        return False
     payload = {
         "mission_id": mission_config["mission_id"],
         "mission_number": mission_config["mission_number"],

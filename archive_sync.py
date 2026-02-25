@@ -49,47 +49,20 @@ def setup_logging(log_dir=LOG_DIR):
 
 def get_drive_service(credentials_json=None):
     """Build Google Drive API service."""
-    try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-    except ImportError:
-        sys.exit("pip install google-api-python-client google-auth")
-
-    creds_path = credentials_json or GOOGLE_SERVICE_ACCOUNT_JSON
-    if not creds_path:
-        sys.exit("GOOGLE_SERVICE_ACCOUNT_JSON env var required")
-    if not os.path.isfile(creds_path):
-        sys.exit(f"Credentials not found: {creds_path}")
-
-    scopes = ["https://www.googleapis.com/auth/drive"]
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=scopes)
-    return build("drive", "v3", credentials=creds)
+    from pipeline_utils import get_drive_service as _get_drive_service
+    return _get_drive_service(credentials_json)
 
 
 def find_folder(service, folder_path):
     """Find a nested folder by path. Returns folder ID or None."""
-    parts = folder_path.strip("/").split("/")
-    current_parent = "root"
-
-    for part in parts:
-        safe_part = part.replace("'", "\\'")
-        query = (
-            f"name = '{safe_part}' and "
-            f"'{current_parent}' in parents and "
-            f"mimeType = 'application/vnd.google-apps.folder' and "
-            f"trashed = false"
-        )
-        results = service.files().list(q=query, fields="files(id)").execute()
-        files = results.get("files", [])
-        if not files:
-            return None
-        current_parent = files[0]["id"]
-
-    return current_parent
+    from pipeline_utils import traverse_drive_folder
+    return traverse_drive_folder(service, folder_path, create_missing=False)
 
 
 def list_files_in_folder(service, folder_id):
     """List all files in a Google Drive folder."""
+    from pipeline_utils import validate_drive_id
+    validate_drive_id(folder_id)
     query = f"'{folder_id}' in parents and trashed = false"
     all_files = []
     page_token = None

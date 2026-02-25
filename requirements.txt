@@ -1,9 +1,9 @@
 # Sentinel Aerial Inspections — Drone Pipeline Dependencies
 
 # Core
-Pillow>=10.0.0           # EXIF extraction fallback (ingest.py, platform_detect.py)
+Pillow>=11.0.0           # EXIF extraction fallback (ingest.py, platform_detect.py) — pinned >=11 for upstream CVE patches
 pyexiftool>=0.5.6        # XMP-drone-dji metadata, M4E/M3E disambiguation (platform_detect.py)
-requests>=2.31.0         # HTTP webhooks (ingest_sorter.py, folder_watcher.py)
+requests>=2.32.0         # HTTP webhooks (ingest_sorter.py, folder_watcher.py) — pinned >=2.32 for upstream CVE patches
 
 # File watching
 watchdog>=4.0.0          # Filesystem monitoring (folder_watcher.py)

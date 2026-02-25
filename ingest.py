@@ -95,15 +95,10 @@ def extract_gps_from_exif(filepath):
     """Extract GPS coords from EXIF as [longitude, latitude, altitude]."""
     try:
         img = Image.open(filepath)
-        exif = img._getexif()
+        exif = img.getexif()
         if not exif:
             return None
-        gps_info = {}
-        for tag_id, value in exif.items():
-            tag = TAGS.get(tag_id, tag_id)
-            if tag == "GPSInfo":
-                gps_info = value
-                break
+        gps_info = exif.get_ifd(0x8825)  # GPSInfo IFD tag
         if not gps_info:
             return None
 

@@ -159,12 +159,15 @@ def test_gimbal_to_orientation_nonzero_roll_returns_9_elements():
 
 def test_extract_gps_from_exif_valid(mocker):
     """Valid GPS EXIF: returns [lon, lat, alt] as floats."""
+    from PIL import Image
+    mock_exif = Image.Exif()
+    # GPSInfo IFD: {1: lat_ref, 2: lat_dms, 3: lon_ref, 4: lon_dms, 6: alt}
+    gps_data = {1: "N", 2: (37, 0, 0), 3: "W", 4: (76, 0, 0), 6: 50.0}
     mock_img = MagicMock()
-    # GPS tag id 34853 maps to "GPSInfo"
-    # Structure: {1: lat_ref, 2: lat_dms, 3: lon_ref, 4: lon_dms, 6: alt}
-    mock_img._getexif.return_value = {
-        34853: {1: "N", 2: (37, 0, 0), 3: "W", 4: (76, 0, 0), 6: 50.0}
-    }
+    mock_exif_obj = MagicMock()
+    mock_exif_obj.__bool__ = lambda self: True
+    mock_exif_obj.get_ifd = MagicMock(return_value=gps_data)
+    mock_img.getexif.return_value = mock_exif_obj
     mocker.patch("PIL.Image.open", return_value=mock_img)
 
     result = extract_gps_from_exif("/fake/DJI_0001.JPG")
@@ -176,9 +179,11 @@ def test_extract_gps_from_exif_valid(mocker):
 
 
 def test_extract_gps_from_exif_no_exif(mocker):
-    """Image with no EXIF (_getexif returns None): returns None."""
+    """Image with no EXIF (getexif returns empty): returns None."""
     mock_img = MagicMock()
-    mock_img._getexif.return_value = None
+    mock_exif_obj = MagicMock()
+    mock_exif_obj.__bool__ = lambda self: False
+    mock_img.getexif.return_value = mock_exif_obj
     mocker.patch("PIL.Image.open", return_value=mock_img)
 
     result = extract_gps_from_exif("/fake/DJI_0001.JPG")
@@ -188,8 +193,10 @@ def test_extract_gps_from_exif_no_exif(mocker):
 def test_extract_gps_from_exif_no_gps_tag(mocker):
     """EXIF present but no GPS tag: returns None."""
     mock_img = MagicMock()
-    # Return EXIF without tag 34853 (GPSInfo)
-    mock_img._getexif.return_value = {271: "DJI"}  # Make tag, not GPS
+    mock_exif_obj = MagicMock()
+    mock_exif_obj.__bool__ = lambda self: True
+    mock_exif_obj.get_ifd = MagicMock(return_value={})  # Empty GPSInfo IFD
+    mock_img.getexif.return_value = mock_exif_obj
     mocker.patch("PIL.Image.open", return_value=mock_img)
 
     result = extract_gps_from_exif("/fake/DJI_0001.JPG")

@@ -315,7 +315,7 @@ def test_fire_webhook_success(mocker):
     }
     inventory = {"photo_count": 10, "video_count": 2, "has_ppk_data": False}
 
-    result = fire_webhook(mission_config, inventory, "mini4pro", webhook_url="http://test/webhook")
+    result = fire_webhook(mission_config, inventory, "mini4pro", webhook_url="http://localhost:5678/webhook")
     assert result is True
     mock_post.assert_called_once()
 
@@ -340,7 +340,7 @@ def test_fire_webhook_request_exception(mocker):
     }
     inventory = {"photo_count": 0, "video_count": 0, "has_ppk_data": False}
 
-    result = fire_webhook(mission_config, inventory, "mini4pro", webhook_url="http://test/webhook")
+    result = fire_webhook(mission_config, inventory, "mini4pro", webhook_url="http://localhost:5678/webhook")
     assert result is False
 
 

@@ -243,7 +243,19 @@ Examples:
     # Resolve export formats
     formats = None
     if args.formats:
-        formats = json.loads(args.formats)
+        try:
+            formats = json.loads(args.formats)
+        except json.JSONDecodeError as e:
+            log.error(f"Invalid --formats JSON: {e}")
+            sys.exit(2)
+        # Validate each format spec
+        from pipeline_utils import validate_format_spec
+        try:
+            for fmt in formats:
+                validate_format_spec(fmt)
+        except ValueError as e:
+            log.error(f"Invalid format spec: {e}")
+            sys.exit(2)
     elif args.mission_id:
         formats = fetch_formats_from_supabase(args.mission_id)
 

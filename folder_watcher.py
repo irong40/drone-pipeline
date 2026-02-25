@@ -58,8 +58,6 @@ def setup_logging(log_dir=LOG_DIR):
     return logging.getLogger(__name__)
 
 
-log = logging.getLogger(__name__)
-
 
 # ─── FILE INVENTORY ──────────────────────────────────────────────────────────
 
@@ -114,6 +112,13 @@ def build_inventory(folder_path):
 
 def fire_webhook(inventory, webhook_url=N8N_WEBHOOK_URL):
     """POST folder inventory to n8n webhook."""
+    log = logging.getLogger(__name__)
+    from pipeline_utils import validate_webhook_url
+    try:
+        validate_webhook_url(webhook_url)
+    except ValueError as e:
+        log.error(f"Webhook blocked: {e}")
+        return False
     try:
         resp = requests.post(webhook_url, json=inventory, timeout=10)
         resp.raise_for_status()
@@ -131,6 +136,7 @@ class MissionFolderHandler(FileSystemEventHandler):
 
     def __init__(self, watch_dir=WATCH_DIR, debounce_seconds=DEBOUNCE_SECONDS, webhook_url=N8N_WEBHOOK_URL):
         super().__init__()
+        self.log = logging.getLogger(__name__)
         self.watch_dir = watch_dir
         self.debounce_seconds = debounce_seconds
         self.webhook_url = webhook_url
@@ -151,7 +157,7 @@ class MissionFolderHandler(FileSystemEventHandler):
             folder_name = os.path.basename(event.src_path)
             # New top-level directory — start watching
             if os.path.dirname(event.src_path) == self.watch_dir:
-                log.info(f"New mission folder detected: {folder_name}")
+                self.log.info(f"New mission folder detected: {folder_name}")
                 self._reset_timer(folder_name)
             return
 
@@ -192,10 +198,10 @@ class MissionFolderHandler(FileSystemEventHandler):
                 del self._timers[folder_name]
 
         folder_path = os.path.join(self.watch_dir, folder_name)
-        log.info(f"Debounce complete for: {folder_name}")
+        self.log.info(f"Debounce complete for: {folder_name}")
 
         inventory = build_inventory(folder_path)
-        log.info(
+        self.log.info(
             f"  Photos: {inventory['photo_count']}, "
             f"Videos: {inventory['video_count']}, "
             f"PPK: {inventory['has_ppk_data']}, "
@@ -227,8 +233,8 @@ Examples:
     parser.add_argument("--once", action="store_true", help="Process existing folders once and exit")
     args = parser.parse_args()
 
-    global log
-    log = setup_logging()
+    setup_logging()
+    log = logging.getLogger(__name__)
 
     watch_dir = args.watch_dir
     os.makedirs(watch_dir, exist_ok=True)
