@@ -1116,6 +1116,17 @@ def generate_all_outputs(
         if det.get("health_status") in ("stressed", "severe_decline", "dead")
     )
 
+    # ── PDF report ──────────────────────────────────────────────────────────
+    pdf_path = os.path.join(output_dir, f"Sentinel_{safe_name}_Vegetation_Report.pdf")
+    pdf_ok = generate_pdf(
+        detections=detections,
+        output_path=pdf_path,
+        mission_label=mission_label,
+        species_map_path=species_map_path if species_map_ok else None,
+        health_map_path=health_map_path if health_map_ok else None,
+        log=log,
+    )
+
     summary = {
         "total_canopy_count": len(detections),
         "unique_species_count": len(species_counts),
@@ -1123,6 +1134,7 @@ def generate_all_outputs(
         "avg_health_score": avg_health,
         "health_distribution": health_counts,
         "needs_attention_count": needs_attention,
+        "pdf_report_path": pdf_path if pdf_ok else None,
         "species_map_path": species_map_path if species_map_ok else None,
         "health_map_path": health_map_path if health_map_ok else None,
         "geojson_path": geojson_path if geojson_ok else None,
@@ -1133,6 +1145,374 @@ def generate_all_outputs(
     write_vegetation_summary(mission_id, summary, log)
 
     return summary
+
+
+# ─── PDF REPORT GENERATION ────────────────────────────────────────────────────
+
+# Sentinel brand colors
+try:
+    from reportlab.lib.colors import HexColor as _HexColor
+    SENTINEL_GREEN = _HexColor("#1B4332")
+    SENTINEL_LIGHT = _HexColor("#2D6A4F")
+    SENTINEL_RED = _HexColor("#DC2626")
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
+METHODOLOGY_DISCLAIMER = (
+    "This vegetation analysis was generated using AI-based classification "
+    "(OpenAI Vision API) with cross-validation (PlantNet). Species identifications "
+    "and health assessments are estimates and do not replace ground-level assessment "
+    "by a certified arborist. Sentinel Aerial Inspections recommends on-site "
+    "verification for any tree identified as stressed, in severe decline, or "
+    "requiring urgent attention."
+)
+
+PDF_FOOTER_TEXT = (
+    "Sentinel Aerial Inspections  |  FAA Part 107 Certified  |  "
+    "Veteran-Owned Small Business  |  Faith & Harmony LLC"
+)
+
+
+def generate_pdf(
+    detections: List[Dict[str, Any]],
+    output_path: str,
+    mission_label: str = "",
+    species_map_path: Optional[str] = None,
+    health_map_path: Optional[str] = None,
+    log: Optional[logging.Logger] = None,
+) -> bool:
+    """Generate a branded PDF vegetation analysis report using ReportLab Platypus.
+
+    Sections (in order):
+      1. Cover page — title, property address, date
+      2. Executive summary — canopy count, species, avg health, attention count
+      3. Species distribution table — sorted by count descending
+      4. Health overview — health distribution table
+      5. Species map — embedded PNG (if available)
+      6. Health map — embedded PNG (if available)
+      7. Attention list — trees needing action (stressed / severe_decline / dead)
+      8. Methodology disclaimer (non-negotiable)
+      9. Footer on every page: Sentinel Aerial Inspections branding
+
+    Args:
+        detections: List of detection dicts from Supabase.
+        output_path: Full path for output PDF file.
+        mission_label: Property address + date for cover page.
+        species_map_path: Path to species overlay PNG (optional embed).
+        health_map_path: Path to health overlay PNG (optional embed).
+        log: Logger instance.
+
+    Returns:
+        True on success, False on failure.
+    """
+    if log is None:
+        log = logging.getLogger(__name__)
+
+    if not REPORTLAB_AVAILABLE:
+        log.error(
+            "reportlab is not installed. "
+            "Install with: pip install reportlab"
+        )
+        return False
+
+    log.info(f"Generating PDF report: {output_path}")
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.colors import HexColor, white, black, lightgrey
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+            PageBreak, Image as RLImage, HRFlowable,
+        )
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        from io import BytesIO
+
+        # ── Color aliases ──────────────────────────────────────────────────
+        SENT_GREEN = HexColor("#1B4332")
+        SENT_LIGHT = HexColor("#2D6A4F")
+        SENT_RED = HexColor("#DC2626")
+        ROW_ALT = HexColor("#F0F4F0")
+
+        # ── Page size and document ─────────────────────────────────────────
+        PAGE_W, PAGE_H = letter  # 8.5 x 11 in
+
+        def _footer_canvas(canvas_obj, doc):
+            """Draw footer on every page."""
+            canvas_obj.saveState()
+            canvas_obj.setFont("Helvetica", 7)
+            canvas_obj.setFillColor(HexColor("#555555"))
+            canvas_obj.drawCentredString(
+                PAGE_W / 2.0,
+                0.45 * inch,
+                PDF_FOOTER_TEXT,
+            )
+            canvas_obj.setFont("Helvetica", 7)
+            canvas_obj.drawRightString(
+                PAGE_W - 0.75 * inch,
+                0.45 * inch,
+                f"Page {doc.page}",
+            )
+            canvas_obj.restoreState()
+
+        doc = SimpleDocTemplate(
+            output_path,
+            pagesize=letter,
+            rightMargin=0.75 * inch,
+            leftMargin=0.75 * inch,
+            topMargin=0.75 * inch,
+            bottomMargin=0.75 * inch,
+        )
+
+        # ── Styles ─────────────────────────────────────────────────────────
+        base_styles = getSampleStyleSheet()
+        style_h1 = ParagraphStyle(
+            "SentinelH1",
+            parent=base_styles["Heading1"],
+            textColor=SENT_GREEN,
+            fontSize=18,
+            spaceAfter=12,
+        )
+        style_h2 = ParagraphStyle(
+            "SentinelH2",
+            parent=base_styles["Heading2"],
+            textColor=SENT_GREEN,
+            fontSize=13,
+            spaceAfter=8,
+        )
+        style_body = ParagraphStyle(
+            "SentinelBody",
+            parent=base_styles["Normal"],
+            fontSize=10,
+            spaceAfter=6,
+        )
+        style_disclaimer = ParagraphStyle(
+            "Disclaimer",
+            parent=base_styles["Normal"],
+            fontSize=9,
+            textColor=HexColor("#555555"),
+            spaceAfter=6,
+            borderPad=6,
+        )
+        style_center = ParagraphStyle(
+            "Center",
+            parent=base_styles["Normal"],
+            alignment=TA_CENTER,
+            fontSize=10,
+        )
+
+        # ── Compute summary stats ──────────────────────────────────────────
+        species_counts: Dict[str, int] = {}
+        species_health: Dict[str, List[float]] = {}
+        species_area: Dict[str, float] = {}
+        health_counts: Dict[str, int] = {}
+        health_scores = []
+        attention_list = []
+
+        for det in detections:
+            sp = det.get("species_tag") or "Unknown"
+            species_counts[sp] = species_counts.get(sp, 0) + 1
+
+            hs = det.get("health_score")
+            if hs is not None:
+                health_scores.append(hs)
+                species_health.setdefault(sp, []).append(hs)
+
+            area = det.get("canopy_area_sqm") or 0.0
+            species_area[sp] = species_area.get(sp, 0.0) + area
+
+            h_status = det.get("health_status") or "unknown"
+            health_counts[h_status] = health_counts.get(h_status, 0) + 1
+
+            if h_status in ("stressed", "severe_decline", "dead"):
+                attention_list.append(det)
+
+        total_canopy = len(detections)
+        unique_species = len(species_counts)
+        avg_health = round(sum(health_scores) / len(health_scores), 3) if health_scores else 0.0
+        needs_attention = len(attention_list)
+
+        # ── Build flowables ────────────────────────────────────────────────
+        story = []
+
+        # 1. Cover page
+        story.append(Spacer(1, 1.2 * inch))
+        story.append(Paragraph("Vegetation Analysis Report", style_h1))
+        story.append(HRFlowable(width="100%", thickness=2, color=SENT_GREEN))
+        story.append(Spacer(1, 0.15 * inch))
+        if mission_label:
+            story.append(Paragraph(mission_label, style_center))
+        story.append(Spacer(1, 0.1 * inch))
+        story.append(Paragraph(
+            f"Prepared by: Sentinel Aerial Inspections",
+            style_center,
+        ))
+        story.append(Paragraph(
+            f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            style_center,
+        ))
+        story.append(PageBreak())
+
+        # 2. Executive Summary
+        story.append(Paragraph("Executive Summary", style_h2))
+        exec_data = [
+            ["Metric", "Value"],
+            ["Total Canopy Count", str(total_canopy)],
+            ["Unique Species Identified", str(unique_species)],
+            ["Average Health Score", f"{avg_health:.3f}"],
+            ["Trees Requiring Attention", str(needs_attention)],
+        ]
+        exec_table = Table(exec_data, colWidths=[3.5 * inch, 2.5 * inch])
+        exec_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), SENT_GREEN),
+            ("TEXTCOLOR", (0, 0), (-1, 0), white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, ROW_ALT]),
+            ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#CCCCCC")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(exec_table)
+        story.append(Spacer(1, 0.2 * inch))
+
+        # 3. Species distribution table
+        story.append(Paragraph("Species Distribution", style_h2))
+        sorted_species = sorted(species_counts.items(), key=lambda x: x[1], reverse=True)
+        sp_table_data = [["Species", "Count", "% of Total", "Total Area (m²)", "Avg Health"]]
+        for sp, cnt in sorted_species:
+            pct = f"{cnt / total_canopy * 100:.1f}%" if total_canopy > 0 else "0%"
+            area = f"{species_area.get(sp, 0.0):.1f}"
+            avg_sp_health = (
+                f"{sum(species_health[sp]) / len(species_health[sp]):.3f}"
+                if sp in species_health and species_health[sp]
+                else "N/A"
+            )
+            sp_table_data.append([sp, str(cnt), pct, area, avg_sp_health])
+
+        sp_col_widths = [2.5 * inch, 0.8 * inch, 0.9 * inch, 1.3 * inch, 1.0 * inch]
+        sp_table = Table(sp_table_data, colWidths=sp_col_widths)
+        alt_rows = [white if i % 2 == 0 else ROW_ALT for i in range(len(sp_table_data) - 1)]
+        sp_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), SENT_GREEN),
+            ("TEXTCOLOR", (0, 0), (-1, 0), white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, ROW_ALT]),
+            ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#CCCCCC")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(sp_table)
+        story.append(Spacer(1, 0.2 * inch))
+
+        # 4. Health overview
+        story.append(Paragraph("Health Distribution", style_h2))
+        health_order = ["healthy", "moderate_stress", "stressed", "severe_decline", "dead"]
+        health_table_data = [["Health Status", "Count", "% of Total"]]
+        for status in health_order:
+            cnt = health_counts.get(status, 0)
+            pct = f"{cnt / total_canopy * 100:.1f}%" if total_canopy > 0 and cnt > 0 else "0%"
+            health_table_data.append([
+                HEALTH_LABELS.get(status, status),
+                str(cnt),
+                pct,
+            ])
+        h_table = Table(health_table_data, colWidths=[3.0 * inch, 1.2 * inch, 1.2 * inch])
+        h_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), SENT_GREEN),
+            ("TEXTCOLOR", (0, 0), (-1, 0), white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, ROW_ALT]),
+            ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#CCCCCC")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(h_table)
+        story.append(Spacer(1, 0.2 * inch))
+
+        # 5. Species map embed
+        if species_map_path and os.path.isfile(species_map_path):
+            story.append(PageBreak())
+            story.append(Paragraph("Species Distribution Map", style_h2))
+            avail_w = PAGE_W - 1.5 * inch
+            avail_h = PAGE_H - 2.5 * inch
+            story.append(RLImage(species_map_path, width=avail_w, height=avail_h))
+
+        # 6. Health map embed
+        if health_map_path and os.path.isfile(health_map_path):
+            story.append(PageBreak())
+            story.append(Paragraph("Canopy Health Assessment Map", style_h2))
+            avail_w = PAGE_W - 1.5 * inch
+            avail_h = PAGE_H - 2.5 * inch
+            story.append(RLImage(health_map_path, width=avail_w, height=avail_h))
+
+        # 7. Attention list
+        if attention_list:
+            story.append(PageBreak())
+            story.append(Paragraph("Trees Requiring Attention", style_h2))
+            attn_data = [["#", "Species", "Health Score", "Status", "Recommended Action"]]
+            for i, det in enumerate(
+                sorted(attention_list, key=lambda d: d.get("health_score") or 1.0), start=1
+            ):
+                sp = det.get("species_tag") or "Unknown"
+                hs_val = det.get("health_score")
+                status = det.get("health_status") or "unknown"
+                action = _recommended_action_from_det(det).title()
+                attn_data.append([
+                    str(i),
+                    sp,
+                    f"{hs_val:.3f}" if hs_val is not None else "N/A",
+                    HEALTH_LABELS.get(status, status),
+                    action,
+                ])
+
+            attn_col_widths = [0.4 * inch, 2.0 * inch, 1.0 * inch, 1.3 * inch, 1.5 * inch]
+            attn_table = Table(attn_data, colWidths=attn_col_widths)
+            attn_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), SENT_RED),
+                ("TEXTCOLOR", (0, 0), (-1, 0), white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, ROW_ALT]),
+                ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#CCCCCC")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.append(attn_table)
+            story.append(Spacer(1, 0.2 * inch))
+
+        # 8. Methodology disclaimer
+        story.append(Spacer(1, 0.3 * inch))
+        story.append(Paragraph("Methodology & Disclaimer", style_h2))
+        story.append(HRFlowable(width="100%", thickness=1, color=SENT_LIGHT))
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(Paragraph(METHODOLOGY_DISCLAIMER, style_disclaimer))
+
+        # ── Build document ─────────────────────────────────────────────────
+        doc.build(story, onFirstPage=_footer_canvas, onLaterPages=_footer_canvas)
+        log.info(f"PDF report saved: {output_path}")
+        return True
+
+    except Exception as exc:
+        log.error(f"PDF generation failed: {exc}")
+        return False
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
@@ -1222,6 +1602,7 @@ Examples:
 
     # ── Results ───────────────────────────────────────────────────────────────
     outputs_ok = [
+        summary.get("pdf_report_path"),
         summary.get("species_map_path"),
         summary.get("health_map_path"),
         summary.get("geojson_path"),
