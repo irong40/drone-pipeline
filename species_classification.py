@@ -427,6 +427,12 @@ def classify_openai(image: Any, api_key: str) -> Dict[str, Any]:
 
 # ─── PLANTNET CLASSIFICATION ──────────────────────────────────────────────────
 
+# Sentinel value returned by classify_plantnet() when daily quota is exhausted.
+# The classification loop checks for this sentinel and disables PlantNet for all
+# subsequent canopies in the run to avoid wasting retries.
+PLANTNET_QUOTA_EXHAUSTED: Dict[str, Any] = {"_quota_exhausted": True}
+
+
 def classify_plantnet(image: Any, api_key: str) -> Optional[Dict[str, Any]]:
     """Cross-validate species using PlantNet API.
 
@@ -436,7 +442,8 @@ def classify_plantnet(image: Any, api_key: str) -> Optional[Dict[str, Any]]:
 
     Returns:
         Dict with: species_name (top result scientific name), score, full_results.
-        Returns None if API call fails.
+        Returns PLANTNET_QUOTA_EXHAUSTED sentinel dict when daily quota is used up.
+        Returns None if API call fails for any other reason.
     """
     import requests
 
@@ -463,15 +470,29 @@ def classify_plantnet(image: Any, api_key: str) -> Optional[Dict[str, Any]]:
             except OSError:
                 pass
 
+        # 429 = rate limit / quota exhausted
+        if response.status_code == 429:
+            logging.getLogger(__name__).warning(
+                "PlantNet quota exhausted (HTTP 429), switching to OpenAI-only for remaining canopies"
+            )
+            return PLANTNET_QUOTA_EXHAUSTED
+
         if response.status_code != 200:
             return None
 
-        # Check remaining identifications quota
+        # Check remaining identifications quota from response headers
         remaining = response.headers.get("X-Remaining-Identifications")
         if remaining is not None:
             try:
                 remaining_int = int(remaining)
-                if remaining_int < 10:
+                if remaining_int == 0:
+                    logging.getLogger(__name__).warning(
+                        "PlantNet quota exhausted (0 remaining), switching to OpenAI-only for remaining canopies"
+                    )
+                    # Still return this result since the call succeeded; loop will
+                    # set plantnet_quota_exhausted=True after seeing remaining==0.
+                    # We signal via the _quota_at_zero marker in full_results sentinel.
+                elif remaining_int < 10:
                     logging.getLogger(__name__).warning(
                         f"PlantNet: only {remaining_int} identifications remaining today"
                     )
@@ -488,6 +509,13 @@ def classify_plantnet(image: Any, api_key: str) -> Optional[Dict[str, Any]]:
         top = results[0]
         species_name = top.get("species", {}).get("scientificNameWithoutAuthor", "")
         score = float(top.get("score", 0.0))
+        remaining_after = None
+        try:
+            rem_hdr = response.headers.get("X-Remaining-Identifications")
+            if rem_hdr is not None:
+                remaining_after = int(rem_hdr)
+        except (ValueError, TypeError):
+            pass
 
         # Build condensed full_results list (top 5 to avoid bloat)
         full_results = []
@@ -501,6 +529,7 @@ def classify_plantnet(image: Any, api_key: str) -> Optional[Dict[str, Any]]:
             "species_name": species_name,
             "score": round(score, 4),
             "full_results": full_results,
+            "remaining_quota": remaining_after,
         }
 
     except Exception:
@@ -639,6 +668,11 @@ def run_classification(
         return {
             "classified_count": 0,
             "skipped_count": 0,
+            "cross_validated_count": 0,
+            "avg_confidence": 0.0,
+            "api_calls_openai": 0,
+            "api_calls_plantnet": 0,
+            "total_api_cost_estimate": 0.0,
             "api_cost_estimate": 0.0,
             "plantnet_used": not skip_plantnet,
         }
@@ -677,6 +711,11 @@ def run_classification(
         return {
             "classified_count": 0,
             "skipped_count": len(detections),
+            "cross_validated_count": 0,
+            "avg_confidence": 0.0,
+            "api_calls_openai": 0,
+            "api_calls_plantnet": 0,
+            "total_api_cost_estimate": estimated_cost,
             "api_cost_estimate": estimated_cost,
             "plantnet_used": not skip_plantnet,
             "error": "cost_threshold_exceeded",
@@ -686,6 +725,10 @@ def run_classification(
     update_rows: List[Dict[str, Any]] = []
     skipped_count = 0
     classified_count = 0
+    openai_call_count = 0
+    plantnet_call_count = 0
+    # Track PlantNet quota exhaustion across iterations
+    plantnet_quota_exhausted = False
 
     with rasterio.open(ortho_path) as dataset:
         for detection in detections:
@@ -729,26 +772,45 @@ def run_classification(
                 }
             else:
                 openai_result = classify_openai(crop, OPENAI_API_KEY)
+                openai_call_count += 1
                 log.info(
                     f"  OpenAI: {openai_result['species_common']} "
                     f"({openai_result['confidence']:.2f} confidence)"
                 )
 
             # PlantNet cross-validation (optional)
-            if skip_plantnet:
+            # Skip if: explicitly disabled, no key, or quota exhausted this run
+            if skip_plantnet or plantnet_quota_exhausted:
                 plantnet_result = None
             elif not PLANTNET_API_KEY:
                 log.warning("PLANTNET_API_KEY not set — skipping PlantNet")
                 plantnet_result = None
             else:
-                plantnet_result = classify_plantnet(crop, PLANTNET_API_KEY)
-                if plantnet_result is not None:
+                raw_plantnet = classify_plantnet(crop, PLANTNET_API_KEY)
+
+                # Check for quota-exhausted sentinel
+                if raw_plantnet is PLANTNET_QUOTA_EXHAUSTED:
+                    plantnet_quota_exhausted = True
+                    log.warning(
+                        "PlantNet quota exhausted — switching to OpenAI-only for remaining canopies"
+                    )
+                    plantnet_result = None
+                elif raw_plantnet is not None:
+                    plantnet_call_count += 1
+                    plantnet_result = raw_plantnet
                     log.info(
                         f"  PlantNet: {plantnet_result['species_name']} "
                         f"({plantnet_result['score']:.2f} score)"
                     )
+                    # Check if remaining quota just hit 0 — disable PlantNet for next canopies
+                    if plantnet_result.get("remaining_quota") == 0:
+                        plantnet_quota_exhausted = True
+                        log.warning(
+                            "PlantNet quota now at 0 — switching to OpenAI-only for remaining canopies"
+                        )
                 else:
                     log.warning(f"  PlantNet: identification failed for canopy {det_idx}")
+                    plantnet_result = None
 
             # Confidence reconciliation
             final = reconcile(openai_result, plantnet_result)
@@ -776,6 +838,9 @@ def run_classification(
             except OSError as exc:
                 log.warning(f"Checkpoint save failed for canopy {det_idx}: {exc}")
 
+            # Rate limiting: 0.5s delay between API calls to respect quotas
+            time.sleep(0.5)
+
     log.info(
         f"Classification loop complete: {classified_count} classified, "
         f"{skipped_count} skipped"
@@ -786,9 +851,22 @@ def run_classification(
 
     actual_cost = estimate_api_cost(classified_count, skip_plantnet)
 
+    # Compute summary stats over classified canopies
+    cross_validated_count = sum(
+        1 for row in update_rows if row.get("cross_validated", False)
+    )
+    confidences = [row["species_confidence"] for row in update_rows if update_rows]
+    avg_confidence = round(sum(confidences) / len(confidences), 3) if confidences else 0.0
+
     return {
         "classified_count": classified_count,
         "skipped_count": skipped_count,
+        "cross_validated_count": cross_validated_count,
+        "avg_confidence": avg_confidence,
+        "api_calls_openai": openai_call_count,
+        "api_calls_plantnet": plantnet_call_count,
+        "total_api_cost_estimate": actual_cost,
+        # Keep legacy key for backwards compatibility
         "api_cost_estimate": actual_cost,
         "plantnet_used": not skip_plantnet and bool(PLANTNET_API_KEY),
     }
