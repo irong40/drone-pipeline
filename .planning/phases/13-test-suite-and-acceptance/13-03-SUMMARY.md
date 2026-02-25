@@ -145,18 +145,15 @@ None — these are automated tests running against system Python with full stub 
 
 ## Checkpoint Status
 
-**Task 2 (Real-ortho acceptance test) is a human-verify checkpoint.**
-Awaiting operator to:
-1. Pick a real orthomosaic from E:\Sentinel\Output\
-2. Run the full E1→E4 sequence using .venv-path-e
-3. Review the generated PDF (branding, species table, health overview, maps, disclaimer)
-4. Verify Supabase rows and QGIS GeoJSON display
+**Task 2 (Real-ortho acceptance test) — DEFERRED.**
+Operator does not yet have a processed orthomosaic available for real-world testing.
+Will be completed when a real ortho is available from a WebODM (Path C) run.
+Deferred: 2026-02-25
 
 ## Next Phase Readiness
-- TST-05 (integration tests) and TST-06 (real-ortho acceptance) partially satisfied
-  (TST-06 requires operator sign-off via checkpoint)
-- Phase 13 plans 13-04 remains (final QA and regression sweep)
+- TST-05 (integration tests) satisfied
+- TST-06 (real-ortho acceptance) deferred — no processed orthomosaic available yet
 
 ---
 *Phase: 13-test-suite-and-acceptance*
-*Completed: 2026-02-25 (Task 1 only — checkpoint at Task 2)*
+*Completed: 2026-02-25 (Task 1 complete; Task 2 checkpoint deferred — no ortho available)*
