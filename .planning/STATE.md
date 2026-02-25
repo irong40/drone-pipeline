@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 7 (Environment and Foundation)
+**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 8 (Canopy Detection)
 
 ## Current Position
 
-Phase: 7 of 13 (Environment and Foundation)
-Plan: 2 of TBD in current phase
-Status: In progress (07-01 and 07-02 complete)
-Last activity: 2026-02-25 — 07-01 complete: Python 3.12 venv with CUDA PyTorch + GPU verification; 07-02 complete: Supabase vegetation schema
+Phase: 8 of 13 (Canopy Detection)
+Plan: 1 of TBD in current phase
+Status: In progress (08-01 complete)
+Last activity: 2026-02-25 — 08-01 complete: canopy_detection.py with tiling, DeepForest CUDA inference, cross-tile NMS, geographic coordinate transform
 
 Progress: [███████░░░░░░░░░░░░░] 35% (6/13 phases complete — v1.0 shipped; Phase 7 in progress)
 
@@ -42,6 +42,7 @@ Progress: [███████░░░░░░░░░░░░░] 35% (6/
 |-------|------|----------|-------|------|
 | 7. Environment and Foundation | 07-01 (venv+GPU) | 11 min | 2 | 2026-02-25 |
 | 7. Environment and Foundation | 07-02 (schema) | 2 min | 2 | 2026-02-25 |
+| 8. Canopy Detection | 08-01 (detection engine) | 15 min | 1 | 2026-02-25 |
 
 ## Accumulated Context
 
@@ -59,6 +60,9 @@ Recent decisions affecting v2.0 work:
 - [07-02]: processing_steps.step_name is free TEXT (no ENUM, no CHECK) — confirmed in 20260211120000 migration; new veg step names valid without DDL
 - [07-02]: processing_templates uses path_code routing (not package_type) — Path E seeded with path_code='E'
 - [07-02]: RLS uses TO service_role role targeting for Python E scripts using service key (not has_role() admin check)
+- [08-01]: DeepForest v2 import path is `from deepforest import main as deepforest_main` — top-level module does not auto-expose submodules
+- [08-01]: predict_image() used per tile (not predict_tile()) — we pre-tile for overlap control; predict_tile() would re-tile internally
+- [08-01]: NMS operates in geographic space (CRS units) not pixel space — avoids coordinate errors from CRS skew in UTM projections
 
 ### Pending Todos
 
@@ -74,5 +78,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 07-01-PLAN.md — .venv-path-e created, torch 2.10.0+cu128, DeepForest 2.0.0, test_environment.py exits 0 with CUDA sm_120 verified
+Stopped at: Completed 08-01-PLAN.md — canopy_detection.py with GeoTIFF tiling, DeepForest CUDA inference, cross-tile NMS, geographic coordinate transform
 Resume file: None
