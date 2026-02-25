@@ -131,6 +131,15 @@ None — canopy_detection.py requires only the .venv-path-e Python and a GeoTIFF
 - detect_canopies() returns List[Dict] with polygon, geo coords, confidence, label, dimensions — 08-02 consumes this directly
 - Key pattern: `from deepforest import main as deepforest_main` established for all future E scripts that use DeepForest
 
+## Self-Check: PASSED
+
+- FOUND: canopy_detection.py
+- FOUND: .planning/phases/08-canopy-detection/08-01-SUMMARY.md
+- FOUND: commit 9ae5d92 (feat: scaffold + detection engine)
+- FOUND: commit aa1bdfb (docs: metadata, STATE, ROADMAP, REQUIREMENTS)
+- FOUND: REQUIREMENTS.md — DET-01, DET-02, DET-05, DET-06, DET-07 marked complete
+- FOUND: ROADMAP.md — Phase 8 updated (1/2 plans, In Progress)
+
 ---
 *Phase: 08-canopy-detection*
 *Completed: 2026-02-25*
