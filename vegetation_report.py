@@ -994,6 +994,9 @@ def generate_all_outputs(
     output_dir: str,
     tier: str,
     log: logging.Logger,
+    site_area_sqm: Optional[float] = None,
+    api_calls_total: int = 0,
+    processing_time_seconds: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Orchestrate all E4 output generation: maps, GeoJSON, Folium, summary.
 
@@ -1003,10 +1006,17 @@ def generate_all_outputs(
         output_dir: Directory for all output files.
         tier: standard | extended | comprehensive (controls Folium generation).
         log: Logger instance.
+        site_area_sqm: Total site area in square meters (optional — derived from ortho
+            bounds when not provided). Used for canopy_coverage_pct in summary.
+        api_calls_total: Number of external API calls made across all pipeline steps
+            for this mission (default 0 when called standalone).
+        processing_time_seconds: Total elapsed seconds for the full E4 step.
+            When None, measured from generate_all_outputs() entry to exit.
 
     Returns:
         Dict with output paths and summary metrics.
     """
+    _e4_start = time.time()
     os.makedirs(output_dir, exist_ok=True)
 
     # ── Fetch data ─────────────────────────────────────────────────────────
@@ -1032,7 +1042,7 @@ def generate_all_outputs(
         .replace("\\", "-")
     )
 
-    # ── Get ortho bounds and CRS ─────────────────────────────────────────────
+    # ── Get ortho bounds, CRS, and site area ─────────────────────────────────
     ortho_bounds = None
     ortho_crs = None
     if os.path.isfile(ortho_path):
@@ -1051,6 +1061,22 @@ def generate_all_outputs(
                     left, bottom = transformer.transform(b.left, b.bottom)
                     right, top = transformer.transform(b.right, b.top)
                     ortho_bounds = (left, bottom, right, top)
+
+                # Derive site_area_sqm from ortho pixel count when not provided
+                if site_area_sqm is None:
+                    try:
+                        px_area = abs(ds.transform.a * ds.transform.e)  # m² per pixel
+                        if ortho_crs and ortho_crs.is_geographic:
+                            # lat/lon — convert degrees² → m²
+                            mid_lat = (b.bottom + b.top) / 2.0
+                            import math
+                            m_per_deg_lat = 111320.0
+                            m_per_deg_lon = 111320.0 * math.cos(math.radians(mid_lat))
+                            px_area = abs(ds.transform.a) * m_per_deg_lon * abs(ds.transform.e) * m_per_deg_lat
+                        site_area_sqm = float(px_area * ds.width * ds.height)
+                        log.info(f"Site area derived from ortho: {site_area_sqm:.1f} m²")
+                    except Exception as exc:
+                        log.debug(f"Could not derive site area from ortho: {exc}")
         except Exception as exc:
             log.warning(f"Could not read ortho bounds: {exc}")
 
@@ -1116,6 +1142,15 @@ def generate_all_outputs(
         if det.get("health_status") in ("stressed", "severe_decline", "dead")
     )
 
+    # ── Canopy coverage ──────────────────────────────────────────────────────
+    total_canopy_area = sum(
+        det.get("canopy_area_sqm") or 0.0 for det in detections
+    )
+    if site_area_sqm and site_area_sqm > 0:
+        canopy_coverage_pct = round(total_canopy_area / site_area_sqm * 100, 2)
+    else:
+        canopy_coverage_pct = None
+
     # ── PDF report ──────────────────────────────────────────────────────────
     pdf_path = os.path.join(output_dir, f"Sentinel_{safe_name}_Vegetation_Report.pdf")
     pdf_ok = generate_pdf(
@@ -1127,6 +1162,11 @@ def generate_all_outputs(
         log=log,
     )
 
+    # ── Elapsed time ─────────────────────────────────────────────────────────
+    _e4_elapsed = time.time() - _e4_start
+    if processing_time_seconds is None:
+        processing_time_seconds = round(_e4_elapsed, 1)
+
     summary = {
         "total_canopy_count": len(detections),
         "unique_species_count": len(species_counts),
@@ -1134,6 +1174,14 @@ def generate_all_outputs(
         "avg_health_score": avg_health,
         "health_distribution": health_counts,
         "needs_attention_count": needs_attention,
+        # Site area and coverage
+        "site_area_sqm": round(site_area_sqm, 2) if site_area_sqm is not None else None,
+        "site_area_acres": round(site_area_sqm * 0.000247105, 4) if site_area_sqm is not None else None,
+        "canopy_coverage_pct": canopy_coverage_pct,
+        # API and perf metrics
+        "api_calls_total": api_calls_total,
+        "processing_time_seconds": processing_time_seconds,
+        # Output paths
         "pdf_report_path": pdf_path if pdf_ok else None,
         "species_map_path": species_map_path if species_map_ok else None,
         "health_map_path": health_map_path if health_map_ok else None,
@@ -1145,6 +1193,96 @@ def generate_all_outputs(
     write_vegetation_summary(mission_id, summary, log)
 
     return summary
+
+
+# ─── PDF HELPER UTILITIES ─────────────────────────────────────────────────────
+
+def _generate_species_pie_chart(
+    sorted_species: List[Tuple[str, int]],
+    total_canopy: int,
+    log: Optional[logging.Logger] = None,
+) -> Optional[str]:
+    """Render a species distribution pie chart using matplotlib.
+
+    Shows top 8 species individually; remaining species are grouped as "Other".
+    Saves to a temporary PNG file and returns the path.  Caller is responsible
+    for deleting the file after embedding it in the PDF.
+
+    Args:
+        sorted_species: List of (species_name, count) tuples sorted by count descending.
+        total_canopy: Total canopy count (used for percentage labels).
+        log: Logger instance.
+
+    Returns:
+        Path to the temporary PNG file, or None on failure.
+    """
+    if log is None:
+        log = logging.getLogger(__name__)
+    if not sorted_species or total_canopy == 0:
+        return None
+
+    try:
+        import tempfile
+
+        TOP_N = 8
+        labels = []
+        sizes = []
+        colors = []
+
+        top_species = sorted_species[:TOP_N]
+        other_count = sum(cnt for _, cnt in sorted_species[TOP_N:])
+
+        for sp, cnt in top_species:
+            labels.append(sp)
+            sizes.append(cnt)
+            colors.append(SPECIES_COLORS.get(sp, SPECIES_DEFAULT_COLOR))
+
+        if other_count > 0:
+            labels.append("Other")
+            sizes.append(other_count)
+            colors.append("#AAAAAA")
+
+        fig, ax = plt.subplots(figsize=(6, 4.5), dpi=120)
+        wedges, texts, autotexts = ax.pie(
+            sizes,
+            labels=None,
+            colors=colors,
+            autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+            startangle=140,
+            pctdistance=0.78,
+            wedgeprops={"linewidth": 0.8, "edgecolor": "white"},
+        )
+        for atext in autotexts:
+            atext.set_fontsize(7)
+
+        ax.legend(
+            wedges,
+            labels,
+            loc="center left",
+            bbox_to_anchor=(1.0, 0.5),
+            fontsize=7,
+            framealpha=0.85,
+            title="Species",
+            title_fontsize=8,
+        )
+        ax.set_title("Species Distribution", fontsize=10, fontweight="bold", pad=8)
+        plt.tight_layout()
+
+        tmp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp_path = tmp_file.name
+        tmp_file.close()
+        fig.savefig(tmp_path, dpi=120, bbox_inches="tight")
+        plt.close(fig)
+        return tmp_path
+
+    except Exception as exc:
+        if log:
+            log.warning(f"Species pie chart generation failed: {exc}")
+        try:
+            plt.close("all")
+        except Exception:
+            pass
+        return None
 
 
 # ─── PDF REPORT GENERATION ────────────────────────────────────────────────────
@@ -1415,6 +1553,18 @@ def generate_pdf(
         story.append(sp_table)
         story.append(Spacer(1, 0.2 * inch))
 
+        # 4. Species pie chart — top 8 species + "Other" slice
+        _pie_cleanup: list = []
+        if sorted_species:
+            pie_img_path = _generate_species_pie_chart(sorted_species, total_canopy, log)
+            if pie_img_path and os.path.isfile(pie_img_path):
+                story.append(Paragraph("Species Distribution (Pie Chart)", style_h2))
+                pie_w = 4.0 * inch
+                pie_h = 3.0 * inch
+                story.append(RLImage(pie_img_path, width=pie_w, height=pie_h))
+                story.append(Spacer(1, 0.15 * inch))
+                _pie_cleanup.append(pie_img_path)  # delete AFTER doc.build()
+
         # 4. Health overview
         story.append(Paragraph("Health Distribution", style_h2))
         health_order = ["healthy", "moderate_stress", "stressed", "severe_decline", "dead"]
@@ -1464,7 +1614,7 @@ def generate_pdf(
         if attention_list:
             story.append(PageBreak())
             story.append(Paragraph("Trees Requiring Attention", style_h2))
-            attn_data = [["#", "Species", "Health Score", "Status", "Recommended Action"]]
+            attn_data = [["#", "Species", "Health Score", "Status", "GPS (lat, lon)", "Recommended Action"]]
             for i, det in enumerate(
                 sorted(attention_list, key=lambda d: d.get("health_score") or 1.0), start=1
             ):
@@ -1472,26 +1622,32 @@ def generate_pdf(
                 hs_val = det.get("health_score")
                 status = det.get("health_status") or "unknown"
                 action = _recommended_action_from_det(det).title()
+                lat = det.get("centroid_lat")
+                lon = det.get("centroid_lon")
+                gps_str = (
+                    f"{lat:.6f}, {lon:.6f}" if lat is not None and lon is not None else "N/A"
+                )
                 attn_data.append([
                     str(i),
                     sp,
                     f"{hs_val:.3f}" if hs_val is not None else "N/A",
                     HEALTH_LABELS.get(status, status),
+                    gps_str,
                     action,
                 ])
 
-            attn_col_widths = [0.4 * inch, 2.0 * inch, 1.0 * inch, 1.3 * inch, 1.5 * inch]
+            attn_col_widths = [0.35 * inch, 1.6 * inch, 0.85 * inch, 1.1 * inch, 1.4 * inch, 1.2 * inch]
             attn_table = Table(attn_data, colWidths=attn_col_widths)
             attn_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), SENT_RED),
                 ("TEXTCOLOR", (0, 0), (-1, 0), white),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, ROW_ALT]),
                 ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#CCCCCC")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
                 ("TOPPADDING", (0, 0), (-1, -1), 4),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]))
@@ -1507,6 +1663,12 @@ def generate_pdf(
 
         # ── Build document ─────────────────────────────────────────────────
         doc.build(story, onFirstPage=_footer_canvas, onLaterPages=_footer_canvas)
+        # Clean up temp pie chart PNG now that it has been embedded
+        for _p in _pie_cleanup:
+            try:
+                os.unlink(_p)
+            except Exception:
+                pass
         log.info(f"PDF report saved: {output_path}")
         return True
 
@@ -1560,6 +1722,26 @@ Examples:
         default=".",
         help="Directory for all output files (default: current directory)",
     )
+    parser.add_argument(
+        "--site-area",
+        type=float,
+        default=None,
+        metavar="SQM",
+        help=(
+            "Total site area in square meters for canopy coverage calculation. "
+            "When omitted, derived automatically from the orthomosaic pixel count."
+        ),
+    )
+    parser.add_argument(
+        "--api-calls",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Total external API calls made across all pipeline steps for this mission "
+            "(default: 0 — set by n8n orchestrator when available)."
+        ),
+    )
     add_pipeline_args(parser)
     args = parser.parse_args()
 
@@ -1570,6 +1752,10 @@ Examples:
     log.info(f"Ortho:      {args.ortho_path}")
     log.info(f"Tier:       {args.tier}")
     log.info(f"Output dir: {args.output_dir}")
+    if args.site_area:
+        log.info(f"Site area:  {args.site_area:.1f} m²")
+    if args.api_calls:
+        log.info(f"API calls:  {args.api_calls}")
 
     # ── Input validation ─────────────────────────────────────────────────────
     if not os.path.isfile(args.ortho_path):
@@ -1592,6 +1778,8 @@ Examples:
             output_dir=args.output_dir,
             tier=args.tier,
             log=log,
+            site_area_sqm=args.site_area,
+            api_calls_total=args.api_calls,
         )
     except Exception as exc:
         log.exception(f"Report generation failed: {exc}")
