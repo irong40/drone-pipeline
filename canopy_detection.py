@@ -203,8 +203,8 @@ def run_inference_on_tile(
 
     try:
         results = model.predict_image(image=tile_array, return_plot=False)
-    except Exception:
-        return None
+    except Exception as exc:
+        raise RuntimeError(f"DeepForest inference failed: {exc}") from exc
 
     if results is None or len(results) == 0:
         return None
@@ -571,8 +571,14 @@ def detect_canopies(
             # Free CHW array immediately to reduce peak memory
             del tile_chw
 
-            results_df = run_inference_on_tile(model, tile_hwc, score_threshold)
-            del tile_hwc
+            try:
+                results_df = run_inference_on_tile(model, tile_hwc, score_threshold)
+            except RuntimeError:
+                log.warning(f"    Inference failed on tile {tile_key} — skipping")
+                had_partial_failure = True
+                results_df = None
+            finally:
+                del tile_hwc
 
             # Periodically flush CUDA cache to prevent fragmentation
             if tile_idx % 10 == 0:
@@ -737,7 +743,7 @@ Examples:
     # ── Pipeline status reporter ─────────────────────────────────────────────
     reporter = PipelineStatusReporter(
         processing_job_id=getattr(args, "processing_job_id", None),
-        step_name="canopy_detection",
+        step_name="veg_canopy_detection",
     )
     reporter.start()
 
