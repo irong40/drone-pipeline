@@ -9,7 +9,7 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 ### Environment & Setup
 
-- [ ] **ENV-01**: Pipeline runs in a dedicated Python 3.12 virtual environment with CUDA-verified PyTorch 2.9.1+cu128 on the RTX 5070
+- [x] **ENV-01**: Pipeline runs in a dedicated Python 3.12 virtual environment with CUDA-verified PyTorch 2.9.1+cu128 on the RTX 5070
 - [x] **ENV-02**: Supabase migration creates vegetation_detections and vegetation_analysis_summary tables with RLS policies
 - [x] **ENV-03**: Supabase migration adds vegetation_analysis and vegetation_status columns to missions table
 - [x] **ENV-04**: Supabase migration adds vegetation_enabled and vegetation_config columns to processing_templates table
@@ -110,7 +110,7 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENV-01 | Phase 7 | Pending |
+| ENV-01 | Phase 7 | Complete |
 | ENV-02 | Phase 7 | Complete (07-02) |
 | ENV-03 | Phase 7 | Complete (07-02) |
 | ENV-04 | Phase 7 | Complete (07-02) |

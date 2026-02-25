@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 Phase: 7 of 13 (Environment and Foundation)
 Plan: 2 of TBD in current phase
 Status: In progress (07-01 and 07-02 complete)
-Last activity: 2026-02-25 — 07-02 complete: Supabase vegetation schema migrations created
+Last activity: 2026-02-25 — 07-01 complete: Python 3.12 venv with CUDA PyTorch + GPU verification; 07-02 complete: Supabase vegetation schema
 
 Progress: [███████░░░░░░░░░░░░░] 35% (6/13 phases complete — v1.0 shipped; Phase 7 in progress)
 
@@ -40,6 +40,7 @@ Progress: [███████░░░░░░░░░░░░░] 35% (6/
 
 | Phase | Plan | Duration | Files | Date |
 |-------|------|----------|-------|------|
+| 7. Environment and Foundation | 07-01 (venv+GPU) | 11 min | 2 | 2026-02-25 |
 | 7. Environment and Foundation | 07-02 (schema) | 2 min | 2 | 2026-02-25 |
 
 ## Accumulated Context
@@ -50,7 +51,7 @@ See PROJECT.md Key Decisions table for full history.
 Recent decisions affecting v2.0 work:
 
 - [v2.0 roadmap]: Python 3.12 venv (.venv-path-e) separate from system Python 3.14 — DeepForest requires <3.13
-- [v2.0 roadmap]: Install PyTorch 2.9.1+cu128 FIRST via --index-url before DeepForest to avoid CPU-only build
+- [v2.0 roadmap]: Install PyTorch via --index-url before DeepForest to avoid CPU-only build (2.9.1 not published; 2.10.0+cu128 installed)
 - [v2.0 roadmap]: Use predict_tile() for cross-tile NMS rather than manual tile stitching
 - [v2.0 roadmap]: Start with --skip-plantnet=true for first missions; enable after baseline established
 - [v2.0 roadmap]: Phase 10 (Health) can build in parallel with Phase 9 (Species) if timeline is aggressive — both read from E1 rows
@@ -65,13 +66,13 @@ None.
 
 ### Blockers/Concerns
 
-- ENV: PyTorch CPU silent fallback on RTX 5070 — must assert torch.cuda.get_device_capability()[0] >= 12 in Phase 7
-- ENV: PROJ_LIB/PROJ_DATA conflict from QGIS on this machine — clear env vars before rasterio import in all E scripts
+- ~~ENV: PyTorch CPU silent fallback on RTX 5070~~ **RESOLVED** (07-01) — torch.cuda.get_device_capability()[0] = 12, sm_120 verified; gate in test_environment.py
+- ~~ENV: PROJ_LIB/PROJ_DATA conflict from QGIS~~ **RESOLVED** (07-01) — clear pattern established and tested in test_environment.py; apply to all E scripts
 - SPE: Species accuracy is 30-55% top-1 — methodology disclaimer in PDF is non-negotiable; do not label as authoritative
 - SPE: OpenAI Vision cost overrun risk — enforce max_canopies cap and pre-run cost estimate before first API loop
 
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 07-02-PLAN.md — Supabase vegetation schema migrations created and committed
+Stopped at: Completed 07-01-PLAN.md — .venv-path-e created, torch 2.10.0+cu128, DeepForest 2.0.0, test_environment.py exits 0 with CUDA sm_120 verified
 Resume file: None
