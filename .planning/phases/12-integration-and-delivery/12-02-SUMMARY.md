@@ -108,6 +108,15 @@ None - no external service configuration required.
 - Phase 13 (Test Suite and Acceptance) is already in progress — 13-01, 13-02, 13-03 Task 1 complete
 - Remaining: 13-03 Task 2 (real-ortho acceptance test) — awaiting operator to run E1→E4 on real orthomosaic and approve PDF
 
+## Self-Check: PASSED
+
+- FOUND: delivery_packaging.py (--include-vegetation verified via --help)
+- FOUND: REVIEW_GATE.md (sentinel-vegetation-resume documented)
+- FOUND: .planning/phases/12-integration-and-delivery/12-02-SUMMARY.md
+- FOUND: commit 24a9af8 (Task 2 - review gate docs)
+- FOUND: commit c573bba (Task 1 - delivery vegetation support, prior phase)
+- FOUND: commit 76f8733 (metadata - SUMMARY, STATE, ROADMAP, REQUIREMENTS)
+
 ---
 *Phase: 12-integration-and-delivery*
 *Completed: 2026-02-25*
