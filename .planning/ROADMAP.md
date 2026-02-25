@@ -169,7 +169,7 @@ Plans:
 | 4. Video Pipeline Tests | v1.0 | 3/3 | Complete | 2026-02-24 |
 | 5. Delivery Layer Tests | v1.0 | 2/2 | Complete | 2026-02-24 |
 | 6. Integration Tests | v1.0 | 3/3 | Complete | 2026-02-24 |
-| 7. Environment and Foundation | 2/2 | Complete   | 2026-02-25 | - |
+| 7. Environment and Foundation | 2/2 | Complete    | 2026-02-25 | - |
 | 8. Canopy Detection | v2.0 | 0/TBD | Not started | - |
 | 9. Species Classification | v2.0 | 0/TBD | Not started | - |
 | 10. Health Assessment | v2.0 | 0/TBD | Not started | - |
