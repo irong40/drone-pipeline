@@ -10,10 +10,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 ### Environment & Setup
 
 - [ ] **ENV-01**: Pipeline runs in a dedicated Python 3.12 virtual environment with CUDA-verified PyTorch 2.9.1+cu128 on the RTX 5070
-- [ ] **ENV-02**: Supabase migration creates vegetation_detections and vegetation_analysis_summary tables with RLS policies
-- [ ] **ENV-03**: Supabase migration adds vegetation_analysis and vegetation_status columns to missions table
-- [ ] **ENV-04**: Supabase migration adds vegetation_enabled and vegetation_config columns to processing_templates table
-- [ ] **ENV-05**: Processing steps enum extended with 4 new step_name values (veg_canopy_detection, veg_species_classification, veg_health_assessment, veg_report_generation)
+- [x] **ENV-02**: Supabase migration creates vegetation_detections and vegetation_analysis_summary tables with RLS policies
+- [x] **ENV-03**: Supabase migration adds vegetation_analysis and vegetation_status columns to missions table
+- [x] **ENV-04**: Supabase migration adds vegetation_enabled and vegetation_config columns to processing_templates table
+- [x] **ENV-05**: Processing steps enum extended with 4 new step_name values (veg_canopy_detection, veg_species_classification, veg_health_assessment, veg_report_generation)
 
 ### Canopy Detection (E1)
 
@@ -111,10 +111,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ENV-01 | Phase 7 | Pending |
-| ENV-02 | Phase 7 | Pending |
-| ENV-03 | Phase 7 | Pending |
-| ENV-04 | Phase 7 | Pending |
-| ENV-05 | Phase 7 | Pending |
+| ENV-02 | Phase 7 | Complete (07-02) |
+| ENV-03 | Phase 7 | Complete (07-02) |
+| ENV-04 | Phase 7 | Complete (07-02) |
+| ENV-05 | Phase 7 | Complete (07-02) |
 | DET-01 | Phase 8 | Pending |
 | DET-02 | Phase 8 | Pending |
 | DET-03 | Phase 8 | Pending |
@@ -168,4 +168,4 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-02-24*
-*Last updated: 2026-02-24 — traceability populated, all 48 requirements mapped*
+*Last updated: 2026-02-25 — ENV-02/03/04/05 marked complete (07-02 Supabase migration)*

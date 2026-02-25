@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 7 of 13 (Environment and Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-24 — v2.0 roadmap created, 48 requirements mapped across phases 7-13
+Plan: 2 of TBD in current phase
+Status: In progress (07-01 and 07-02 complete)
+Last activity: 2026-02-25 — 07-02 complete: Supabase vegetation schema migrations created
 
-Progress: [███████░░░░░░░░░░░░░] 35% (6/13 phases complete — v1.0 shipped)
+Progress: [███████░░░░░░░░░░░░░] 35% (6/13 phases complete — v1.0 shipped; Phase 7 in progress)
 
 ## Performance Metrics
 
@@ -36,6 +36,12 @@ Progress: [███████░░░░░░░░░░░░░] 35% (6/
 
 *v2.0 metrics will be tracked here as plans complete*
 
+**v2.0 Plans Completed:**
+
+| Phase | Plan | Duration | Files | Date |
+|-------|------|----------|-------|------|
+| 7. Environment and Foundation | 07-02 (schema) | 2 min | 2 | 2026-02-25 |
+
 ## Accumulated Context
 
 ### Decisions
@@ -48,6 +54,10 @@ Recent decisions affecting v2.0 work:
 - [v2.0 roadmap]: Use predict_tile() for cross-tile NMS rather than manual tile stitching
 - [v2.0 roadmap]: Start with --skip-plantnet=true for first missions; enable after baseline established
 - [v2.0 roadmap]: Phase 10 (Health) can build in parallel with Phase 9 (Species) if timeline is aggressive — both read from E1 rows
+- [07-02]: drone_jobs is the actual missions table — "missions" is a conceptual alias only; all FKs reference public.drone_jobs(id)
+- [07-02]: processing_steps.step_name is free TEXT (no ENUM, no CHECK) — confirmed in 20260211120000 migration; new veg step names valid without DDL
+- [07-02]: processing_templates uses path_code routing (not package_type) — Path E seeded with path_code='E'
+- [07-02]: RLS uses TO service_role role targeting for Python E scripts using service key (not has_role() admin check)
 
 ### Pending Todos
 
@@ -62,6 +72,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-24
-Stopped at: Roadmap created — Phase 7 ready to plan
+Last session: 2026-02-25
+Stopped at: Completed 07-02-PLAN.md — Supabase vegetation schema migrations created and committed
 Resume file: None
