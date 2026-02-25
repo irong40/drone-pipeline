@@ -1,0 +1,36 @@
+# Path E Vegetation Analysis — Python 3.12 venv
+# PyTorch MUST be installed first via --index-url to get CUDA 12.8 build:
+#   pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+# Then install the rest:
+#   pip install -r requirements-path-e.txt
+#
+# Do NOT add torch/torchvision here — they must come from the PyTorch CUDA index.
+
+# Core ML
+deepforest>=1.4.0
+
+# Geospatial
+rasterio>=1.3.0
+geopandas>=0.14.0
+shapely>=2.0.0
+fiona>=1.9.0
+pyproj>=3.6.0
+
+# Image processing
+Pillow>=10.0.0
+numpy>=1.26.0
+
+# API clients
+openai>=1.0.0
+requests>=2.31.0
+
+# Reporting
+reportlab>=4.0.0
+matplotlib>=3.8.0
+folium>=0.15.0
+
+# Database
+supabase>=2.0.0
+
+# Utilities
+python-dotenv>=1.0.0
