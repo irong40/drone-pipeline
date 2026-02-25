@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 11 (Report Generation) — Phases 7+8+9+10 complete
+**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 11 (Report Generation) — Plan 01 complete
 
 ## Current Position
 
-Phase: 09 of 13 (Species Classification) — COMPLETE (retroactively executed)
-Plan: 1 of 1 in current phase (PHASE COMPLETE)
-Status: Phases 7+8+9+10 all complete — moving to Phase 11 (Report Generation)
-Last activity: 2026-02-25 — 09-01 complete: species_classification.py (crop_canopy 15% padding, OpenAI Vision gpt-4o Hampton Roads 20-species prompt, PlantNet cross-validation, genus reconciliation +0.1/-0.15, checkpoint resume, Supabase batch update, cost gate)
+Phase: 11 of 13 (Report Generation)
+Plan: 1 of 2 in current phase (PLAN 01 COMPLETE)
+Status: Phase 11 Plan 01 complete — map generation done; 11-02 (PDF report) next
+Last activity: 2026-02-25 — 11-01 complete: vegetation_report.py (species map PNG, health map PNG, GeoJSON, Folium interactive map, Supabase summary write)
 
-Progress: [████████░░░░░░░░░░░░] 40% (8/13 phases complete — v1.0 shipped; Phases 7+8+9+10 complete)
+Progress: [████████░░░░░░░░░░░░] 45% (Phases 7+8+9+10 complete; Phase 11 in progress)
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Progress: [████████░░░░░░░░░░░░] 40% (8/
 | 8. Canopy Detection | 08-02 (output layer) | 15 min | 1 | 2026-02-25 |
 | 9. Species Classification | 09-01 (species_classification.py) | 25 min | 1 | 2026-02-25 |
 | 10. Health Assessment | 10-01 (health_assessment.py) | 3 min | 1 | 2026-02-25 |
+| 11. Report Generation | 11-01 (vegetation_report.py maps) | 3 min | 1 | 2026-02-25 |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Recent decisions affecting v2.0 work:
 - [09-01]: cost_threshold guard runs BEFORE classification loop — prevents any API calls when over budget
 - [09-01]: fetch_detections() filters species_tag IS NULL by default — --force fetches all including already-classified
 - [09-01]: run_classification() added as testable orchestration function following canopy_detection.py / health_assessment.py pattern
+- [Phase 11-report-generation]: matplotlib Agg backend set before pyplot import for headless rendering — avoids TkAgg/Qt errors in server/n8n context
+- [Phase 11-report-generation]: Folium two-pass simplification: FOLIUM_SIMPLIFY_INITIAL=5e-6 first, FOLIUM_SIMPLIFY_AGGRESSIVE=2e-5 only if file > 10MB
+- [Phase 11-report-generation]: Folium interactive map tier-gated: extended/comprehensive only per PRD delivery spec
 
 ### Pending Todos
 
@@ -94,5 +98,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 09-01-PLAN.md — species_classification.py: crop_canopy 15% padding, OpenAI Vision gpt-4o 20-species prompt, PlantNet cross-validation, genus reconciliation +0.1/-0.15 confidence, checkpoint resume, cost gate, Supabase batch update. Phase 09 COMPLETE.
+Stopped at: Completed 11-01-PLAN.md — vegetation_report.py: species map PNG (20-species SPECIES_COLORS palette, rasterio.plot basemap, legend/north arrow/scale/branding), health map PNG (5-status HEALTH_COLORS, severity-ordered legend), GeoJSON export (EPSG:4326, 6-decimal precision via shapely.set_precision), Folium interactive map (Esri satellite, clickable popups, LayerControl, 10MB guard with 2-pass simplification), tier-aware orchestrator, Supabase vegetation_analysis_summary write. RPT-02/03/04/09 satisfied.
 Resume file: None
