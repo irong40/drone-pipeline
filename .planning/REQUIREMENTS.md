@@ -69,8 +69,8 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 ### Testing
 
-- [ ] **TST-01**: Unit tests for canopy_detection.py covering tiling, NMS, polygon export, and Supabase writes with mocked GPU/rasterio
-- [ ] **TST-02**: Unit tests for species_classification.py covering crop extraction, API calls, confidence reconciliation, checkpoint resume with mocked APIs
+- [x] **TST-01**: Unit tests for canopy_detection.py covering tiling, NMS, polygon export, and Supabase writes with mocked GPU/rasterio
+- [x] **TST-02**: Unit tests for species_classification.py covering crop extraction, API calls, confidence reconciliation, checkpoint resume with mocked APIs
 - [x] **TST-03**: Unit tests for health_assessment.py covering VARI/ExG calculation, vision sampling, score combination with mocked APIs
 - [x] **TST-04**: Unit tests for vegetation_report.py covering PDF generation, map rendering, Folium output, summary writes
 - [ ] **TST-05**: Integration test: E1 → E2 → E3 → E4 end-to-end with sample orthomosaic and mocked APIs
@@ -152,8 +152,8 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | INT-05 | Phase 12 | Pending |
 | INT-06 | Phase 12 | Pending |
 | INT-07 | Phase 12 | Pending |
-| TST-01 | Phase 13 | Pending |
-| TST-02 | Phase 13 | Pending |
+| TST-01 | Phase 13 | Complete |
+| TST-02 | Phase 13 | Complete |
 | TST-03 | Phase 13 | Complete |
 | TST-04 | Phase 13 | Complete |
 | TST-05 | Phase 13 | Pending |
