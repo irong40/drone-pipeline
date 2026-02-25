@@ -24,6 +24,8 @@ import argparse
 import subprocess
 import logging
 
+from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 FFPROBE_BIN = "ffprobe"
@@ -230,7 +232,7 @@ def check_lrf_proxy(mission_path, original_filename):
 
 # ─── METADATA COLLECTION ────────────────────────────────────────────────────
 
-def collect_metadata(mission_path, platform="mini4pro"):
+def collect_metadata(mission_path, platform="mini4pro", completed=None):
     """Collect metadata for all video files in a mission.
 
     For each video:
@@ -239,6 +241,7 @@ def collect_metadata(mission_path, platform="mini4pro"):
       3. Check for LRF proxy
       4. Derive color_profile from platform
 
+    completed: optional set of already-processed item keys (for checkpoint resume).
     Returns list of metadata dicts.
     """
     log = logging.getLogger(__name__)
@@ -247,11 +250,19 @@ def collect_metadata(mission_path, platform="mini4pro"):
     if not videos:
         return []
 
+    if completed is None:
+        completed = set()
+
     color_profile = PLATFORM_COLOR_PROFILES.get(platform)
     results = []
 
     for video_path in videos:
         filename = os.path.basename(video_path)
+
+        if video_path in completed:
+            log.info(f"  Skip (checkpoint): {filename}")
+            continue
+
         log.info(f"  Probing: {filename}")
 
         # Run ffprobe
@@ -309,6 +320,7 @@ def collect_metadata(mission_path, platform="mini4pro"):
             log.info(f"    Graded path: {graded_path}")
 
         results.append(meta)
+        completed.add(video_path)
 
     return results
 
@@ -428,6 +440,8 @@ Examples:
     parser.add_argument("--upload", action="store_true", help="Upload metadata to Supabase video_assets")
     parser.add_argument("--dump-json", action="store_true", help="Output metadata as JSON")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be updated without writing")
+    parser.add_argument("--force", action="store_true",
+                        help="Clear checkpoint and re-process all files from scratch")
     args = parser.parse_args()
 
     log = setup_logging()
@@ -444,12 +458,27 @@ Examples:
     log.info(f"  Mission:  {mission_path}")
     log.info(f"  Platform: {args.platform}")
 
+    # Checkpoint resume
+    SCRIPT_NAME = "video_metadata"
+    if args.force:
+        clear_checkpoint(mission_path, SCRIPT_NAME)
+        log.info("--force: checkpoint cleared, re-processing all files")
+    completed = load_checkpoint(mission_path, SCRIPT_NAME)
+    if completed:
+        log.info(f"Resuming: {len(completed)} file(s) already completed")
+
     # Collect metadata
-    metadata = collect_metadata(mission_path, platform=args.platform)
+    metadata = collect_metadata(mission_path, platform=args.platform, completed=completed)
 
     if not metadata:
         log.info("No video files found in video/full/")
         return
+
+    # Save checkpoint after collection
+    try:
+        save_checkpoint(mission_path, SCRIPT_NAME, completed)
+    except OSError as e:
+        log.warning(f"Checkpoint write failed (non-fatal): {e}")
 
     # Summary
     ok_count = sum(1 for m in metadata if m["status"] == "ok")

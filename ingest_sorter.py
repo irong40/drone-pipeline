@@ -34,6 +34,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
 
+from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 INCOMING_ROOT = r"E:\Sentinel\Incoming"
@@ -373,6 +375,8 @@ Examples:
     parser.add_argument("--webhook-url", default=N8N_WEBHOOK_URL, help="Override webhook URL")
     parser.add_argument("--dry-run", action="store_true", help="Show what would happen without copying")
     parser.add_argument("--list", action="store_true", help="List files found and exit")
+    parser.add_argument("--force", action="store_true",
+                        help="Clear checkpoint and re-copy all files from scratch")
     args = parser.parse_args()
 
     log = setup_logging()
@@ -466,17 +470,35 @@ Examples:
         mission_path = create_mission_structure(folder_name, root=args.incoming)
         log.info(f"  Created: {mission_path}")
 
+        # Checkpoint resume — keyed per mission
+        SCRIPT_NAME = f"ingest_sorter_{mid}"
+        if args.force:
+            clear_checkpoint(mission_path, SCRIPT_NAME)
+        completed = load_checkpoint(mission_path, SCRIPT_NAME)
+        if completed:
+            log.info(f"  Resuming: {len(completed)} file(s) already copied")
+
         # Copy files
         copied = 0
+        skipped = 0
         failed = 0
         for f in mission_files:
+            item_key = f["path"]
+            if item_key in completed:
+                skipped += 1
+                continue
             dest = copy_file_to_mission(f, mission_path)
             if dest:
                 copied += 1
+                completed.add(item_key)
+                try:
+                    save_checkpoint(mission_path, SCRIPT_NAME, completed)
+                except OSError as e:
+                    log.warning(f"  Checkpoint write failed (non-fatal): {e}")
             else:
                 failed += 1
 
-        log.info(f"  Copied: {copied} files, Failed: {failed}")
+        log.info(f"  Copied: {copied}, Skipped (checkpoint): {skipped}, Failed: {failed}")
 
         if failed > 0:
             log.warning(f"  {failed} file(s) failed to copy — ingest incomplete")

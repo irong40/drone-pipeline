@@ -33,6 +33,7 @@ import logging
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 FFPROBE_BIN = "ffprobe"
+LOG_DIR = r"E:\Sentinel\logs"
 
 # DJI EXIF Model tag → pipeline platform ID
 # DJI uses internal camera module codes in EXIF. These map to the commercial
@@ -381,10 +382,15 @@ Examples:
                         help="Show detailed detection info")
     args = parser.parse_args()
 
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_file = os.path.join(LOG_DIR, "platform_detect.log")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout),
+        ],
     )
 
     target = os.path.abspath(args.path)
