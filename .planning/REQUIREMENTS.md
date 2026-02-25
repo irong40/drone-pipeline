@@ -27,10 +27,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 ### Species Classification (E2)
 
-- [ ] **SPE-01**: species_classification.py crops each canopy polygon from orthomosaic with 15% padding and resizes to 512px max dimension
-- [ ] **SPE-02**: Each crop sent to OpenAI Vision API (gpt-4o) with Hampton Roads species identification prompt covering 20 species
-- [ ] **SPE-03**: Each crop sent to PlantNet API for independent cross-validation (skippable via --skip-plantnet flag)
-- [ ] **SPE-04**: Confidence reconciliation: genus match between APIs boosts confidence +0.1, disagreement reduces -0.15
+- [x] **SPE-01**: species_classification.py crops each canopy polygon from orthomosaic with 15% padding and resizes to 512px max dimension
+- [x] **SPE-02**: Each crop sent to OpenAI Vision API (gpt-4o) with Hampton Roads species identification prompt covering 20 species
+- [x] **SPE-03**: Each crop sent to PlantNet API for independent cross-validation (skippable via --skip-plantnet flag)
+- [x] **SPE-04**: Confidence reconciliation: genus match between APIs boosts confidence +0.1, disagreement reduces -0.15
 - [ ] **SPE-05**: Per-canopy checkpoint resume prevents re-billing for already-classified canopies on script restart
 - [ ] **SPE-06**: max_canopies cap (default 200) limits API cost by selecting largest canopies by area
 - [ ] **SPE-07**: 0.5-second delay between API calls respects rate limits; PlantNet remainingIdentificationRequests checked and acted on
@@ -122,10 +122,10 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | DET-05 | Phase 8 | Complete |
 | DET-06 | Phase 8 | Complete |
 | DET-07 | Phase 8 | Complete |
-| SPE-01 | Phase 9 | Pending |
-| SPE-02 | Phase 9 | Pending |
-| SPE-03 | Phase 9 | Pending |
-| SPE-04 | Phase 9 | Pending |
+| SPE-01 | Phase 9 | Complete |
+| SPE-02 | Phase 9 | Complete |
+| SPE-03 | Phase 9 | Complete |
+| SPE-04 | Phase 9 | Complete |
 | SPE-05 | Phase 9 | Pending |
 | SPE-06 | Phase 9 | Pending |
 | SPE-07 | Phase 9 | Pending |

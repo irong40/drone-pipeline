@@ -171,7 +171,7 @@ Plans:
 | 6. Integration Tests | v1.0 | 3/3 | Complete | 2026-02-24 |
 | 7. Environment and Foundation | 2/2 | Complete    | 2026-02-25 | - |
 | 8. Canopy Detection | 2/2 | Complete    | 2026-02-25 | - |
-| 9. Species Classification | v2.0 | 0/TBD | Not started | - |
+| 9. Species Classification | 1/2 | In Progress|  | - |
 | 10. Health Assessment | v2.0 | Complete    | 2026-02-25 | 2026-02-25 |
 | 11. Report Generation | v2.0 | 0/TBD | Not started | - |
 | 12. Integration and Delivery | v2.0 | 0/TBD | Not started | - |

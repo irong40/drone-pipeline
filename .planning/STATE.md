@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 10 (Health Assessment)
+**Current focus:** v2.0 Vegetation Analysis Pipeline — Phase 11 (Report Generation) — Phases 7+8+9+10 complete
 
 ## Current Position
 
-Phase: 10 of 13 (Health Assessment)
+Phase: 09 of 13 (Species Classification) — COMPLETE (retroactively executed)
 Plan: 1 of 1 in current phase (PHASE COMPLETE)
-Status: Phase 10 complete — moving to Phase 11 (Report Generation)
-Last activity: 2026-02-25 — 10-01 complete: health_assessment.py (VARI/ExG indices, health scoring, OpenAI Vision sampling, checkpoint resume, Supabase update, JSON stdout)
+Status: Phases 7+8+9+10 all complete — moving to Phase 11 (Report Generation)
+Last activity: 2026-02-25 — 09-01 complete: species_classification.py (crop_canopy 15% padding, OpenAI Vision gpt-4o Hampton Roads 20-species prompt, PlantNet cross-validation, genus reconciliation +0.1/-0.15, checkpoint resume, Supabase batch update, cost gate)
 
 Progress: [████████░░░░░░░░░░░░] 40% (8/13 phases complete — v1.0 shipped; Phases 7+8+9+10 complete)
 
@@ -44,6 +44,7 @@ Progress: [████████░░░░░░░░░░░░] 40% (8/
 | 7. Environment and Foundation | 07-02 (schema) | 2 min | 2 | 2026-02-25 |
 | 8. Canopy Detection | 08-01 (detection engine) | 15 min | 1 | 2026-02-25 |
 | 8. Canopy Detection | 08-02 (output layer) | 15 min | 1 | 2026-02-25 |
+| 9. Species Classification | 09-01 (species_classification.py) | 25 min | 1 | 2026-02-25 |
 | 10. Health Assessment | 10-01 (health_assessment.py) | 3 min | 1 | 2026-02-25 |
 
 ## Accumulated Context
@@ -72,6 +73,12 @@ Recent decisions affecting v2.0 work:
 - [10-01]: update_health_batch uses individual UPDATE per row (not upsert) since E1 rows already exist in vegetation_detections
 - [10-01]: Checkpoint key format canopy_{detection_index} — per-canopy granularity prevents re-billing on vision API calls after partial run
 - [10-01]: Cost threshold guard runs before vision loop — aborts if estimated_cost > cost_threshold ($2.00 default)
+- [09-01]: classify_openai() uses system+user message roles — system sets arborist context, user sends image + prompt
+- [09-01]: classify_plantnet() uses organs=['leaf'] for top-down canopy view (best match for aerial despite naming)
+- [09-01]: reconcile() extracts genus from species_scientific (first word) not common name — more reliable for Latin binomials
+- [09-01]: cost_threshold guard runs BEFORE classification loop — prevents any API calls when over budget
+- [09-01]: fetch_detections() filters species_tag IS NULL by default — --force fetches all including already-classified
+- [09-01]: run_classification() added as testable orchestration function following canopy_detection.py / health_assessment.py pattern
 
 ### Pending Todos
 
@@ -87,5 +94,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 10-01-PLAN.md — health_assessment.py: VARI/ExG vegetation indices, health scoring (40/60 index/vision), OpenAI Vision sampling for bottom 30%, checkpoint resume, Supabase batch update, JSON stdout. Phase 10 COMPLETE.
+Stopped at: Completed 09-01-PLAN.md — species_classification.py: crop_canopy 15% padding, OpenAI Vision gpt-4o 20-species prompt, PlantNet cross-validation, genus reconciliation +0.1/-0.15 confidence, checkpoint resume, cost gate, Supabase batch update. Phase 09 COMPLETE.
 Resume file: None
