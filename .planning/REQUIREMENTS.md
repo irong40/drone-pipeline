@@ -59,13 +59,13 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 
 ### Integration & Delivery
 
-- [ ] **INT-01**: n8n Path E workflow triggers when mission.vegetation_analysis=true AND Path C orthomosaic exists
-- [ ] **INT-02**: Package Router updated: site_survey and environmental_survey enable vegetation by default; construction_hybrid optional
+- [x] **INT-01**: n8n Path E workflow triggers when mission.vegetation_analysis=true AND Path C orthomosaic exists
+- [x] **INT-02**: Package Router updated: site_survey and environmental_survey enable vegetation by default; construction_hybrid optional
 - [x] **INT-03**: Operator review gate pauses processing after E4 with approve/exclude/flag-for-arborist actions per detection
 - [x] **INT-04**: Review resume webhook (POST /sentinel-vegetation-resume) accepts decisions array and regenerates report excluding excluded detections
 - [x] **INT-05**: delivery_packaging.py adds vegetation/ subfolder to client ZIP with PDF, species map, health map, GeoJSON, and optional interactive map
 - [x] **INT-06**: Path E failure never blocks main delivery package; --include-vegetation flag gated on vegetation_status='complete'
-- [ ] **INT-07**: All 4 scripts follow v1.0 contract: argparse inputs, processing_steps row updates, JSON stdout, exit codes 0/1/2, setup_logging()
+- [x] **INT-07**: All 4 scripts follow v1.0 contract: argparse inputs, processing_steps row updates, JSON stdout, exit codes 0/1/2, setup_logging()
 
 ### Testing
 
@@ -145,13 +145,13 @@ Requirements for Path E Vegetation Analysis. Each maps to roadmap phases.
 | RPT-07 | Phase 11 | Complete (11-02) |
 | RPT-08 | Phase 11 | Complete (11-02) |
 | RPT-09 | Phase 11 | Complete (11-01) |
-| INT-01 | Phase 12 | Pending |
-| INT-02 | Phase 12 | Pending |
+| INT-01 | Phase 12 | Complete (12-01) |
+| INT-02 | Phase 12 | Complete (12-01) |
 | INT-03 | Phase 12 | Complete |
 | INT-04 | Phase 12 | Complete |
 | INT-05 | Phase 12 | Complete |
 | INT-06 | Phase 12 | Complete |
-| INT-07 | Phase 12 | Pending |
+| INT-07 | Phase 12 | Complete (12-01) |
 | TST-01 | Phase 13 | Complete |
 | TST-02 | Phase 13 | Complete |
 | TST-03 | Phase 13 | Complete |

@@ -39,6 +39,7 @@ Progress: [████████████░░░░░░░░] 60% (Ph
 | 13. Test Suite | 13-02 (E3/E4 unit tests) | — | 3 | 2026-02-25 |
 | 13. Test Suite | 13-03 Task 1 (integration tests) | 25 min | 2 | 2026-02-25 |
 | 9. Species Classification | 09-02 (safety controls + JSON stdout) | 8 min | 1 | 2026-02-25 |
+| 12. Integration and Delivery | 12-01 (n8n Path E workflow + package router patch) | 4 min | 2 | 2026-02-25 |
 | 12. Integration and Delivery | 12-02 (delivery veg subfolder + review gate docs) | 5 min | 2 | 2026-02-25 |
 
 ## Accumulated Context
@@ -75,6 +76,12 @@ Recent decisions affecting v2.0 work:
 - [Phase 13]: collect_vegetation() returns [] for any non-complete status — safe default, no partial outputs in ZIP
 - [Phase 09]: PLANTNET_QUOTA_EXHAUSTED is a module-level sentinel dict — identity check (is) distinguishes it from normal None returns
 - [Phase 09]: time.sleep(0.5) placed at END of per-canopy block to rate-limit both OpenAI and PlantNet calls
+- [12-01]: n8n Path E workflow uses .venv-path-e Python (E:\Sentinel\.venv-path-e\Scripts\python.exe) — not system Python 3.14 which lacks DeepForest
+- [12-01]: E0 ortho polling: 60s interval, 30 attempts max = 30-minute timeout; sets vegetation_status=failed on timeout
+- [12-01]: Zero-canopy bypass: E1 canopy_count=0 skips E2/E3, routes directly to report generation
+- [12-01]: Review gate uses n8n Webhook Wait node — workflow thread pauses until POST /sentinel-vegetation-resume
+- [12-01]: vegetation_report.py (E4) intentionally omits checkpoint — idempotent (reads fresh from Supabase each run)
+- [12-01]: Package router: vegetation_enabled=true by default for site_survey and environmental_survey only
 - [12-02]: collect_vegetation() returns [] for any non-complete status — two-gate safety: CLI flag (opt-in) + vegetation_status=complete (data guard)
 - [12-02]: Decisions array for review gate contains only non-default overrides; omitting detection_index implicitly approves it
 - [12-02]: REVIEW_GATE.md in repo root (not embedded in delivery_packaging.py) — contract is for Trestle admin UI (separate project)
@@ -93,5 +100,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 12-02-PLAN.md — delivery vegetation subfolder + review gate docs; Phase 12 fully complete. Phase 13 still at checkpoint 13-03 Task 2.
+Stopped at: Completed 12-01-PLAN.md — n8n Path E workflow JSON (35 nodes) + package router patch + v1 contract smoke test. Phase 12 now fully complete (both 12-01 + 12-02 done). Phase 13 still at checkpoint 13-03 Task 2.
 Resume file: None
