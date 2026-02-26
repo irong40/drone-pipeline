@@ -227,8 +227,8 @@ def test_run_qa_checks_multiple_issues():
 
 def test_fetch_thresholds_returns_default_when_mission_not_found(mock_supabase_client, mocker):
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("video_qa.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_qa.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
     # .single().execute().data = None → no mission found
     (mock_supabase_client.table.return_value.select.return_value
      .eq.return_value.single.return_value.execute.return_value.data) = None
@@ -238,8 +238,8 @@ def test_fetch_thresholds_returns_default_when_mission_not_found(mock_supabase_c
     assert result == DEFAULT_THRESHOLDS
 
 def test_fetch_thresholds_returns_default_when_no_package_type(mock_supabase_client, mocker):
-    mocker.patch("video_qa.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_qa.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
     (mock_supabase_client.table.return_value.select.return_value
      .eq.return_value.single.return_value.execute.return_value.data) = {"package_type": None}
 
@@ -251,8 +251,8 @@ def test_fetch_thresholds_returns_default_when_no_package_type(mock_supabase_cli
 # ── update_qa_status (Supabase) ───────────────────────────────────────────────
 
 def test_update_qa_status_calls_update(mock_supabase_client, mocker):
-    mocker.patch("video_qa.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_qa.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
 
     from video_qa import update_qa_status
     update_qa_status(mock_supabase_client, "asset-uuid", "pass", {})

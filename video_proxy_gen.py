@@ -23,33 +23,18 @@ import subprocess
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_utils import LOG_DIR, VIDEO_EXTENSIONS, setup_logging
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
+SCRIPT_NAME = "video_proxy_gen"
 FFMPEG_BIN = "ffmpeg"
-LOG_DIR = r"E:\Sentinel\logs"
 PROXY_RESOLUTION = "1920x1080"
 PROXY_CRF = 23  # Fast, decent quality — proxies are for editing, not delivery
 PROXY_PRESET = "fast"
 PROXY_CODEC = "libx264"
 
 VIDEO_EXTENSIONS = {"*.mp4", "*.MP4", "*.mov", "*.MOV"}
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "video_proxy_gen.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── PROXY GENERATION ────────────────────────────────────────────────────────
@@ -142,7 +127,7 @@ Examples:
                         help="Clear checkpoint and re-process all files from scratch")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     # Pre-flight: check FFmpeg
     if not args.dry_run and not check_ffmpeg():
@@ -168,7 +153,6 @@ Examples:
     log.info(f"Found {len(videos)} video(s)")
 
     # Checkpoint resume
-    SCRIPT_NAME = "video_proxy_gen"
     if args.force:
         clear_checkpoint(mission_path, SCRIPT_NAME)
         log.info("--force: checkpoint cleared, re-processing all files")

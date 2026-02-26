@@ -20,42 +20,20 @@ import io
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from pipeline_utils import setup_logging, get_drive_service, traverse_drive_folder
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+SCRIPT_NAME = "archive_sync"
 ARCHIVE_DIR = r"F:\Sentinel_Archive"
-LOG_DIR = r"E:\Sentinel\logs"
 DRIVE_DELIVERED_FOLDER = "Sentinel_Deliveries/Delivered"
 CLEANUP_DAYS = 30  # Remove from Drive after N days
 
 
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "archive_sync.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
-
-
 # ─── GOOGLE DRIVE ────────────────────────────────────────────────────────────
-
-def get_drive_service(credentials_json=None):
-    """Build Google Drive API service."""
-    from pipeline_utils import get_drive_service as _get_drive_service
-    return _get_drive_service(credentials_json)
-
 
 def find_folder(service, folder_path):
     """Find a nested folder by path. Returns folder ID or None."""
-    from pipeline_utils import traverse_drive_folder
     return traverse_drive_folder(service, folder_path, create_missing=False)
 
 
@@ -222,7 +200,7 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", help="Show actions without executing")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     log.info("Archive sync starting")
     log.info(f"  Archive dir:   {args.archive_dir}")

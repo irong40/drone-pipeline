@@ -35,11 +35,13 @@ from pathlib import Path
 from collections import defaultdict
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_utils import LOG_DIR, PHOTO_EXTS, VIDEO_EXTS, PPK_EXTS, setup_logging, extract_sequence_number
+from platform_detect import detect_from_filename
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
+SCRIPT_NAME = "ingest_sorter"
 INCOMING_ROOT = r"E:\Sentinel\Incoming"
-LOG_DIR = r"E:\Sentinel\logs"
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/ingest")
 MISSION_GAP_MINUTES = 30
 
@@ -70,22 +72,6 @@ MISSION_SUBFOLDERS = [
 ]
 
 
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "ingest_sorter.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
-
-
 # ─── PLATFORM DETECTION ─────────────────────────────────────────────────────
 
 def detect_platform(filename):
@@ -97,11 +83,7 @@ def detect_platform(filename):
     Note: Cannot distinguish M4E from M3E by filename alone.
     Use detect_platform_exif() on media files for exact identification.
     """
-    if re.match(r"DJI_\d{14}_\d{4}_", filename, re.IGNORECASE):
-        return "m4e"  # Ambiguous — use EXIF for M4E vs M3E
-    if re.match(r"DJI_\d{4}\.", filename, re.IGNORECASE):
-        return "mini4pro"
-    return None
+    return detect_from_filename(filename)
 
 
 def detect_platform_exif(source_path):
@@ -118,25 +100,6 @@ def detect_platform_exif(source_path):
     except ImportError:
         pass
     return None, "unavailable"
-
-
-def extract_sequence_number(filename):
-    """Extract the sequence number from a DJI filename.
-
-    Mini 4 Pro: DJI_0015.JPG → 15
-    M4E/M3E:   DJI_20260218101500_0015_D.JPG → 15
-    """
-    # Timestamp format: DJI_YYYYMMDDHHMMSS_NNNN_X.EXT
-    m = re.match(r"DJI_\d{14}_(\d{4})_", filename, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-
-    # Sequential format: DJI_NNNN.EXT
-    m = re.match(r"DJI_(\d{4})\.", filename, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-
-    return None
 
 
 def extract_timestamp(filename):
@@ -177,7 +140,7 @@ def scan_sd_card(source_path):
         platform = detect_platform(fname)
         ts = extract_timestamp(fname)
 
-        if seq is None:
+        if not seq:
             continue
 
         files.append({
@@ -301,9 +264,9 @@ def copy_file_to_mission(file_info, mission_path):
 
 def count_inventory(mission_path):
     """Count files by type in a mission folder."""
-    photo_exts = {"DNG", "JPG", "JPEG"}
-    video_exts = {"MP4", "MOV"}
-    ppk_exts = {"MRK", "NAV", "OBS", "BIN", "RTK"}
+    photo_exts = PHOTO_EXTS
+    video_exts = VIDEO_EXTS
+    ppk_exts = PPK_EXTS
 
     photo_count = 0
     video_count = 0
@@ -379,7 +342,7 @@ Examples:
                         help="Clear checkpoint and re-copy all files from scratch")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     # Validate source
     source = os.path.abspath(args.source)

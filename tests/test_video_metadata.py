@@ -182,8 +182,8 @@ def test_check_lrf_proxy_not_found(tmp_path):
 def test_upload_metadata_update_branch(mock_supabase_client, mocker):
     """When filename exists in video_assets, triggers update path."""
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("video_metadata.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_metadata.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
     # Configure select to return existing record
     mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
         {"id": "existing-id", "filename": "DJI_0001.MP4"}
@@ -203,8 +203,8 @@ def test_upload_metadata_update_branch(mock_supabase_client, mocker):
 def test_upload_metadata_insert_branch(mock_supabase_client, mocker):
     """When filename does NOT exist in video_assets, triggers insert path."""
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("video_metadata.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_metadata.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
     # Conftest default: data = [] (no existing records)
 
     metadata = [{
@@ -221,8 +221,8 @@ def test_upload_metadata_insert_branch(mock_supabase_client, mocker):
 
 def test_upload_metadata_skips_failed_records(mock_supabase_client, mocker):
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("video_metadata.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_metadata.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
 
     metadata = [{"filename": "DJI_0001.MP4", "status": "probe_failed"}]
     from video_metadata import upload_metadata
@@ -231,8 +231,8 @@ def test_upload_metadata_skips_failed_records(mock_supabase_client, mocker):
     assert inserted == 0
 
 def test_upload_metadata_raises_when_env_not_set(mocker):
-    mocker.patch("video_metadata.SUPABASE_URL", "")
-    mocker.patch("video_metadata.SUPABASE_SERVICE_KEY", "")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "")
     from video_metadata import upload_metadata
     with pytest.raises(ValueError, match="SUPABASE_URL"):
         upload_metadata([], "mission-uuid")

@@ -830,8 +830,8 @@ def test_supabase_batch_update_correct_payload(mock_supabase_client, mocker):
 
     mock_log = logging.getLogger("test")
 
-    with patch("species_classification.SUPABASE_URL", "https://test.supabase.co"), \
-         patch("species_classification.SUPABASE_SERVICE_KEY", "test-key"):
+    with patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co"), \
+         patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key"):
         result = update_classification_batch(rows, mock_log)
 
     assert result is True
@@ -871,8 +871,9 @@ def test_supabase_batch_update_skips_when_no_credentials():
         "classification_details": {},
     }]
 
-    with patch("species_classification.SUPABASE_URL", ""), \
-         patch("species_classification.SUPABASE_SERVICE_KEY", ""):
+    with patch("pipeline_utils.SUPABASE_URL", ""), \
+         patch("pipeline_utils.SUPABASE_SERVICE_KEY", ""), \
+         patch("species_classification._get_supabase_client", return_value=None):
         result = update_classification_batch(rows, mock_log)
 
     assert result is False

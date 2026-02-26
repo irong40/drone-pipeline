@@ -24,12 +24,14 @@ from datetime import datetime
 from pathlib import Path
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_utils import (
+    LOG_DIR, SUPABASE_URL, SUPABASE_SERVICE_KEY,
+    setup_logging, extract_sequence_number, get_supabase_client,
+)
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-LOG_DIR = r"E:\Sentinel\logs"
+SCRIPT_NAME = "srt_telemetry_parser"
 
 # SRT telemetry patterns (DJI format)
 # Example SRT frame:
@@ -51,22 +53,6 @@ DATETIME_RE = re.compile(r"\[datetime:\s*([^\]]+)\]")
 ALTITUDE_RE = re.compile(r"\[altitude:\s*([\d.]+)\]")
 LATITUDE_RE = re.compile(r"\[latitude:\s*([+-]?[\d.]+)\]")
 LONGITUDE_RE = re.compile(r"\[longitude:\s*([+-]?[\d.]+)\]")
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "srt_telemetry_parser.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── SRT PARSING ─────────────────────────────────────────────────────────────
@@ -259,16 +245,7 @@ def aggregate_clip(frames, filename, source_platform=None):
 
 def upload_to_supabase(clip_data, mission_id):
     """Write clip metadata to video_assets table in Supabase."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
-
-    try:
-        from supabase import create_client
-    except ImportError:
-        logging.getLogger(__name__).error("supabase package not installed. Run: pip install supabase")
-        sys.exit(2)
-
-    client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    client = get_supabase_client()
 
     record = {
         "mission_id": mission_id,
@@ -291,7 +268,6 @@ def upload_to_supabase(clip_data, mission_id):
     }
 
     # Sequence number from filename (platform-aware)
-    from pipeline_utils import extract_sequence_number
     record["sequence_number"] = extract_sequence_number(clip_data["filename"])
 
     result = client.table("video_assets").insert(record).execute()
@@ -323,7 +299,7 @@ Examples:
                         help="Clear checkpoint and re-process all SRT files from scratch")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     mission_path = os.path.abspath(args.mission_path)
     telemetry_dir = os.path.join(mission_path, "video", "telemetry")
@@ -345,7 +321,6 @@ Examples:
     log.info(f"Found {len(srt_files)} SRT file(s)")
 
     # Checkpoint resume
-    SCRIPT_NAME = "srt_telemetry_parser"
     if args.force:
         clear_checkpoint(mission_path, SCRIPT_NAME)
         log.info("--force: checkpoint cleared, re-processing all files")

@@ -217,8 +217,8 @@ def test_aggregate_clip_empty_frames_returns_none():
 
 def test_upload_to_supabase_inserts_record(mock_supabase_client, mocker):
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("srt_telemetry_parser.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("srt_telemetry_parser.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
 
     clip_data = {
         "filename": "DJI_0001.MP4",
@@ -244,8 +244,8 @@ def test_upload_to_supabase_inserts_record(mock_supabase_client, mocker):
 
 def test_upload_to_supabase_m4e_sequence_number(mock_supabase_client, mocker):
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("srt_telemetry_parser.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("srt_telemetry_parser.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
 
     from srt_telemetry_parser import upload_to_supabase
     upload_to_supabase({"filename": "DJI_20260218101500_0015_D.MP4"}, "uuid")
@@ -253,8 +253,8 @@ def test_upload_to_supabase_m4e_sequence_number(mock_supabase_client, mocker):
     assert record["sequence_number"] == 15
 
 def test_upload_to_supabase_raises_when_env_not_set(mocker):
-    mocker.patch("srt_telemetry_parser.SUPABASE_URL", "")
-    mocker.patch("srt_telemetry_parser.SUPABASE_SERVICE_KEY", "")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "")
     from srt_telemetry_parser import upload_to_supabase
     with pytest.raises(ValueError, match="SUPABASE_URL"):
         upload_to_supabase({"filename": "DJI_0001.MP4"}, "uuid")

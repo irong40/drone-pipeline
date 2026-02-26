@@ -17,9 +17,10 @@ import argparse
 import logging
 from pathlib import Path
 
+from pipeline_utils import setup_logging, get_drive_service, traverse_drive_folder
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 DRIVE_ACTIVE_FOLDER = "Sentinel_Deliveries/Active"
 DRIVE_DELIVERED_FOLDER = "Sentinel_Deliveries/Delivered"
 
@@ -28,31 +29,10 @@ MIME_FOLDER = "application/vnd.google-apps.folder"
 MIME_ZIP = "application/zip"
 
 
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-LOG_DIR = r"E:\Sentinel\logs"
-
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "gdrive_upload.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
+SCRIPT_NAME = "gdrive_upload"
 
 
 # ─── GOOGLE DRIVE CLIENT ─────────────────────────────────────────────────────
-
-def get_drive_service(credentials_json=None):
-    """Build Google Drive API service using service account credentials."""
-    from pipeline_utils import get_drive_service as _get_drive_service
-    return _get_drive_service(credentials_json)
 
 
 def find_or_create_folder(service, folder_path, parent_id=None):
@@ -61,10 +41,6 @@ def find_or_create_folder(service, folder_path, parent_id=None):
     folder_path: "Sentinel_Deliveries/Active" creates both folders if needed.
     Returns the folder ID of the deepest folder.
     """
-    parts = folder_path.strip("/").split("/")
-    current_parent = parent_id or "root"
-
-    from pipeline_utils import traverse_drive_folder
     return traverse_drive_folder(service, folder_path, parent_id=parent_id, create_missing=True)
 
 
@@ -153,7 +129,7 @@ Examples:
     parser.add_argument("--no-share", action="store_true", help="Don't create shareable link")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     service = get_drive_service(credentials_json=args.credentials)
 

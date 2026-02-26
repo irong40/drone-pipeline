@@ -29,11 +29,14 @@ import glob
 import json
 import subprocess
 import logging
+from collections import Counter
+
+from pipeline_utils import setup_logging
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
+SCRIPT_NAME = "platform_detect"
 FFPROBE_BIN = "ffprobe"
-LOG_DIR = r"E:\Sentinel\logs"
 
 # DJI EXIF Model tag → pipeline platform ID
 # DJI uses internal camera module codes in EXIF. These map to the commercial
@@ -338,7 +341,6 @@ def detect_platform_from_folder(folder_path, max_samples=5):
             return platform, confidence, method
         else:
             # Multiple platforms detected — unusual, pick majority
-            from collections import Counter
             counts = Counter(d[0] for d in detections)
             platform = counts.most_common(1)[0][0]
             return platform, "ambiguous", "mixed"
@@ -382,16 +384,9 @@ Examples:
                         help="Show detailed detection info")
     args = parser.parse_args()
 
-    os.makedirs(LOG_DIR, exist_ok=True)
-    log_file = os.path.join(LOG_DIR, "platform_detect.log")
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    setup_logging(SCRIPT_NAME)
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
 
     target = os.path.abspath(args.path)
 

@@ -20,17 +20,15 @@ from pathlib import Path
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
 from pipeline_status import PipelineStatusReporter, add_pipeline_args
+from pipeline_utils import LOG_DIR, VIDEO_EXTENSIONS, setup_logging, get_supabase_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
+SCRIPT_NAME = "video_color_grade"
 LUT_DIR = r"E:\Sentinel\LUTs"
-LOG_DIR = r"E:\Sentinel\logs"
 FFMPEG_BIN = "ffmpeg"  # Assumes ffmpeg is on PATH
 CRF_QUALITY = 18  # Lower = better quality, 18 is visually lossless
 VIDEO_CODEC = "libx264"
-
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 # Platform → LUT mapping
 PLATFORM_LUTS = {
@@ -38,8 +36,6 @@ PLATFORM_LUTS = {
     "m3e": "Sentinel_DLogM.cube",
     "mini4pro": "Sentinel_DCinelike.cube",
 }
-
-VIDEO_EXTENSIONS = {"*.mp4", "*.MP4", "*.mov", "*.MOV"}
 
 
 # ─── SUPABASE ────────────────────────────────────────────────────────────────
@@ -51,11 +47,8 @@ def update_graded_path(mission_id, filename, graded_path):
     (video_metadata.py may not have run yet).
     Returns True on success, False on failure (failure is non-fatal).
     """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        return False
     try:
-        from supabase import create_client
-        client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        client = get_supabase_client()
         client.table("video_assets").upsert(
             {
                 "mission_id": mission_id,
@@ -68,22 +61,6 @@ def update_graded_path(mission_id, filename, graded_path):
     except Exception as e:
         logging.getLogger(__name__).warning(f"Supabase graded_path update failed: {e}")
         return False
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "video_color_grade.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── COLOR GRADING ───────────────────────────────────────────────────────────
@@ -187,7 +164,7 @@ Examples:
     add_pipeline_args(parser)
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     mission_path = os.path.abspath(args.mission_path)
     if not os.path.isdir(mission_path):
@@ -211,7 +188,6 @@ Examples:
     reporter.start()
 
     # Checkpoint resume
-    SCRIPT_NAME = "video_color_grade"
     if args.force:
         clear_checkpoint(mission_path, SCRIPT_NAME)
         log.info("--force: checkpoint cleared, re-processing all files")

@@ -52,9 +52,9 @@ def test_extract_sequence_number_sequential_video():
     assert extract_sequence_number("DJI_0001.MP4") == 1
 
 
-def test_extract_sequence_number_non_dji_returns_none():
-    """Non-DJI prefix should return None."""
-    assert extract_sequence_number("RANDOM_0015.JPG") is None
+def test_extract_sequence_number_non_dji_returns_zero():
+    """Non-DJI prefix should return 0 (falsy)."""
+    assert extract_sequence_number("RANDOM_0015.JPG") == 0
 
 
 # ─── detect_platform ─────────────────────────────────────────────────────────

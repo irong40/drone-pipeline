@@ -175,8 +175,9 @@ def test_find_master_video_not_found_empty_dir(tmp_path):
 # ── fetch_formats_from_supabase ───────────────────────────────────────────────
 
 def test_fetch_formats_from_supabase_returns_none_when_env_not_set(mocker):
-    mocker.patch("video_format_export.SUPABASE_URL", "")
-    mocker.patch("video_format_export.SUPABASE_SERVICE_KEY", "")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "")
+    mocker.patch("video_format_export.get_supabase_client", return_value=None)
     from video_format_export import fetch_formats_from_supabase
     assert fetch_formats_from_supabase("mission-uuid") is None
 
@@ -185,8 +186,8 @@ def test_fetch_formats_from_supabase_returns_none_when_mission_not_found(mock_su
     stub_supabase = types.ModuleType("supabase")
     stub_supabase.create_client = lambda url, key: mock_supabase_client
     mocker.patch.dict("sys.modules", {"supabase": stub_supabase})
-    mocker.patch("video_format_export.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_format_export.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
     # .single().execute().data = None -> no mission found
     (mock_supabase_client.table.return_value.select.return_value
      .eq.return_value.single.return_value.execute.return_value.data) = None

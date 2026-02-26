@@ -25,15 +25,15 @@ import subprocess
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_utils import (
+    LOG_DIR, VIDEO_EXTENSIONS, SUPABASE_URL, SUPABASE_SERVICE_KEY,
+    setup_logging, extract_sequence_number, get_supabase_client,
+)
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
+SCRIPT_NAME = "video_metadata"
 FFPROBE_BIN = "ffprobe"
-
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-
-VIDEO_EXTENSIONS = {"*.mp4", "*.MP4", "*.mov", "*.MOV"}
 
 # Platform → expected color profile
 PLATFORM_COLOR_PROFILES = {
@@ -41,24 +41,6 @@ PLATFORM_COLOR_PROFILES = {
     "m3e": "d_log_m",
     "mini4pro": "d_cinelike",
 }
-
-LOG_DIR = r"E:\Sentinel\logs"
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    log_file = os.path.join(LOG_DIR, "video_metadata.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── FFPROBE ─────────────────────────────────────────────────────────────────
@@ -335,15 +317,7 @@ def upload_metadata(metadata_list, mission_id, dry_run=False):
     """
     log = logging.getLogger(__name__)
 
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
-
-    try:
-        from supabase import create_client
-    except ImportError:
-        sys.exit("pip install supabase")
-
-    client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    client = get_supabase_client()
 
     # Fetch existing records for this mission
     existing = client.table("video_assets").select(
@@ -408,12 +382,6 @@ def upload_metadata(metadata_list, mission_id, dry_run=False):
     return updated, inserted
 
 
-def extract_sequence_number(filename):
-    """Extract sequence number from DJI filename (same logic as V2)."""
-    from pipeline_utils import extract_sequence_number as _extract_seq
-    return _extract_seq(filename)
-
-
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -444,7 +412,7 @@ Examples:
                         help="Clear checkpoint and re-process all files from scratch")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     # Pre-flight: check ffprobe
     if not check_ffprobe():
@@ -459,7 +427,6 @@ Examples:
     log.info(f"  Platform: {args.platform}")
 
     # Checkpoint resume
-    SCRIPT_NAME = "video_metadata"
     if args.force:
         clear_checkpoint(mission_path, SCRIPT_NAME)
         log.info("--force: checkpoint cleared, re-processing all files")

@@ -22,6 +22,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 from collections import defaultdict
 
+from pipeline_utils import LOG_DIR, PHOTO_EXTS, VIDEO_EXTS, PPK_EXTS, setup_logging
+
 try:
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
@@ -30,8 +32,8 @@ except ImportError:
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
+SCRIPT_NAME = "folder_watcher"
 WATCH_DIR = r"E:\Sentinel\Incoming"
-LOG_DIR = r"E:\Sentinel\logs"
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/folder-watcher")
 DEBOUNCE_SECONDS = 60  # Wait this long after last file write before triggering
 
@@ -40,22 +42,6 @@ KNOWN_EXTENSIONS = {
     "DNG", "JPG", "JPEG", "MP4", "MOV", "LRF", "SRT",
     "MRK", "NAV", "OBS", "BIN", "RTK",
 }
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "folder_watcher.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 
@@ -75,9 +61,9 @@ def build_inventory(folder_path):
     has_ppk = False
     total_size = 0
 
-    photo_exts = {"DNG", "JPG", "JPEG"}
-    video_exts = {"MP4", "MOV"}
-    ppk_exts = {"MRK", "NAV", "OBS", "BIN", "RTK"}
+    photo_exts = PHOTO_EXTS
+    video_exts = VIDEO_EXTS
+    ppk_exts = PPK_EXTS
 
     for root, _, filenames in os.walk(folder_path):
         for fname in filenames:
@@ -233,7 +219,7 @@ Examples:
     parser.add_argument("--once", action="store_true", help="Process existing folders once and exit")
     args = parser.parse_args()
 
-    setup_logging()
+    setup_logging(SCRIPT_NAME)
     log = logging.getLogger(__name__)
 
     watch_dir = args.watch_dir

@@ -531,8 +531,8 @@ def test_supabase_write_correct_payload(mock_supabase_client, mocker):
 
     det = _make_det_full(FakePolygon(500000.0, 4000000.0, 500010.0, 4000010.0), 0.85)
 
-    with patch("canopy_detection.SUPABASE_URL", "https://test.supabase.co"), \
-         patch("canopy_detection.SUPABASE_SERVICE_KEY", "test-key"):
+    with patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co"), \
+         patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key"):
         result = upsert_detections_to_supabase([det], "mission-uuid-001", log)
 
     assert result is True
@@ -561,8 +561,9 @@ def test_supabase_write_skips_when_no_credentials():
 
     det = _make_det_full(FakePolygon(0, 0, 10, 10), 0.8)
 
-    with patch("canopy_detection.SUPABASE_URL", ""), \
-         patch("canopy_detection.SUPABASE_SERVICE_KEY", ""):
+    with patch("pipeline_utils.SUPABASE_URL", ""), \
+         patch("pipeline_utils.SUPABASE_SERVICE_KEY", ""), \
+         patch("canopy_detection._get_supabase_client", return_value=None):
         result = upsert_detections_to_supabase([det], "mission-uuid", log)
 
     assert result is False

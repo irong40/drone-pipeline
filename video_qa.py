@@ -25,12 +25,11 @@ import argparse
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_utils import LOG_DIR, setup_logging, get_supabase_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-LOG_DIR = r"E:\Sentinel\logs"
+SCRIPT_NAME = "video_qa"
 
 DEFAULT_THRESHOLDS = {
     "iso_ceiling": 800,
@@ -44,34 +43,7 @@ METERS_PER_DEG_LAT = 111_320
 METERS_PER_DEG_LON = 82_000  # ~at 36N latitude (Hampton Roads)
 
 
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "video_qa.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
-
-
-# ─── SUPABASE CLIENT ─────────────────────────────────────────────────────────
-
-def get_supabase_client():
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
-    try:
-        from supabase import create_client
-    except ImportError:
-        logging.getLogger(__name__).error("supabase package not installed. Run: pip install supabase")
-        sys.exit(2)
-    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
+# ─── SUPABASE ───────────────────────────────────────────────────────────────
 
 def fetch_video_assets(client, mission_id):
     """Fetch video_assets records for a mission."""
@@ -268,7 +240,7 @@ Examples:
                         help="Clear checkpoint and re-process all assets from scratch")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     mission_path = os.path.abspath(args.mission_path) if args.mission_path else os.getcwd()
 
@@ -289,7 +261,6 @@ Examples:
     log.info(f"Video assets: {len(assets)}")
 
     # Checkpoint resume
-    SCRIPT_NAME = "video_qa"
     if args.force:
         clear_checkpoint(mission_path, SCRIPT_NAME)
         log.info("--force: checkpoint cleared, re-processing all assets")

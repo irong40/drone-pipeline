@@ -15,8 +15,10 @@ from urllib.parse import urlparse
 
 LOG_DIR = r"E:\Sentinel\logs"
 
+# Glob-style patterns for finding video files (used with glob.glob)
 VIDEO_EXTENSIONS = {"*.mp4", "*.MP4", "*.mov", "*.MOV"}
 
+# Extension sets for file-type classification (uppercase, no dots)
 PHOTO_EXTS = {"DNG", "JPG", "JPEG"}
 VIDEO_EXTS = {"MP4", "MOV"}
 PPK_EXTS = {"MRK", "NAV", "OBS", "BIN", "RTK"}
@@ -29,6 +31,10 @@ ALLOWED_VIDEO_CODECS = {
 
 # Allowed webhook hosts (local n8n only)
 ALLOWED_WEBHOOK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+# Supabase credentials (read from env once)
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 
 # ─── LOGGING ────────────────────────────────────────────────────────────────
@@ -51,6 +57,22 @@ def setup_logging(script_name, log_dir=LOG_DIR):
         ],
     )
     return logging.getLogger(__name__)
+
+
+# ─── SUPABASE CLIENT ────────────────────────────────────────────────────────
+
+def get_supabase_client():
+    """Return a Supabase client or raise ValueError if credentials are missing.
+
+    Lazy-imports supabase to keep the module importable without the package.
+    """
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
+    try:
+        from supabase import create_client
+    except ImportError:
+        sys.exit("pip install supabase")
+    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
 # ─── DJI FILENAME PARSING ──────────────────────────────────────────────────

@@ -25,6 +25,8 @@ def load_checkpoint(mission_path, script_name):
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            return set()
         if data.get("version") != CHECKPOINT_VERSION:
             return set()
         return set(data.get("completed", []))

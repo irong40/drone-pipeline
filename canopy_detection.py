@@ -38,42 +38,13 @@ from deepforest import main as deepforest_main
 # ─── PIPELINE MODULES ────────────────────────────────────────────────────────
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
 from pipeline_status import PipelineStatusReporter, add_pipeline_args
+from pipeline_utils import setup_logging, get_supabase_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-LOG_DIR = r"E:\Sentinel\logs"
 SCRIPT_NAME = "canopy_detection"
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-
 SUPABASE_BATCH_SIZE = 50  # Rows per upsert request to stay under payload limits
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir: str = LOG_DIR) -> logging.Logger:
-    """Configure dual file+stdout logging.
-
-    Creates log directory if it does not exist. Falls back to current directory
-    if E:\\Sentinel\\logs is not writable (e.g., development machine).
-    """
-    try:
-        os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, f"{SCRIPT_NAME}.log")
-    except OSError:
-        log_dir = "."
-        log_file = f"{SCRIPT_NAME}.log"
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── CUDA VERIFICATION ───────────────────────────────────────────────────────
@@ -399,21 +370,13 @@ def write_output_files(
 
 def _get_supabase_client(log: logging.Logger):
     """Return a Supabase client or None if credentials are missing."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    client = get_supabase_client()
+    if client is None:
         log.warning(
             "Supabase credentials not set (SUPABASE_URL / SUPABASE_SERVICE_KEY). "
             "Skipping vegetation_detections upsert."
         )
-        return None
-    try:
-        from supabase import create_client
-        return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    except ImportError:
-        log.warning("supabase package not installed. Skipping upsert.")
-        return None
-    except Exception as e:
-        log.warning(f"Supabase client creation failed: {e}. Skipping upsert.")
-        return None
+    return client
 
 
 def upsert_detections_to_supabase(
@@ -704,7 +667,7 @@ Examples:
     add_pipeline_args(parser)
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     # ── Startup verification ────────────────────────────────────────────────
     log.info(f"Canopy Detection (E1) starting — mission {args.mission_id}")

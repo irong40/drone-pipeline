@@ -32,10 +32,11 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from pipeline_utils import setup_logging
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 OUTPUT_ROOT = r"E:\Sentinel\Output"
-LOG_DIR = r"E:\Sentinel\logs"
 
 # Video export format name → client-facing label
 FORMAT_LABELS = {
@@ -49,22 +50,6 @@ FORMAT_LABELS = {
 # Mapping output file patterns
 MAPPING_EXTENSIONS = {".tif", ".tiff", ".obj", ".laz", ".las", ".ply"}
 REPORT_EXTENSIONS = {".pdf", ".docx", ".xlsx"}
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    log_file = os.path.join(LOG_DIR, "delivery_packaging.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── ADDRESS FORMATTING ─────────────────────────────────────────────────────
@@ -344,7 +329,7 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", help="Show what would be packaged without creating ZIP")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging("delivery_packaging")
 
     mission_path = os.path.abspath(args.mission_path)
     if not os.path.isdir(mission_path):

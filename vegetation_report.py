@@ -44,14 +44,11 @@ from folium import GeoJson
 
 # ─── PIPELINE MODULES ────────────────────────────────────────────────────────
 from pipeline_status import PipelineStatusReporter, add_pipeline_args
+from pipeline_utils import setup_logging, get_supabase_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-LOG_DIR = r"E:\Sentinel\logs"
 SCRIPT_NAME = "vegetation_report"
-
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 # Folium file size warning threshold
 FOLIUM_SIZE_WARN_MB = 10.0
@@ -112,47 +109,19 @@ HEALTH_LABELS: Dict[str, str] = {
 }
 
 
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir: str = LOG_DIR) -> logging.Logger:
-    """Configure dual file+stdout logging.
-
-    Creates log directory if it does not exist. Falls back to current directory
-    if E:\\Sentinel\\logs is not writable (e.g., development machine).
-    """
-    try:
-        os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, f"{SCRIPT_NAME}.log")
-    except OSError:
-        log_dir = "."
-        log_file = f"{SCRIPT_NAME}.log"
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── SUPABASE ────────────────────────────────────────────────────────────────
 
 def _get_supabase_client(log: logging.Logger):
     """Return a Supabase client or None if credentials are missing."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    try:
+        return get_supabase_client()
+    except (ValueError, SystemExit):
         log.warning(
             "Supabase credentials not set (SUPABASE_URL / SUPABASE_SERVICE_KEY). "
             "Skipping Supabase operations."
         )
-        return None
-    try:
-        from supabase import create_client
-        return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    except ImportError:
-        log.warning("supabase package not installed. Skipping Supabase operations.")
         return None
     except Exception as exc:
         log.warning(f"Supabase client creation failed: {exc}. Skipping Supabase operations.")
@@ -1746,7 +1715,7 @@ Examples:
     add_pipeline_args(parser)
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     # ── Startup log ─────────────────────────────────────────────────────────
     log.info(f"Vegetation Report (E4) starting — mission {args.mission_id}")

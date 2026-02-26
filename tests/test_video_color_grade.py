@@ -143,8 +143,8 @@ def test_grade_video_custom_crf_and_codec(mock_ffmpeg, tmp_path):
 
 def test_update_graded_path_calls_upsert_with_correct_payload(mock_supabase_client, mocker):
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("video_color_grade.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_color_grade.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
 
     from video_color_grade import update_graded_path
     result = update_graded_path("mission-uuid", "DJI_0001.MP4", "/path/to/graded.MP4")
@@ -160,15 +160,15 @@ def test_update_graded_path_calls_upsert_with_correct_payload(mock_supabase_clie
     assert kwargs.get("on_conflict") == "mission_id,filename"
 
 def test_update_graded_path_returns_false_when_env_not_set(mocker):
-    mocker.patch("video_color_grade.SUPABASE_URL", "")
-    mocker.patch("video_color_grade.SUPABASE_SERVICE_KEY", "")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "")
     from video_color_grade import update_graded_path
     assert update_graded_path("uuid", "file.mp4", "/path") is False
 
 def test_update_graded_path_returns_false_on_supabase_exception(mock_supabase_client, mocker):
     mocker.patch("supabase.create_client", return_value=mock_supabase_client)
-    mocker.patch("video_color_grade.SUPABASE_URL", "https://test.supabase.co")
-    mocker.patch("video_color_grade.SUPABASE_SERVICE_KEY", "test-key")
+    mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+    mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
     mock_supabase_client.table.return_value.upsert.return_value.execute.side_effect = Exception("DB error")
 
     from video_color_grade import update_graded_path

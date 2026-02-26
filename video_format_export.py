@@ -23,14 +23,13 @@ import subprocess
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_utils import LOG_DIR, setup_logging, get_supabase_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+SCRIPT_NAME = "video_format_export"
 FFMPEG_BIN = "ffmpeg"
 FFPROBE_BIN = "ffprobe"
-LOG_DIR = r"E:\Sentinel\logs"
 
 # Fallback formats if Supabase is not available
 DEFAULT_FORMATS = [
@@ -40,22 +39,6 @@ DEFAULT_FORMATS = [
     {"name": "client_4k", "resolution": "3840x2160", "aspect": "16:9", "fps": 30, "codec": "copy"},
     {"name": "web_preview", "resolution": "1920x1080", "aspect": "16:9", "fps": 30, "codec": "libx264"},
 ]
-
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-
-def setup_logging(log_dir=LOG_DIR):
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "video_format_export.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger(__name__)
 
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -79,15 +62,9 @@ def get_video_duration(video_path):
 
 def fetch_formats_from_supabase(mission_id):
     """Fetch video_formats from processing_templates via mission's package type."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    client = get_supabase_client()
+    if client is None:
         return None
-
-    try:
-        from supabase import create_client
-    except ImportError:
-        return None
-
-    client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     # Get mission's package_type
     mission = client.table("missions").select("package_type").eq("id", mission_id).single().execute()
@@ -220,7 +197,7 @@ Examples:
                         help="Clear checkpoint and re-process all formats from scratch")
     args = parser.parse_args()
 
-    log = setup_logging()
+    log = setup_logging(SCRIPT_NAME)
 
     mission_path = os.path.abspath(args.mission_path)
     if not os.path.isdir(mission_path):
@@ -266,7 +243,6 @@ Examples:
     log.info(f"Formats: {len(formats)}")
 
     # Checkpoint resume
-    SCRIPT_NAME = "video_format_export"
     if args.force:
         clear_checkpoint(mission_path, SCRIPT_NAME)
         log.info("--force: checkpoint cleared, re-processing all formats")
