@@ -273,7 +273,7 @@ def _ortho_rgb_array(dataset: rasterio.DatasetReader) -> Tuple[np.ndarray, Any]:
     return rgb, dataset.transform
 
 
-def _add_north_arrow(ax: plt.Axes) -> None:
+def _add_north_arrow(ax: "plt.Axes") -> None:
     """Add a simple north arrow to the top-right corner of the axes."""
     ax.annotate(
         "N",
@@ -295,7 +295,7 @@ def _add_north_arrow(ax: plt.Axes) -> None:
     )
 
 
-def _add_scale_bar(ax: plt.Axes, dataset: rasterio.DatasetReader) -> None:
+def _add_scale_bar(ax: "plt.Axes", dataset: rasterio.DatasetReader) -> None:
     """Add a simple scale bar based on raster pixel size.
 
     Uses the x-axis pixel size from the dataset transform to compute
@@ -338,7 +338,7 @@ def _add_scale_bar(ax: plt.Axes, dataset: rasterio.DatasetReader) -> None:
         pass  # Scale bar is cosmetic — never fail the render
 
 
-def _sentinel_branding(ax: plt.Axes) -> None:
+def _sentinel_branding(ax: "plt.Axes") -> None:
     """Add Sentinel Aerial Inspections branding text to lower-right."""
     ax.text(
         0.98, 0.02,
@@ -1361,7 +1361,8 @@ def generate_pdf(
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.units import inch
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.colors import HexColor, white, black, lightgrey
+        from reportlab.lib.colors import HexColor, white, black
+        lightgrey = HexColor('#D3D3D3')
         from reportlab.platypus import (
             SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
             PageBreak, Image as RLImage, HRFlowable,
