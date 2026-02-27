@@ -474,6 +474,8 @@ class TestCheckpointResume:
         ]
         mock_sb.table.return_value = mock_table
         mocker.patch("supabase.create_client", return_value=mock_sb)
+        mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+        mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
         mocker.patch.dict(os.environ, {
             "SUPABASE_URL": "https://test.supabase.co",
             "SUPABASE_SERVICE_KEY": "test-key",
@@ -523,6 +525,8 @@ class TestCheckpointResume:
         ]
         mock_sb.table.return_value = mock_table
         mocker.patch("supabase.create_client", return_value=mock_sb)
+        mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+        mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
         mocker.patch.dict(os.environ, {
             "SUPABASE_URL": "https://test.supabase.co",
             "SUPABASE_SERVICE_KEY": "test-key",
@@ -570,6 +574,8 @@ class TestSupabaseUpdate:
         mock_table.update.return_value.eq.return_value.execute.return_value.data = []
 
         mocker.patch("supabase.create_client", return_value=mock_sb)
+        mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+        mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
         mocker.patch.dict(os.environ, {
             "SUPABASE_URL": "https://test.supabase.co",
             "SUPABASE_SERVICE_KEY": "test-key",
@@ -615,6 +621,8 @@ class TestSupabaseUpdate:
         mock_table.update.return_value.eq.return_value.execute.side_effect = RuntimeError("DB error")
 
         mocker.patch("supabase.create_client", return_value=mock_sb)
+        mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+        mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
         mocker.patch.dict(os.environ, {
             "SUPABASE_URL": "https://test.supabase.co",
             "SUPABASE_SERVICE_KEY": "test-key",

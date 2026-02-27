@@ -612,6 +612,8 @@ class TestSupabaseSummary:
         mock_table.upsert.return_value.execute.return_value.data = [{"mission_id": "test-mission"}]
 
         mocker.patch("supabase.create_client", return_value=mock_sb)
+        mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+        mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
         mocker.patch.dict(os.environ, {
             "SUPABASE_URL": "https://test.supabase.co",
             "SUPABASE_SERVICE_KEY": "test-key",
@@ -643,6 +645,8 @@ class TestSupabaseSummary:
 
     def test_write_vegetation_summary_no_credentials(self, mocker):
         """write_vegetation_summary() does nothing when Supabase creds are absent."""
+        mocker.patch("pipeline_utils.SUPABASE_URL", "")
+        mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "")
         mocker.patch.dict(os.environ, {"SUPABASE_URL": "", "SUPABASE_SERVICE_KEY": ""})
         log = logging.getLogger("test")
         from vegetation_report import write_vegetation_summary
@@ -658,6 +662,8 @@ class TestSupabaseSummary:
         mock_table.upsert.return_value.execute.side_effect = RuntimeError("DB error")
 
         mocker.patch("supabase.create_client", return_value=mock_sb)
+        mocker.patch("pipeline_utils.SUPABASE_URL", "https://test.supabase.co")
+        mocker.patch("pipeline_utils.SUPABASE_SERVICE_KEY", "test-key")
         mocker.patch.dict(os.environ, {
             "SUPABASE_URL": "https://test.supabase.co",
             "SUPABASE_SERVICE_KEY": "test-key",

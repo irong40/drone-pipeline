@@ -528,8 +528,15 @@ def _install_all_stubs():
     fake_openai.OpenAI = _FakeOpenAI
     stubs["openai"] = fake_openai
 
+    # Install stubs only when the real package is NOT importable.
+    # setdefault alone isn't enough — a package can be installed but not yet
+    # imported (so not in sys.modules).  Try-import first to let real packages win.
     for name, mod in stubs.items():
-        sys.modules.setdefault(name, mod)
+        if name not in sys.modules:
+            try:
+                __import__(name)
+            except ImportError:
+                sys.modules[name] = mod
 
     # Return objects tests need direct access to
     return {

@@ -174,8 +174,13 @@ def _install_stubs():
     fake_openai.OpenAI = _FakeOpenAIClient
     stubs["openai"] = fake_openai
 
+    # Install stubs only when the real package is NOT importable.
     for name, mod in stubs.items():
-        sys.modules.setdefault(name, mod)
+        if name not in sys.modules:
+            try:
+                __import__(name)
+            except ImportError:
+                sys.modules[name] = mod
 
 
 _install_stubs()

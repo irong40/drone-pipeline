@@ -225,9 +225,15 @@ def _install_all_stubs():
     fake_supabase.create_client = MagicMock()
     stubs["supabase"] = fake_supabase
 
-    # Install all stubs (only if not already present — allows real packages to win)
+    # Install stubs only when the real package is NOT importable.
+    # setdefault alone isn't enough — a package can be installed but not yet
+    # imported (so not in sys.modules).  Try-import first to let real packages win.
     for name, mod in stubs.items():
-        sys.modules.setdefault(name, mod)
+        if name not in sys.modules:
+            try:
+                __import__(name)
+            except ImportError:
+                sys.modules[name] = mod
 
 
 _install_all_stubs()
