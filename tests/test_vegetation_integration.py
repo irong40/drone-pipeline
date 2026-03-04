@@ -243,7 +243,7 @@ def _make_torch_stub():
     torch_cuda = types.ModuleType("torch.cuda")
     torch_cuda.is_available = MagicMock(return_value=True)
     torch_cuda.get_device_capability = MagicMock(return_value=(12, 0))
-    torch_cuda.get_device_name = MagicMock(return_value="NVIDIA RTX 5070")
+    torch_cuda.get_device_name = MagicMock(return_value="NVIDIA RTX 5060 Ti")
     torch_cuda.empty_cache = MagicMock()
 
     torch_mod = types.ModuleType("torch")

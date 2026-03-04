@@ -9,8 +9,8 @@ Checks:
   1. Python version is 3.12.x
   2. PROJ_LIB / PROJ_DATA env vars cleared (prevents QGIS conflict)
   3. PyTorch CUDA support
-  4. GPU compute capability >= 12.0 (sm_120 for RTX 5070)
-  5. GPU device name contains "5070"
+  4. GPU compute capability >= 12.0 (sm_120 for Blackwell GPUs)
+  5. GPU device name contains a Blackwell RTX identifier
   6. DeepForest imports and can instantiate
   7. Geospatial deps: rasterio, geopandas, shapely, fiona, pyproj
   8. Reporting deps: reportlab, matplotlib, folium
@@ -134,13 +134,14 @@ def check_torch(logger: logging.Logger) -> dict:
     # sm_120 requires compute capability >= 12.0
     major, minor = torch.cuda.get_device_capability(0)
     if major < 12:
-        fail(logger, f"GPU compute capability {major}.{minor} < 12.0 — sm_120 (RTX 5070) required")
+        fail(logger, f"GPU compute capability {major}.{minor} < 12.0 — sm_120 (Blackwell) required")
     ok(logger, f"GPU compute capability {major}.{minor} (sm_120 satisfied)")
 
-    # Sanity: device name should contain "5070"
+    # Sanity: device name should contain a Blackwell RTX identifier
     device_name = torch.cuda.get_device_name(0)
-    if "5070" not in device_name:
-        fail(logger, f"Expected RTX 5070 device, got: '{device_name}'. "
+    blackwell_ids = ["5060", "5070", "5080", "5090"]
+    if not any(bid in device_name for bid in blackwell_ids):
+        fail(logger, f"Expected Blackwell RTX device, got: '{device_name}'. "
                      f"Verify the correct GPU is selected.")
     ok(logger, f"GPU: {device_name}")
 

@@ -101,6 +101,7 @@ def _install_stubs():
     # ── rasterio stub ─────────────────────────────────────────────────────────
     rasterio_mod = types.ModuleType("rasterio")
     rasterio_mod.open = MagicMock()
+    rasterio_mod.DatasetReader = MagicMock
 
     rasterio_mask_mod = types.ModuleType("rasterio.mask")
     rasterio_mask_mod.mask = MagicMock(return_value=(_FakeArr(), MagicMock()))

@@ -30,8 +30,8 @@ except ImportError:
 MIPMAP_ENGINE = r"C:\Program Files\MipMap\MipMapDesktop\resources\resources\catch3d\reconstruct_full_engine.exe"
 GDAL_FOLDER = r"C:\ProgramData\MipMap\MipMapDesktop\gdal_data"
 EXTENSIONS = [
-    r"C:\Users\redle\AppData\Roaming\mipmap-desktop\extentions\gs_dlls",
-    r"C:\Users\redle\AppData\Roaming\mipmap-desktop\extentions\ml_dlls",
+    os.path.join(os.environ.get("APPDATA", ""), "mipmap-desktop", "extentions", "gs_dlls"),
+    os.path.join(os.environ.get("APPDATA", ""), "mipmap-desktop", "extentions", "ml_dlls"),
 ]
 WORKSPACE = "D:/"
 LICENSE_ID = 9000

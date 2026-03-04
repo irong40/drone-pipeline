@@ -56,14 +56,14 @@ def verify_cuda() -> None:
     This mirrors the pattern established in test_environment.py.
     """
     assert torch.cuda.is_available(), (
-        "CUDA not available — RTX 5070 required. "
+        "CUDA not available — Blackwell GPU (sm_120+) required. "
         "Check PyTorch CUDA installation: torch.cuda.is_available() == False"
     )
     cap = torch.cuda.get_device_capability()
     cap_major = cap[0]
     assert cap_major >= 12, (
         f"GPU sm_{cap_major * 10} insufficient, need sm_120+. "
-        f"RTX 5070 (sm_120) required for E-path inference."
+        f"Blackwell GPU (sm_120) required for E-path inference."
     )
 
 

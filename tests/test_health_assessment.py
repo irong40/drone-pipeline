@@ -9,8 +9,16 @@ import json
 import tempfile
 import logging
 import pytest
-import numpy as np
 from unittest.mock import MagicMock, patch, call
+
+try:
+    import numpy as np
+    np.array([1.0])  # verify it's a real module, not a stub
+    _HAS_NUMPY = True
+except (ImportError, AttributeError, TypeError):
+    _HAS_NUMPY = False
+
+pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required for health_assessment tests")
 
 
 # ── Module-level stubs (required before any import of health_assessment) ──────

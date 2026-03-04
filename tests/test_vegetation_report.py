@@ -11,6 +11,16 @@ import logging
 import pytest
 from unittest.mock import MagicMock, patch
 
+# Skip entire module if numpy is not installed (requires Path E venv)
+try:
+    import numpy as np
+    np.array([1.0])  # verify it's a real module, not a stub
+    _HAS_NUMPY = True
+except (ImportError, AttributeError, TypeError):
+    _HAS_NUMPY = False
+
+pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required for vegetation_report tests")
+
 
 # ── Module-level stubs ────────────────────────────────────────────────────────
 
