@@ -1,0 +1,153 @@
+{
+  "id": "sentinel-path-a",
+  "name": "Sentinel Path A — Real Estate Photos",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-trigger",
+      "name": "Execute Sub Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Entry point. Called by Package Router. Receives: { mission_id, package_type, mission_number, folder_path, processing_job_id, source_platform, address, city }"
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_color_grade.py\" \"{{ $json.folder_path }}\" --platform {{ $json.source_platform || 'mini4pro' }} --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-color-grade",
+      "name": "Execute Color Grade",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "notes": "Runs video_color_grade.py. For photo-only missions, script exits 0 with 'No video files found -- skipped'. The script self-reports status via PipelineStatusReporter."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  color_grade_exit_code: exitCode,\n  color_grade_result: parsed\n}}];"
+      },
+      "id": "node-parse-color-grade",
+      "name": "Parse Color Grade Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "notes": "Parses stdout JSON from video_color_grade.py. Passes through all trigger parameters for next step."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-color-grade-failed",
+              "leftValue": "={{ $json.color_grade_exit_code }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-color-grade-failed",
+      "name": "IF Color Grade Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: 'color_grade',\n  exit_code: $json.color_grade_exit_code,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-on-failure",
+      "name": "Stop on Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 100],
+      "notes": "Script already set step to failed via PipelineStatusReporter. This just stops the workflow chain."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\delivery_packaging.py\" \"{{ $json.folder_path }}\" --address \"{{ $json.address || 'Unknown' }}\" --city \"{{ $json.city || 'Unknown' }}\" --photos-only --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-delivery-packaging",
+      "name": "Execute Delivery Packaging",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1200, 300],
+      "notes": "Runs delivery_packaging.py with --photos-only for real estate packages. Uses --address and --city from drone_jobs Supabase lookup (done in Package Router). Script self-reports status via PipelineStatusReporter."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Parse Color Grade Result').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  delivery_exit_code: exitCode,\n  delivery_result: parsed,\n  status: exitCode === 0 ? 'complete' : 'failed'\n}}];"
+      },
+      "id": "node-parse-delivery-result",
+      "name": "Parse Delivery Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    }
+  ],
+  "connections": {
+    "Execute Sub Workflow Trigger": {
+      "main": [
+        [{ "node": "Execute Color Grade", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute Color Grade": {
+      "main": [
+        [{ "node": "Parse Color Grade Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Color Grade Result": {
+      "main": [
+        [{ "node": "IF Color Grade Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF Color Grade Failed": {
+      "main": [
+        [{ "node": "Stop on Failure", "type": "main", "index": 0 }],
+        [{ "node": "Execute Delivery Packaging", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute Delivery Packaging": {
+      "main": [
+        [{ "node": "Parse Delivery Result", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-05T00:00:00.000Z",
+  "versionId": "1",
+  "_meta": {
+    "description": "Path A sub-workflow for real estate photo processing. Runs color grading (graceful no-op for photo-only missions) then delivery packaging with --photos-only. Each step self-reports status via PipelineStatusReporter. Called by Package Router Execute Sub Workflow node.",
+    "n8n_version_required": "2.x",
+    "env_vars_required": ["SENTINEL_SCRIPTS", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
+    "parameters_expected": {
+      "mission_id": "UUID from processing_jobs table",
+      "package_type": "re_standard | re_premium | re_basic",
+      "mission_number": "Integer mission number",
+      "folder_path": "Full path to mission folder on disk",
+      "processing_job_id": "UUID of the processing_jobs row for status reporting",
+      "source_platform": "Drone platform (mini4pro, m4e, m3e)",
+      "address": "Property street address",
+      "city": "City name"
+    }
+  }
+}
