@@ -58,10 +58,11 @@
   1. n8n Execute Command node runs a Python script and returns output without error
   2. n8n execution timeout is configured to survive a 2-hour MipMap job without killing the workflow
   3. All six new environment variables are accessible from an n8n Code node expression
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 14-01: TBD
+- [ ] 14-01-PLAN.md — Decide Docker vs Native architecture, configure env vars and security overrides
+- [ ] 14-02-PLAN.md — Create verification artifacts and verify all 3 success criteria in n8n
 
 ### Phase 15: Foundation Scripts + Schema
 **Goal**: Python scripts and Supabase tables exist and are tested, so n8n workflows can call them reliably
@@ -160,7 +161,7 @@ Phases execute in numeric order: 14 -> 14.x -> 15 -> 15.x -> 16 -> ... -> 19
 | 11. Report Generation (E4) | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 12. Integration and Delivery | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 13. Test Suite and Acceptance | v2.0 | 3/3 | Complete | 2026-02-25 |
-| 14. Environment Setup | v3.0 | 0/1 | Not started | - |
+| 14. Environment Setup | v3.0 | 0/2 | Not started | - |
 | 15. Foundation Scripts + Schema | v3.0 | 0/3 | Not started | - |
 | 16. Package Router Core + Path A | v3.0 | 0/3 | Not started | - |
 | 17. Path C MipMap + Path E | v3.0 | 0/1 | Not started | - |
