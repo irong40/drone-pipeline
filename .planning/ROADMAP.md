@@ -119,11 +119,11 @@ Plans:
   3. On V5 resume webhook, V6 (format export) and delivery_packaging run automatically
   4. Each V-script step updates its Supabase processing_steps status (running/complete/failed)
   5. A V-script returning exit code 1 marks that step failed and halts Path V without blocking other paths running in parallel
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 18-01: TBD
-- [ ] 18-02: TBD
+- [ ] 18-01-PLAN.md — Add PipelineStatusReporter to all 6 V scripts with correct STEP_MAP step_names
+- [ ] 18-02-PLAN.md — Build Path V sub-workflow JSON and patch Package Router to replace NoOp stub
 
 ### Phase 19: Remaining Paths + Integration + Hardening
 **Goal**: All package types have a routing destination, folder watcher events flow into the router, and the full pipeline is validated end-to-end
