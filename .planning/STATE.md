@@ -3,45 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Package Router & End-to-End Automation
 status: in-progress
-stopped_at: Completed 15-02-PLAN.md (mipmap_launcher fire-and-forget subprocess launcher)
-last_updated: "2026-03-05T15:31:31.529Z"
-last_activity: 2026-03-05 — Completed 15-03 (ortho_harvester GeoTIFF copy utility)
+stopped_at: Completed 16-02-PLAN.md (Path A sub-workflow + delivery_packaging.py PipelineStatusReporter)
+last_updated: "2026-03-05T15:59:00Z"
+last_activity: 2026-03-05 — Completed 16-02 (Path A sub-workflow + delivery packaging status)
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
----
-
----
-gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: Package Router & End-to-End Automation
-status: in-progress
-stopped_at: Completed 15-03-PLAN.md (ortho_harvester GeoTIFF copy with integrity verification)
-last_updated: "2026-03-05T15:27:30Z"
-last_activity: 2026-03-05 — Completed 15-03 (ortho_harvester GeoTIFF copy utility)
-progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
----
-
----
-gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: Package Router & End-to-End Automation
-status: in-progress
-stopped_at: Completed 19-02-PLAN.md (n8n validation + Package Router integration tests)
-last_updated: "2026-03-05T15:21:00Z"
-last_activity: 2026-03-05 — Completed 19-02 (n8n workflow validation + Package Router integration tests)
-progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 7
 ---
 
 # Project State
@@ -51,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** Phase 15 - Foundation Scripts & Schema (v3.0)
+**Current focus:** Phase 16 - Package Router Core + Path A (v3.0) -- COMPLETE
 
 ## Current Position
 
-Phase: 15 of 19 (Foundation Scripts & Schema)
-Plan: 3 of 5 in current phase (15-03 complete)
-Status: Executing Phase 15 plans
-Last activity: 2026-03-05 — Completed 15-03 (ortho_harvester GeoTIFF copy utility)
+Phase: 16 of 19 (Package Router Core + Path A)
+Plan: 2 of 2 in current phase (16-02 complete)
+Status: Phase 16 complete
+Last activity: 2026-03-05 — Completed 16-02 (Path A sub-workflow + delivery packaging status)
 
 Progress: [██████████] 100% (v3.0)
 
@@ -81,6 +50,8 @@ Progress: [██████████] 100% (v3.0)
 - 19-01: 3 min, 3 tasks, 5 files
 - 19-02: 3 min, 2 tasks, 2 files
 - 15-03: 2 min, 1 task (TDD), 2 files
+- 16-01: 3 min, 1 task, 1 file
+- 16-02: 3 min, 2 tasks, 2 files
 
 ## Accumulated Context
 
@@ -103,6 +74,10 @@ Recent decisions affecting current work:
 - [Phase 15]: rasterio fallback to TIFF magic bytes when not installed
 - [Phase 15]: temp-file-then-rename copy pattern for safe GeoTIFF transfer
 - [Phase 15]: No shell=True in Popen -- preserves MipMap PID for orphan detection
+- [Phase 16]: Switch node v3 with fallback output routes unknown types to Manual Path automatically
+- [Phase 16]: Dual lookup branches: folder_watcher gets mission_id, ingest_sorter gets address/city
+- [Phase 16]: Extracted _run_packaging() for clean PipelineStatusReporter try/except wrapping
+- [Phase 16]: Dry-run mode skips reporter.start() entirely (no Supabase side effects)
 
 ### Pending Todos
 
@@ -118,6 +93,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:28:26.184Z
-Stopped at: Completed 15-02-PLAN.md (mipmap_launcher fire-and-forget subprocess launcher)
+Last session: 2026-03-05T15:59:00Z
+Stopped at: Completed 16-02-PLAN.md (Path A sub-workflow + delivery_packaging.py PipelineStatusReporter)
 Resume file: None

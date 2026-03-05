@@ -15,11 +15,11 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Package Router
 
-- [ ] **RTR-01**: n8n webhook receives POST from ingest_sorter.py with mission_id, package_type, and inventory payload
-- [ ] **RTR-02**: n8n Switch node routes missions to Path A/B/C/D/V sub-workflows based on package_type
-- [ ] **RTR-03**: Package Router fetches processing_templates config from Supabase and merges with mission-specific overrides
-- [ ] **RTR-04**: Package Router creates a processing_jobs row in Supabase with all active steps before dispatching to path sub-workflows
-- [ ] **RTR-05**: Package Router normalizes both folder_watcher.py and ingest_sorter.py payloads into a common format via Code node
+- [x] **RTR-01**: n8n webhook receives POST from ingest_sorter.py with mission_id, package_type, and inventory payload
+- [x] **RTR-02**: n8n Switch node routes missions to Path A/B/C/D/V sub-workflows based on package_type
+- [x] **RTR-03**: Package Router fetches processing_templates config from Supabase and merges with mission-specific overrides
+- [x] **RTR-04**: Package Router creates a processing_jobs row in Supabase with all active steps before dispatching to path sub-workflows
+- [x] **RTR-05**: Package Router normalizes both folder_watcher.py and ingest_sorter.py payloads into a common format via Code node
 
 ### Path C (MipMap Mapping)
 
@@ -112,11 +112,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | MPC-05 | Phase 15 | Complete |
 | MPC-06 | Phase 17 | Pending |
 | MPC-07 | Phase 15 | Complete |
-| RTR-01 | Phase 16 | Pending |
-| RTR-02 | Phase 16 | Pending |
-| RTR-03 | Phase 16 | Pending |
-| RTR-04 | Phase 16 | Pending |
-| RTR-05 | Phase 16 | Pending |
+| RTR-01 | Phase 16 | Complete |
+| RTR-02 | Phase 16 | Complete |
+| RTR-03 | Phase 16 | Complete |
+| RTR-04 | Phase 16 | Complete |
+| RTR-05 | Phase 16 | Complete |
 | PHA-01 | Phase 16 | Pending |
 | PHA-02 | Phase 16 | Pending |
 | PHA-03 | Phase 16 | Pending |
