@@ -43,7 +43,7 @@
 
 - [x] **Phase 14: Environment Setup** - Verify n8n compatibility and configure environment variables before any workflow development (completed 2026-03-05)
 - [x] **Phase 15: Foundation Scripts + Schema** - Build Python scripts and Supabase schema that all n8n workflows depend on (completed 2026-03-05)
-- [ ] **Phase 16: Package Router Core + Path A** - Build the central router and prove the pattern with the simplest end-to-end path
+- [x] **Phase 16: Package Router Core + Path A** - Build the central router and prove the pattern with the simplest end-to-end path (completed 2026-03-05)
 - [ ] **Phase 17: Path C MipMap Automation + Path E Connection** - Automate photogrammetry and wire ortho output to vegetation analysis
 - [ ] **Phase 18: Path V Video Pipeline** - Automate the 6-script video pipeline with manual DaVinci Resolve gate
 - [x] **Phase 19: Remaining Paths + Integration + Hardening** - Path B/D stubs, folder watcher bridge, and end-to-end validation (completed 2026-03-05)

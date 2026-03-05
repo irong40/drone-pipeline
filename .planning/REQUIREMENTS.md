@@ -33,9 +33,9 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Path A (Real Estate Photos)
 
-- [ ] **PHA-01**: n8n Path A sub-workflow executes photo color grading script on mission photos
-- [ ] **PHA-02**: n8n Path A sub-workflow executes delivery_packaging.py to create client delivery ZIP
-- [ ] **PHA-03**: Path A sub-workflow updates Supabase processing_steps status at each stage (running/complete/failed)
+- [x] **PHA-01**: n8n Path A sub-workflow executes photo color grading script on mission photos
+- [x] **PHA-02**: n8n Path A sub-workflow executes delivery_packaging.py to create client delivery ZIP
+- [x] **PHA-03**: Path A sub-workflow updates Supabase processing_steps status at each stage (running/complete/failed)
 
 ### Path V (Video Pipeline)
 
@@ -117,9 +117,9 @@ Deferred to future release. Tracked but not in current roadmap.
 | RTR-03 | Phase 16 | Complete |
 | RTR-04 | Phase 16 | Complete |
 | RTR-05 | Phase 16 | Complete |
-| PHA-01 | Phase 16 | Pending |
-| PHA-02 | Phase 16 | Pending |
-| PHA-03 | Phase 16 | Pending |
+| PHA-01 | Phase 16 | Complete |
+| PHA-02 | Phase 16 | Complete |
+| PHA-03 | Phase 16 | Complete |
 | PHV-01 | Phase 18 | Pending |
 | PHV-02 | Phase 18 | Pending |
 | PHV-03 | Phase 18 | Pending |
