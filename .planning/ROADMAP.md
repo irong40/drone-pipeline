@@ -104,10 +104,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Path C sub-workflow polls MipMap output directory and detects GeoTIFF completion within the configured timeout
   2. After ortho is confirmed in mapping/, Path C fires a POST to the existing vegetation trigger webhook (when vegetation_analysis=true)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 17-01: TBD
+- [ ] 17-01-PLAN.md — Path C sub-workflow JSON + Package Router stub replacement
 
 ### Phase 18: Path V Video Pipeline
 **Goal**: Video missions execute V1-V4 automatically, pause for operator DaVinci Resolve edit, then complete V6 and delivery on resume
