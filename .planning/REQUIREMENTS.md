@@ -52,9 +52,9 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Supabase Schema
 
-- [ ] **SCH-01**: Supabase migration adds processing_jobs table (or columns) to track active steps per mission
-- [ ] **SCH-02**: Supabase migration adds mipmap_workspace JSONB column to drone_jobs for tracking MipMap workspace path and task IDs
-- [ ] **SCH-03**: processing_templates table has columns for all path-specific configuration (video_formats, vegetation_config, etc.)
+- [x] **SCH-01**: Supabase migration adds processing_jobs table (or columns) to track active steps per mission
+- [x] **SCH-02**: Supabase migration adds mipmap_workspace JSONB column to drone_jobs for tracking MipMap workspace path and task IDs
+- [x] **SCH-03**: processing_templates table has columns for all path-specific configuration (video_formats, vegetation_config, etc.)
 
 ### Folder Watcher Integration
 
@@ -127,9 +127,9 @@ Deferred to future release. Tracked but not in current roadmap.
 | PHV-05 | Phase 18 | Pending |
 | PBD-01 | Phase 19 | Complete |
 | PBD-02 | Phase 19 | Complete |
-| SCH-01 | Phase 15 | Pending |
-| SCH-02 | Phase 15 | Pending |
-| SCH-03 | Phase 15 | Pending |
+| SCH-01 | Phase 15 | Complete |
+| SCH-02 | Phase 15 | Complete |
+| SCH-03 | Phase 15 | Complete |
 | FWI-01 | Phase 19 | Complete |
 | FWI-02 | Phase 19 | Complete |
 | TST-01 | Phase 15 | Pending |

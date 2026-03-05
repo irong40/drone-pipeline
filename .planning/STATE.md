@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Package Router & End-to-End Automation
 status: in-progress
-stopped_at: Completed 19-02-PLAN.md (n8n validation + Package Router integration tests)
-last_updated: "2026-03-05T15:23:44.569Z"
+stopped_at: Completed 15-01-PLAN.md (schema migrations for processing_jobs, mipmap_workspace, template configs)
+last_updated: "2026-03-05T15:27:09.712Z"
 last_activity: 2026-03-05 — Completed 19-02 (n8n workflow validation + Package Router integration tests)
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 ---
@@ -83,6 +83,7 @@ Recent decisions affecting current work:
 - v3.0: Config/patch files get JSON-syntax-only validation (no node structure checks)
 - v3.0: build_processing_steps helper lives in test file as test utility
 - v3.0: Step mapping covers all 6 automated + 2 manual types + unknown fallback
+- [Phase 15]: UNIQUE(mission_id) on processing_jobs enforces one active job per mission
 
 ### Pending Todos
 
@@ -98,6 +99,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:21:00Z
-Stopped at: Completed 19-02-PLAN.md (n8n validation + Package Router integration tests)
-Resume file: Phase 19 complete
+Last session: 2026-03-05T15:27:09.711Z
+Stopped at: Completed 15-01-PLAN.md (schema migrations for processing_jobs, mipmap_workspace, template configs)
+Resume file: None
