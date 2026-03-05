@@ -23,13 +23,13 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Path C (MipMap Mapping)
 
-- [ ] **MPC-01**: mipmap_launcher.py launches MipMap reconstruct_full_engine.exe with stdout redirected to log file, writes PID file, and returns immediately
-- [ ] **MPC-02**: mipmap_launcher.py follows pipeline contract (argparse, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
+- [x] **MPC-01**: mipmap_launcher.py launches MipMap reconstruct_full_engine.exe with stdout redirected to log file, writes PID file, and returns immediately
+- [x] **MPC-02**: mipmap_launcher.py follows pipeline contract (argparse, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
 - [ ] **MPC-03**: n8n Path C sub-workflow polls MipMap output directory for GeoTIFF completion with configurable interval and timeout
 - [x] **MPC-04**: ortho_harvester.py copies completed GeoTIFF from D:/ MipMap workspace to mission mapping/ folder with integrity verification (size + rasterio header check)
 - [x] **MPC-05**: ortho_harvester.py follows pipeline contract (argparse, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
 - [ ] **MPC-06**: After ortho confirmed in mapping/, Path C sub-workflow fires POST to /sentinel-vegetation-trigger to start existing Path E workflow (if vegetation_analysis=true)
-- [ ] **MPC-07**: MipMap orphan process detection via PID file check before launching new instance
+- [x] **MPC-07**: MipMap orphan process detection via PID file check before launching new instance
 
 ### Path A (Real Estate Photos)
 
@@ -63,7 +63,7 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Testing
 
-- [ ] **TST-01**: mipmap_launcher.py has unit tests with mocked subprocess (no real MipMap needed)
+- [x] **TST-01**: mipmap_launcher.py has unit tests with mocked subprocess (no real MipMap needed)
 - [x] **TST-02**: ortho_harvester.py has unit tests with mocked file operations and rasterio validation
 - [x] **TST-03**: All n8n workflow JSON files are syntactically valid and importable
 - [x] **TST-04**: Integration test validates Package Router webhook → Supabase processing_jobs creation
@@ -105,13 +105,13 @@ Deferred to future release. Tracked but not in current roadmap.
 | ENV-01 | Phase 14 | Complete |
 | ENV-02 | Phase 14 | Complete |
 | ENV-03 | Phase 14 | Complete |
-| MPC-01 | Phase 15 | Pending |
-| MPC-02 | Phase 15 | Pending |
+| MPC-01 | Phase 15 | Complete |
+| MPC-02 | Phase 15 | Complete |
 | MPC-03 | Phase 17 | Pending |
 | MPC-04 | Phase 15 | Complete |
 | MPC-05 | Phase 15 | Complete |
 | MPC-06 | Phase 17 | Pending |
-| MPC-07 | Phase 15 | Pending |
+| MPC-07 | Phase 15 | Complete |
 | RTR-01 | Phase 16 | Pending |
 | RTR-02 | Phase 16 | Pending |
 | RTR-03 | Phase 16 | Pending |
@@ -132,7 +132,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | SCH-03 | Phase 15 | Complete |
 | FWI-01 | Phase 19 | Complete |
 | FWI-02 | Phase 19 | Complete |
-| TST-01 | Phase 15 | Pending |
+| TST-01 | Phase 15 | Complete |
 | TST-02 | Phase 15 | Complete |
 | TST-03 | Phase 19 | Complete |
 | TST-04 | Phase 19 | Complete |
