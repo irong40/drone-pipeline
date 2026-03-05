@@ -23,6 +23,7 @@ import subprocess
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_status import PipelineStatusReporter, add_pipeline_args
 from pipeline_utils import LOG_DIR, setup_logging, get_supabase_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -195,6 +196,7 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
     parser.add_argument("--force", action="store_true",
                         help="Clear checkpoint and re-process all formats from scratch")
+    add_pipeline_args(parser)
     args = parser.parse_args()
 
     log = setup_logging(SCRIPT_NAME)
@@ -204,107 +206,122 @@ Examples:
         log.error(f"Mission folder not found: {mission_path}")
         sys.exit(2)
 
+    reporter = PipelineStatusReporter(
+        processing_job_id=getattr(args, "processing_job_id", None),
+        step_name="v6_export",
+    )
+
     # Find master video
     master_video = args.input_file or find_master_video(mission_path)
     if not master_video:
         log.error("No master video found in video/master/. Complete Step V5 (manual edit) first.")
         sys.exit(2)
 
+    if not args.dry_run:
+        reporter.start()
+
     log.info(f"Mission: {mission_path}")
     log.info(f"Master:  {master_video}")
 
-    # Get source duration
-    source_duration = get_video_duration(master_video)
-    log.info(f"Duration: {source_duration:.1f}s")
+    try:
+        # Get source duration
+        source_duration = get_video_duration(master_video)
+        log.info(f"Duration: {source_duration:.1f}s")
 
-    # Resolve export formats
-    formats = None
-    if args.formats:
-        try:
-            formats = json.loads(args.formats)
-        except json.JSONDecodeError as e:
-            log.error(f"Invalid --formats JSON: {e}")
-            sys.exit(2)
-        # Validate each format spec
-        from pipeline_utils import validate_format_spec
-        try:
-            for fmt in formats:
-                validate_format_spec(fmt)
-        except ValueError as e:
-            log.error(f"Invalid format spec: {e}")
-            sys.exit(2)
-    elif args.mission_id:
-        formats = fetch_formats_from_supabase(args.mission_id)
-
-    if not formats:
-        log.info("Using default export formats")
-        formats = DEFAULT_FORMATS
-
-    log.info(f"Formats: {len(formats)}")
-
-    # Checkpoint resume
-    if args.force:
-        clear_checkpoint(mission_path, SCRIPT_NAME)
-        log.info("--force: checkpoint cleared, re-processing all formats")
-    completed = load_checkpoint(mission_path, SCRIPT_NAME)
-    if completed:
-        log.info(f"Resuming: {len(completed)} format(s) already completed")
-
-    # Create exports directory
-    exports_dir = os.path.join(mission_path, "video", "exports")
-    os.makedirs(exports_dir, exist_ok=True)
-
-    # Export each format
-    results = []
-    for fmt in formats:
-        name = fmt["name"]
-        item_key = name
-        max_dur = fmt.get("max_duration_sec")
-        truncated = max_dur and source_duration > max_dur
-
-        if item_key in completed:
-            log.info(f"\n  Skip (checkpoint): {name}")
-            results.append({"format": name, "path": None, "status": "ok"})
-            continue
-
-        log.info(f"\n  Exporting: {name}")
-        log.info(f"    Resolution: {fmt.get('resolution', 'copy')}")
-        log.info(f"    Codec: {fmt.get('codec', 'libx264')}")
-        if truncated:
-            log.info(f"    Truncating: {source_duration:.0f}s → {max_dur}s")
-
-        if args.dry_run:
-            cmd = build_ffmpeg_command(master_video, f"<output>_{name}.mp4", fmt, source_duration)
-            log.info(f"    [DRY RUN] {' '.join(cmd)}")
-            continue
-
-        ok, output_path, error = export_format(master_video, exports_dir, fmt, source_duration)
-
-        if ok:
-            size_mb = os.path.getsize(output_path) / (1024 * 1024)
-            log.info(f"    OK: {output_path} ({size_mb:.1f} MB)")
-            results.append({"format": name, "path": output_path, "status": "ok"})
-            completed.add(item_key)
+        # Resolve export formats
+        formats = None
+        if args.formats:
             try:
-                save_checkpoint(mission_path, SCRIPT_NAME, completed)
-            except OSError as e:
-                log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+                formats = json.loads(args.formats)
+            except json.JSONDecodeError as e:
+                raise RuntimeError(f"Invalid --formats JSON: {e}")
+            # Validate each format spec
+            from pipeline_utils import validate_format_spec
+            try:
+                for fmt in formats:
+                    validate_format_spec(fmt)
+            except ValueError as e:
+                raise RuntimeError(f"Invalid format spec: {e}")
+        elif args.mission_id:
+            formats = fetch_formats_from_supabase(args.mission_id)
+
+        if not formats:
+            log.info("Using default export formats")
+            formats = DEFAULT_FORMATS
+
+        log.info(f"Formats: {len(formats)}")
+
+        # Checkpoint resume
+        if args.force:
+            clear_checkpoint(mission_path, SCRIPT_NAME)
+            log.info("--force: checkpoint cleared, re-processing all formats")
+        completed = load_checkpoint(mission_path, SCRIPT_NAME)
+        if completed:
+            log.info(f"Resuming: {len(completed)} format(s) already completed")
+
+        # Create exports directory
+        exports_dir = os.path.join(mission_path, "video", "exports")
+        os.makedirs(exports_dir, exist_ok=True)
+
+        # Export each format
+        results = []
+        for fmt in formats:
+            name = fmt["name"]
+            item_key = name
+            max_dur = fmt.get("max_duration_sec")
+            truncated = max_dur and source_duration > max_dur
+
+            if item_key in completed:
+                log.info(f"\n  Skip (checkpoint): {name}")
+                results.append({"format": name, "path": None, "status": "ok"})
+                continue
+
+            log.info(f"\n  Exporting: {name}")
+            log.info(f"    Resolution: {fmt.get('resolution', 'copy')}")
+            log.info(f"    Codec: {fmt.get('codec', 'libx264')}")
+            if truncated:
+                log.info(f"    Truncating: {source_duration:.0f}s → {max_dur}s")
+
+            if args.dry_run:
+                cmd = build_ffmpeg_command(master_video, f"<output>_{name}.mp4", fmt, source_duration)
+                log.info(f"    [DRY RUN] {' '.join(cmd)}")
+                continue
+
+            ok, output_path, error = export_format(master_video, exports_dir, fmt, source_duration)
+
+            if ok:
+                size_mb = os.path.getsize(output_path) / (1024 * 1024)
+                log.info(f"    OK: {output_path} ({size_mb:.1f} MB)")
+                results.append({"format": name, "path": output_path, "status": "ok"})
+                completed.add(item_key)
+                try:
+                    save_checkpoint(mission_path, SCRIPT_NAME, completed)
+                except OSError as e:
+                    log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+            else:
+                log.error(f"    FAILED: {name}")
+                if error:
+                    log.error(f"    {error}")
+                results.append({"format": name, "path": None, "status": "failed"})
+
+        # Summary
+        ok_count = sum(1 for r in results if r["status"] == "ok")
+        fail_count = sum(1 for r in results if r["status"] == "failed")
+        log.info(f"\n{'=' * 50}")
+        log.info(f"Export complete: {ok_count} ok, {fail_count} failed")
+
+        if fail_count > 0 and ok_count > 0:
+            reporter.fail(f"Partial failure: {fail_count} format(s) failed")
+            sys.exit(1)   # Partial failure
+        elif fail_count > 0:
+            reporter.fail(f"All {fail_count} format(s) failed")
+            sys.exit(2)   # All failed — fatal
         else:
-            log.error(f"    FAILED: {name}")
-            if error:
-                log.error(f"    {error}")
-            results.append({"format": name, "path": None, "status": "failed"})
+            reporter.complete(output=f"{ok_count} format(s) exported successfully")
 
-    # Summary
-    ok_count = sum(1 for r in results if r["status"] == "ok")
-    fail_count = sum(1 for r in results if r["status"] == "failed")
-    log.info(f"\n{'=' * 50}")
-    log.info(f"Export complete: {ok_count} ok, {fail_count} failed")
-
-    if fail_count > 0 and ok_count > 0:
-        sys.exit(1)   # Partial failure
-    elif fail_count > 0:
-        sys.exit(2)   # All failed — fatal
+    except Exception as e:
+        reporter.fail(str(e))
+        raise
 
 
 if __name__ == "__main__":

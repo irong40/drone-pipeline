@@ -23,6 +23,7 @@ import subprocess
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_status import PipelineStatusReporter, add_pipeline_args
 from pipeline_utils import LOG_DIR, VIDEO_EXTENSIONS, setup_logging
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
     parser.add_argument("--force", action="store_true",
                         help="Clear checkpoint and re-process all files from scratch")
+    add_pipeline_args(parser)
     args = parser.parse_args()
 
     log = setup_logging(SCRIPT_NAME)
@@ -139,11 +141,20 @@ Examples:
         log.error(f"Mission folder not found: {mission_path}")
         sys.exit(2)
 
+    reporter = PipelineStatusReporter(
+        processing_job_id=getattr(args, "processing_job_id", None),
+        step_name="v4_proxy",
+    )
+
     # Find source videos
     videos, source_dir = find_source_videos(mission_path)
     if not videos:
         log.info("No video files found in video/graded/ or video/full/")
+        reporter.complete(output="No video files found — skipped")
         return
+
+    if not args.dry_run:
+        reporter.start()
 
     log.info(f"Mission:    {mission_path}")
     log.info(f"Source:     {source_dir}")
@@ -152,79 +163,88 @@ Examples:
     log.info(f"Preset:     {args.preset}")
     log.info(f"Found {len(videos)} video(s)")
 
-    # Checkpoint resume
-    if args.force:
-        clear_checkpoint(mission_path, SCRIPT_NAME)
-        log.info("--force: checkpoint cleared, re-processing all files")
-    completed = load_checkpoint(mission_path, SCRIPT_NAME)
-    if completed:
-        log.info(f"Resuming: {len(completed)} file(s) already completed")
+    try:
+        # Checkpoint resume
+        if args.force:
+            clear_checkpoint(mission_path, SCRIPT_NAME)
+            log.info("--force: checkpoint cleared, re-processing all files")
+        completed = load_checkpoint(mission_path, SCRIPT_NAME)
+        if completed:
+            log.info(f"Resuming: {len(completed)} file(s) already completed")
 
-    # Create proxy output directory
-    proxy_dir = os.path.join(mission_path, "video", "proxy")
-    os.makedirs(proxy_dir, exist_ok=True)
+        # Create proxy output directory
+        proxy_dir = os.path.join(mission_path, "video", "proxy")
+        os.makedirs(proxy_dir, exist_ok=True)
 
-    # Process each video
-    results = []
-    for video_path in videos:
-        filename = os.path.basename(video_path)
-        name, ext = os.path.splitext(filename)
-        # Strip _graded suffix if present so proxy names match original clip names
-        clean_name = re.sub(r"_graded$", "", name)
-        output_path = os.path.join(proxy_dir, f"{clean_name}_proxy{ext}")
+        # Process each video
+        results = []
+        for video_path in videos:
+            filename = os.path.basename(video_path)
+            name, ext = os.path.splitext(filename)
+            # Strip _graded suffix if present so proxy names match original clip names
+            clean_name = re.sub(r"_graded$", "", name)
+            output_path = os.path.join(proxy_dir, f"{clean_name}_proxy{ext}")
 
-        item_key = video_path
-        if item_key in completed:
-            log.info(f"  Skip (checkpoint): {filename}")
-            results.append({"input": video_path, "output": output_path, "status": "exists"})
-            continue
+            item_key = video_path
+            if item_key in completed:
+                log.info(f"  Skip (checkpoint): {filename}")
+                results.append({"input": video_path, "output": output_path, "status": "exists"})
+                continue
 
-        # Secondary guard: skip if proxy already exists and is non-empty
-        if os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
-            log.info(f"  Skip (exists): {clean_name}_proxy{ext}")
-            results.append({"input": video_path, "output": output_path, "status": "exists"})
-            continue
+            # Secondary guard: skip if proxy already exists and is non-empty
+            if os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
+                log.info(f"  Skip (exists): {clean_name}_proxy{ext}")
+                results.append({"input": video_path, "output": output_path, "status": "exists"})
+                continue
 
-        log.info(f"  Generating: {filename} → {clean_name}_proxy{ext}")
+            log.info(f"  Generating: {filename} → {clean_name}_proxy{ext}")
 
-        if args.dry_run:
-            log.info(f"    [DRY RUN] → {output_path}")
-            continue
+            if args.dry_run:
+                log.info(f"    [DRY RUN] → {output_path}")
+                continue
 
-        ok, stderr = generate_proxy(
-            video_path, output_path,
-            resolution=args.resolution, crf=args.crf, preset=args.preset,
-        )
+            ok, stderr = generate_proxy(
+                video_path, output_path,
+                resolution=args.resolution, crf=args.crf, preset=args.preset,
+            )
 
-        if ok:
-            size_mb = os.path.getsize(output_path) / (1024 * 1024)
-            log.info(f"    OK: {output_path} ({size_mb:.1f} MB)")
-            results.append({"input": video_path, "output": output_path, "status": "ok"})
-            completed.add(item_key)
-            try:
-                save_checkpoint(mission_path, SCRIPT_NAME, completed)
-            except OSError as e:
-                log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+            if ok:
+                size_mb = os.path.getsize(output_path) / (1024 * 1024)
+                log.info(f"    OK: {output_path} ({size_mb:.1f} MB)")
+                results.append({"input": video_path, "output": output_path, "status": "ok"})
+                completed.add(item_key)
+                try:
+                    save_checkpoint(mission_path, SCRIPT_NAME, completed)
+                except OSError as e:
+                    log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+            else:
+                log.error(f"    FAILED: {filename}")
+                if stderr:
+                    log.error(f"    FFmpeg: {stderr[-500:]}")
+                # Clean up partial output
+                if os.path.isfile(output_path):
+                    os.remove(output_path)
+                results.append({"input": video_path, "output": None, "status": "failed"})
+
+        # Summary
+        ok_count = sum(1 for r in results if r["status"] == "ok")
+        exists_count = sum(1 for r in results if r["status"] == "exists")
+        fail_count = sum(1 for r in results if r["status"] == "failed")
+        log.info(f"\nProxy generation complete: {ok_count} new, {exists_count} existing, {fail_count} failed")
+
+        success_count = ok_count + exists_count
+        if fail_count > 0 and success_count > 0:
+            reporter.fail(f"Partial failure: {fail_count} proxy(s) failed")
+            sys.exit(1)   # Partial failure
+        elif fail_count > 0:
+            reporter.fail(f"All {fail_count} proxy(s) failed")
+            sys.exit(2)   # All failed — fatal
         else:
-            log.error(f"    FAILED: {filename}")
-            if stderr:
-                log.error(f"    FFmpeg: {stderr[-500:]}")
-            # Clean up partial output
-            if os.path.isfile(output_path):
-                os.remove(output_path)
-            results.append({"input": video_path, "output": None, "status": "failed"})
+            reporter.complete(output=f"{ok_count} new, {exists_count} existing proxy(s)")
 
-    # Summary
-    ok_count = sum(1 for r in results if r["status"] == "ok")
-    exists_count = sum(1 for r in results if r["status"] == "exists")
-    fail_count = sum(1 for r in results if r["status"] == "failed")
-    log.info(f"\nProxy generation complete: {ok_count} new, {exists_count} existing, {fail_count} failed")
-
-    success_count = ok_count + exists_count
-    if fail_count > 0 and success_count > 0:
-        sys.exit(1)   # Partial failure
-    elif fail_count > 0:
-        sys.exit(2)   # All failed — fatal
+    except Exception as e:
+        reporter.fail(str(e))
+        raise
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ import argparse
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_status import PipelineStatusReporter, add_pipeline_args
 from pipeline_utils import LOG_DIR, setup_logging, get_supabase_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -238,11 +239,17 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", help="Analyze without updating Supabase")
     parser.add_argument("--force", action="store_true",
                         help="Clear checkpoint and re-process all assets from scratch")
+    add_pipeline_args(parser)
     args = parser.parse_args()
 
     log = setup_logging(SCRIPT_NAME)
 
     mission_path = os.path.abspath(args.mission_path) if args.mission_path else os.getcwd()
+
+    reporter = PipelineStatusReporter(
+        processing_job_id=getattr(args, "processing_job_id", None),
+        step_name="v3_qa",
+    )
 
     # Connect to Supabase
     try:
@@ -255,85 +262,97 @@ Examples:
     assets = fetch_video_assets(client, args.mission_id)
     if not assets:
         log.info(f"No video assets found for mission {args.mission_id}")
+        reporter.complete(output="No video assets found — skipped")
         return
+
+    if not args.dry_run:
+        reporter.start()
 
     log.info(f"Mission: {args.mission_id}")
     log.info(f"Video assets: {len(assets)}")
 
-    # Checkpoint resume
-    if args.force:
-        clear_checkpoint(mission_path, SCRIPT_NAME)
-        log.info("--force: checkpoint cleared, re-processing all assets")
-    completed = load_checkpoint(mission_path, SCRIPT_NAME)
-    if completed:
-        log.info(f"Resuming: {len(completed)} asset(s) already completed")
+    try:
+        # Checkpoint resume
+        if args.force:
+            clear_checkpoint(mission_path, SCRIPT_NAME)
+            log.info("--force: checkpoint cleared, re-processing all assets")
+        completed = load_checkpoint(mission_path, SCRIPT_NAME)
+        if completed:
+            log.info(f"Resuming: {len(completed)} asset(s) already completed")
 
-    # Get thresholds
-    if args.thresholds:
-        try:
-            thresholds = {**DEFAULT_THRESHOLDS, **json.loads(args.thresholds)}
-        except json.JSONDecodeError as e:
-            log.error(f"Invalid --thresholds JSON: {e}")
-            sys.exit(2)
-    else:
-        try:
-            thresholds = fetch_thresholds(client, args.mission_id)
-        except Exception:
-            thresholds = DEFAULT_THRESHOLDS
-
-    log.info(f"Thresholds: {json.dumps(thresholds)}")
-
-    # Run QA on each asset
-    mission_flags = []
-    per_asset_status = []
-    for asset in assets:
-        filename = asset.get("filename", asset["id"])
-        item_key = asset["id"]
-
-        if item_key in completed:
-            log.info(f"\n  Skip (checkpoint): {filename}")
-            # Count checkpointed assets as pass for mission summary
-            per_asset_status.append("pass")
-            continue
-
-        log.info(f"\n  Checking: {filename}")
-
-        flags = run_qa_checks(asset, thresholds)
-        qa_status = determine_qa_status(flags)
-        per_asset_status.append(qa_status)
-
-        for flag in flags:
-            log.info(f"    [{flag['severity'].upper()}] {flag['flag']}: {flag['message']}")
-
-        log.info(f"    Status: {qa_status}")
-
-        if not args.dry_run:
-            qa_flags_json = {f["flag"]: f for f in flags}
-            update_qa_status(client, asset["id"], qa_status, qa_flags_json)
-            log.info(f"    Updated in Supabase")
-            completed.add(item_key)
+        # Get thresholds
+        if args.thresholds:
             try:
-                save_checkpoint(mission_path, SCRIPT_NAME, completed)
-            except OSError as e:
-                log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+                thresholds = {**DEFAULT_THRESHOLDS, **json.loads(args.thresholds)}
+            except json.JSONDecodeError as e:
+                raise RuntimeError(f"Invalid --thresholds JSON: {e}")
+        else:
+            try:
+                thresholds = fetch_thresholds(client, args.mission_id)
+            except Exception:
+                thresholds = DEFAULT_THRESHOLDS
 
-        mission_flags.extend(flags)
+        log.info(f"Thresholds: {json.dumps(thresholds)}")
 
-    # Mission-level summary (use cached results, don't re-run checks)
-    overall = determine_qa_status(mission_flags)
-    pass_count = sum(1 for s in per_asset_status if s == "pass")
-    ok_count = sum(1 for s in per_asset_status if s in ("pass", "review"))
-    fail_count = sum(1 for s in per_asset_status if s == "fail")
+        # Run QA on each asset
+        mission_flags = []
+        per_asset_status = []
+        for asset in assets:
+            filename = asset.get("filename", asset["id"])
+            item_key = asset["id"]
 
-    log.info(f"\n{'=' * 50}")
-    log.info(f"QA Summary: {pass_count}/{len(assets)} clips passed")
-    log.info(f"Mission QA: {overall}")
-    log.info(f"Flags: {len(mission_flags)}")
+            if item_key in completed:
+                log.info(f"\n  Skip (checkpoint): {filename}")
+                # Count checkpointed assets as pass for mission summary
+                per_asset_status.append("pass")
+                continue
 
-    if fail_count > 0 and ok_count > 0:
-        sys.exit(1)   # Partial failure
-    elif fail_count > 0:
-        sys.exit(2)   # All failed — fatal
+            log.info(f"\n  Checking: {filename}")
+
+            flags = run_qa_checks(asset, thresholds)
+            qa_status = determine_qa_status(flags)
+            per_asset_status.append(qa_status)
+
+            for flag in flags:
+                log.info(f"    [{flag['severity'].upper()}] {flag['flag']}: {flag['message']}")
+
+            log.info(f"    Status: {qa_status}")
+
+            if not args.dry_run:
+                qa_flags_json = {f["flag"]: f for f in flags}
+                update_qa_status(client, asset["id"], qa_status, qa_flags_json)
+                log.info(f"    Updated in Supabase")
+                completed.add(item_key)
+                try:
+                    save_checkpoint(mission_path, SCRIPT_NAME, completed)
+                except OSError as e:
+                    log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+
+            mission_flags.extend(flags)
+
+        # Mission-level summary (use cached results, don't re-run checks)
+        overall = determine_qa_status(mission_flags)
+        pass_count = sum(1 for s in per_asset_status if s == "pass")
+        ok_count = sum(1 for s in per_asset_status if s in ("pass", "review"))
+        fail_count = sum(1 for s in per_asset_status if s == "fail")
+
+        log.info(f"\n{'=' * 50}")
+        log.info(f"QA Summary: {pass_count}/{len(assets)} clips passed")
+        log.info(f"Mission QA: {overall}")
+        log.info(f"Flags: {len(mission_flags)}")
+
+        if fail_count > 0 and ok_count > 0:
+            reporter.fail(f"Partial failure: {fail_count} clip(s) failed QA")
+            sys.exit(1)   # Partial failure
+        elif fail_count > 0:
+            reporter.fail(f"All {fail_count} clip(s) failed QA")
+            sys.exit(2)   # All failed — fatal
+        else:
+            reporter.complete(output=f"QA complete: {pass_count}/{len(assets)} passed, overall={overall}")
+
+    except Exception as e:
+        reporter.fail(str(e))
+        raise
 
 
 if __name__ == "__main__":
