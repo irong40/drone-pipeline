@@ -108,10 +108,68 @@
     },
     "note": "N8N_BASE_URL should be your n8n instance URL (e.g. http://localhost:5678)"
   },
+  "folder_watcher_normalization": {
+    "description": "Configuration for normalizing folder_watcher payloads to match ingest_sorter format in the Package Router. Both webhook sources flow through the same entry point.",
+    "code_node": {
+      "description": "n8n Code node that normalizes both payload types before the Switch node",
+      "implementation": "n8n/package_router_normalizer.js",
+      "node_type": "n8n-nodes-base.code",
+      "node_name": "Normalize Payload",
+      "position_hint": "Between webhook trigger and Switch node",
+      "python_reference": "scripts/payload_normalizer.py"
+    },
+    "webhook_entry": {
+      "description": "Single Package Router webhook that accepts both folder_watcher and ingest_sorter payloads",
+      "path": "package-router",
+      "method": "POST",
+      "node_type": "n8n-nodes-base.webhook",
+      "node_name": "Package Router Webhook",
+      "note": "Both folder_watcher.py and ingest_sorter.py POST to this endpoint. The Code node detects source and normalizes before routing."
+    },
+    "mission_lookup_node": {
+      "description": "Supabase lookup for mission_id by mission_number (used when needs_mission_lookup=true, i.e., folder_watcher source)",
+      "node_type": "n8n-nodes-base.httpRequest",
+      "node_name": "Lookup Mission ID",
+      "method": "GET",
+      "url": "={{ $env.SUPABASE_URL }}/rest/v1/drone_jobs?mission_number=eq.{{ $json.mission_number }}&select=id",
+      "headers": {
+        "apikey": "={{ $env.SUPABASE_SERVICE_KEY }}",
+        "Authorization": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+      },
+      "position_hint": "After Normalize Payload, before Switch node, gated by IF needs_mission_lookup=true"
+    },
+    "deduplication_check": {
+      "description": "IF node that checks if a processing_jobs row already exists for this mission_id before creating a new one (prevents duplicate processing when both folder_watcher and ingest_sorter fire for the same mission)",
+      "node_type": "n8n-nodes-base.if",
+      "node_name": "Check Duplicate Processing Job",
+      "condition": {
+        "logic": "Check processing_jobs table for existing row with this mission_id",
+        "query_url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_jobs?mission_id=eq.{{ $json.mission_id }}&select=id",
+        "on_exists": "Skip — processing already in progress",
+        "on_missing": "Continue — create processing_jobs row and route to sub-workflow"
+      },
+      "position_hint": "After Mission ID lookup, before Switch node"
+    },
+    "manual_path_routing": {
+      "description": "Package types that route to the manual_path_workflow.json sub-workflow instead of automated processing",
+      "routed_types": ["construction_hybrid", "adiat"],
+      "sub_workflow": "n8n/manual_path_workflow.json",
+      "sub_workflow_id": "sentinel-manual-path",
+      "node_type": "n8n-nodes-base.executeWorkflow",
+      "node_name": "Execute Manual Path Workflow",
+      "parameters_passed": {
+        "mission_id": "={{ $json.mission_id }}",
+        "package_type": "={{ $json.package_type }}",
+        "mission_number": "={{ $json.mission_number }}",
+        "folder_path": "={{ $json.folder_path }}"
+      }
+    }
+  },
   "required_env_vars": {
     "SUPABASE_URL": "Your Supabase project URL",
     "SUPABASE_SERVICE_KEY": "Supabase service role key (bypasses RLS)",
-    "N8N_BASE_URL": "n8n instance URL for internal webhook calls (e.g. http://localhost:5678)"
+    "N8N_BASE_URL": "n8n instance URL for internal webhook calls (e.g. http://localhost:5678)",
+    "OPERATOR_EMAIL": "Email address for operator notifications on manual-path missions"
   },
   "migration_checklist": [
     "[ ] Add vegetation_analysis BOOLEAN DEFAULT false column to drone_jobs (see migrations)",
