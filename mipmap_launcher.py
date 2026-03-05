@@ -189,7 +189,7 @@ def main():
     # Pipeline status reporter
     reporter = PipelineStatusReporter(
         processing_job_id=getattr(args, "processing_job_id", None),
-        step_name=SCRIPT_NAME,
+        step_name="mipmap_launch",
     )
     reporter.start()
 

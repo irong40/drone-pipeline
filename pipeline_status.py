@@ -233,3 +233,8 @@ def add_pipeline_args(parser) -> None:
         default=None,
         help="Supabase processing_jobs UUID (provided by n8n, optional for manual runs)",
     )
+    parser.add_argument(
+        "--step-name",
+        default=None,
+        help="Override the default step_name for PipelineStatusReporter (for scripts serving multiple paths)",
+    )

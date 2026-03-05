@@ -205,7 +205,7 @@ Examples:
 
     reporter = PipelineStatusReporter(
         processing_job_id=getattr(args, "processing_job_id", None),
-        step_name="ortho_harvester",
+        step_name="ortho_harvest",
     )
     reporter.start()
 

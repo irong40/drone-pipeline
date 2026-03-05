@@ -13,7 +13,7 @@
     },
     {
       "parameters": {
-        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_color_grade.py\" \"{{ $json.folder_path }}\" --platform {{ $json.source_platform || 'mini4pro' }} --processing-job-id {{ $json.processing_job_id }}"
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_color_grade.py\" \"{{ $json.folder_path }}\" --platform {{ $json.source_platform || 'mini4pro' }} --processing-job-id {{ $json.processing_job_id }} --step-name v1_color"
       },
       "id": "node-execute-v1",
       "name": "Execute V1 Color Grade",

@@ -183,7 +183,7 @@ Examples:
 
     reporter = PipelineStatusReporter(
         processing_job_id=getattr(args, "processing_job_id", None),
-        step_name="v1_color",
+        step_name=getattr(args, "step_name", None) or "color_grade",
     )
     reporter.start()
 
