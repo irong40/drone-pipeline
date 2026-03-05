@@ -5,15 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** v2.0 shipped — planning next milestone
+**Current focus:** v3.0 Package Router & End-to-End Automation
 
 ## Current Position
 
-Phase: All complete (13/13)
-Status: v2.0 Vegetation Analysis Pipeline shipped 2026-02-25
-Last activity: 2026-02-25 — milestone archived, PROJECT.md evolved, ROADMAP.md reorganized
-
-Progress: [████████████████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-05 — Milestone v3.0 started
 
 ## Performance Metrics
 

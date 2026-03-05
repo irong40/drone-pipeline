@@ -30,7 +30,18 @@ Every script runs reliably, recovers from failures, and has tests proving it wor
 
 ### Active
 
-(None — next milestone not yet planned)
+## Current Milestone: v3.0 Package Router & End-to-End Automation
+
+**Goal:** Build the n8n Package Router workflow that receives ingest webhooks, routes missions by package_type through all processing paths (A/B/C/D/V), automates Path C (MipMap launch → ortho copy → Supabase status), and connects folder watcher events to trigger downstream workflows including Path E.
+
+**Target features:**
+- n8n Package Router workflow (receives ingest webhook, routes by package_type)
+- Path C automation (MipMap engine launch, result copy to mapping/, status updates)
+- Path A automation (RE photo processing: color grade → delivery)
+- Path V automation (video pipeline: metadata → QA → proxy → color grade → export → delivery)
+- Path B/D automation (construction/ADIAT routing)
+- Folder watcher → Path E trigger (replace polling with event-driven ortho detection)
+- MipMap output harvester (copy GeoTIFF from D:/ workspace to mission mapping/ folder)
 
 ### Out of Scope
 
@@ -87,4 +98,4 @@ Every script runs reliably, recovers from failures, and has tests proving it wor
 | Module-level sys.modules stub injection | E1/E2 tests install stubs before source imports | ✓ Good — 113 tests run on system Python without GPU |
 
 ---
-*Last updated: 2026-02-25 after v2.0 milestone*
+*Last updated: 2026-03-05 after v3.0 milestone start*
