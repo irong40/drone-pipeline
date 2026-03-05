@@ -26,7 +26,7 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={\"status\": \"manual\", \"updated_at\": \"now()\"}",
+        "body": "={\"status\": \"manual\", \"updated_at\": \"{{ $now.toISO() }}\"}",
         "options": {}
       },
       "id": "node-set-manual-status",
