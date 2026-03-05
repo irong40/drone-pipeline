@@ -74,12 +74,12 @@ Plans:
   3. ortho_harvester.py copies a GeoTIFF to a mission mapping/ folder and verifies integrity (size + rasterio header)
   4. Both scripts follow pipeline contract (argparse CLI, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
   5. Supabase processing_jobs table exists with per-step status tracking, and processing_templates table has path-specific config columns
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 15-01: TBD
-- [ ] 15-02: TBD
-- [ ] 15-03: TBD
+- [ ] 15-01-PLAN.md — Supabase schema: processing_jobs table, mipmap_workspace column, processing_templates config
+- [ ] 15-02-PLAN.md — mipmap_launcher.py: fire-and-forget subprocess launcher with PID file + orphan detection + tests
+- [ ] 15-03-PLAN.md — ortho_harvester.py: GeoTIFF copy + rasterio integrity verification + tests
 
 ### Phase 16: Package Router Core + Path A
 **Goal**: Missions arriving via webhook are automatically routed by package type, and real estate photo missions complete end-to-end without operator intervention
