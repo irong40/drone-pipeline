@@ -1,0 +1,596 @@
+{
+  "id": "sentinel-path-v",
+  "name": "sentinel-path-v",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-trigger",
+      "name": "Execute Sub Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Entry point. Called by Package Router. Receives: { mission_id, package_type, mission_number, folder_path, processing_job_id, source_platform, address, city }"
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_color_grade.py\" \"{{ $json.folder_path }}\" --platform {{ $json.source_platform || 'mini4pro' }} --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-v1",
+      "name": "Execute V1 Color Grade",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "notes": "Runs video_color_grade.py. Applies color grading LUTs to video files. Self-reports status via PipelineStatusReporter (step: v1_color)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  v1_exit_code: exitCode,\n  v1_result: parsed\n}}];"
+      },
+      "id": "node-parse-v1",
+      "name": "Parse V1 Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "notes": "Parses stdout JSON from video_color_grade.py. Passes through all trigger parameters."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-v1-failed",
+              "leftValue": "={{ $json.v1_exit_code }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-v1-failed",
+      "name": "IF V1 Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: 'v1_color',\n  exit_code: $json.v1_exit_code,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-v1",
+      "name": "Stop on V1 Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 150],
+      "notes": "Script already set step to failed via PipelineStatusReporter. This stops the workflow chain."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_metadata.py\" \"{{ $json.folder_path }}\" --platform {{ $json.source_platform || 'mini4pro' }} --mission-id {{ $json.mission_id }} --upload --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-v1-5",
+      "name": "Execute V1.5 Metadata",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1200, 300],
+      "notes": "Runs video_metadata.py. Extracts and uploads video metadata. Self-reports status via PipelineStatusReporter (step: v1_5_metadata)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  v1_5_exit_code: exitCode,\n  v1_5_result: parsed\n}}];"
+      },
+      "id": "node-parse-v1-5",
+      "name": "Parse V1.5 Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300],
+      "notes": "Parses stdout JSON from video_metadata.py. Passes through all trigger parameters."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-v1-5-failed",
+              "leftValue": "={{ $json.v1_5_exit_code }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-v1-5-failed",
+      "name": "IF V1.5 Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: 'v1_5_metadata',\n  exit_code: $json.v1_5_exit_code,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-v1-5",
+      "name": "Stop on V1.5 Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 150],
+      "notes": "Script already set step to failed via PipelineStatusReporter. This stops the workflow chain."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\srt_telemetry_parser.py\" \"{{ $json.folder_path }}\" --platform {{ $json.source_platform || 'mini4pro' }} --mission-id {{ $json.mission_id }} --upload --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-v2",
+      "name": "Execute V2 SRT",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1920, 300],
+      "notes": "Runs srt_telemetry_parser.py. Parses SRT telemetry from video files. Self-reports status via PipelineStatusReporter (step: v2_srt)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  v2_exit_code: exitCode,\n  v2_result: parsed\n}}];"
+      },
+      "id": "node-parse-v2",
+      "name": "Parse V2 Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 300],
+      "notes": "Parses stdout JSON from srt_telemetry_parser.py. Passes through all trigger parameters."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-v2-failed",
+              "leftValue": "={{ $json.v2_exit_code }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-v2-failed",
+      "name": "IF V2 Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: 'v2_srt',\n  exit_code: $json.v2_exit_code,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-v2",
+      "name": "Stop on V2 Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 150],
+      "notes": "Script already set step to failed via PipelineStatusReporter. This stops the workflow chain."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_qa.py\" --mission-id {{ $json.mission_id }} --mission-path \"{{ $json.folder_path }}\" --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-v3",
+      "name": "Execute V3 QA",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2640, 300],
+      "notes": "Runs video_qa.py. Quality assurance checks on video files. Self-reports status via PipelineStatusReporter (step: v3_qa)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  v3_exit_code: exitCode,\n  v3_result: parsed\n}}];"
+      },
+      "id": "node-parse-v3",
+      "name": "Parse V3 Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, 300],
+      "notes": "Parses stdout JSON from video_qa.py. Passes through all trigger parameters."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-v3-failed",
+              "leftValue": "={{ $json.v3_exit_code }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-v3-failed",
+      "name": "IF V3 Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: 'v3_qa',\n  exit_code: $json.v3_exit_code,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-v3",
+      "name": "Stop on V3 Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, 150],
+      "notes": "Script already set step to failed via PipelineStatusReporter. This stops the workflow chain."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_proxy_gen.py\" \"{{ $json.folder_path }}\" --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-v4",
+      "name": "Execute V4 Proxy Gen",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [3360, 300],
+      "notes": "Runs video_proxy_gen.py. Generates proxy video files for DaVinci Resolve editing. Self-reports status via PipelineStatusReporter (step: v4_proxy)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  v4_exit_code: exitCode,\n  v4_result: parsed\n}}];"
+      },
+      "id": "node-parse-v4",
+      "name": "Parse V4 Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3600, 300],
+      "notes": "Parses stdout JSON from video_proxy_gen.py. Passes through all trigger parameters."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-v4-failed",
+              "leftValue": "={{ $json.v4_exit_code }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-v4-failed",
+      "name": "IF V4 Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: 'v4_proxy',\n  exit_code: $json.v4_exit_code,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-v4",
+      "name": "Stop on V4 Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4080, 150],
+      "notes": "Script already set step to failed via PipelineStatusReporter. This stops the workflow chain."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst prev = items[0].json;\n\n// V1-V4 complete. Workflow will now pause at V5 Wait node.\n// Operator must complete DaVinci Resolve editing, then POST to resume webhook.\nreturn [{json: {\n  ...input,\n  ...prev,\n  v5_status: 'awaiting_manual_edit',\n  v5_message: 'V1-V4 automated steps complete. Proxy files ready in video/proxy/. Open DaVinci Resolve project, complete color grading and editing, export masters to video/master/. Then POST to the resume webhook URL to continue V6 export and delivery.',\n  v5_resume_info: 'POST to {N8N_BASE_URL}/webhook-waiting/{executionId}/v5-resolve-complete to resume'\n}}];"
+      },
+      "id": "node-v5-gate-setup",
+      "name": "V5 Gate Setup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4080, 300],
+      "notes": "Prepares context for the V5 manual gate. Sets v5_status to awaiting_manual_edit and provides resume instructions for the operator."
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "webhookSuffix": "v5-resolve-complete"
+        }
+      },
+      "id": "node-v5-wait",
+      "name": "V5 Wait for DaVinci Resolve Edit",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [4320, 300],
+      "notes": "MANUAL GATE: Workflow pauses here until operator POSTs to resume webhook.\n\nResume URL: {N8N_BASE_URL}/webhook-waiting/{executionId}/v5-resolve-complete\n\nOperator actions before resuming:\n1. Open DaVinci Resolve with proxy files from video/proxy/\n2. Complete color grading, editing, and transitions\n3. Export final masters to video/master/ directory\n4. POST to resume URL to trigger V6 format export and delivery packaging"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('V5 Gate Setup').first().json;\n\n// After Wait resumes, check if video/master/ has content (informational only)\n// V6 will error if master files are missing, so we just log a warning here\nreturn [{json: {\n  ...input,\n  v5_status: 'resumed',\n  v5_resume_note: 'DaVinci Resolve edit marked complete by operator. Proceeding to V6 format export.'\n}}];"
+      },
+      "id": "node-v5-resume-check",
+      "name": "V5 Resume Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4560, 300],
+      "notes": "After Wait resumes, marks v5 as resumed. V6 will error naturally if master files are missing."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\video_format_export.py\" \"{{ $json.folder_path }}\" --mission-id {{ $json.mission_id }} --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-v6",
+      "name": "Execute V6 Format Export",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [4800, 300],
+      "notes": "Runs video_format_export.py. Exports final video formats from DaVinci Resolve masters. Self-reports status via PipelineStatusReporter (step: v6_export)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  v6_exit_code: exitCode,\n  v6_result: parsed\n}}];"
+      },
+      "id": "node-parse-v6",
+      "name": "Parse V6 Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5040, 300],
+      "notes": "Parses stdout JSON from video_format_export.py. Passes through all trigger parameters."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-v6-failed",
+              "leftValue": "={{ $json.v6_exit_code }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-v6-failed",
+      "name": "IF V6 Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [5280, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: 'v6_export',\n  exit_code: $json.v6_exit_code,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-v6",
+      "name": "Stop on V6 Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5520, 150],
+      "notes": "Script already set step to failed via PipelineStatusReporter. This stops the workflow chain."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\delivery_packaging.py\" \"{{ $json.folder_path }}\" --address \"{{ $json.address || 'Unknown' }}\" --city \"{{ $json.city || 'Unknown' }}\" --video-addendum --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-execute-delivery",
+      "name": "Execute Delivery Packaging",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [5520, 300],
+      "notes": "Runs delivery_packaging.py with --video-addendum for video packages. Uses --address and --city from drone_jobs Supabase lookup. Self-reports status via PipelineStatusReporter."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Parse V6 Result').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  delivery_exit_code: exitCode,\n  delivery_result: parsed,\n  status: exitCode === 0 ? 'complete' : 'failed'\n}}];"
+      },
+      "id": "node-parse-delivery",
+      "name": "Parse Delivery Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5760, 300],
+      "notes": "Final node. Parses delivery_packaging.py result. Sets overall status to complete or failed."
+    }
+  ],
+  "connections": {
+    "Execute Sub Workflow Trigger": {
+      "main": [
+        [{ "node": "Execute V1 Color Grade", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute V1 Color Grade": {
+      "main": [
+        [{ "node": "Parse V1 Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse V1 Result": {
+      "main": [
+        [{ "node": "IF V1 Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF V1 Failed": {
+      "main": [
+        [{ "node": "Stop on V1 Failure", "type": "main", "index": 0 }],
+        [{ "node": "Execute V1.5 Metadata", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute V1.5 Metadata": {
+      "main": [
+        [{ "node": "Parse V1.5 Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse V1.5 Result": {
+      "main": [
+        [{ "node": "IF V1.5 Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF V1.5 Failed": {
+      "main": [
+        [{ "node": "Stop on V1.5 Failure", "type": "main", "index": 0 }],
+        [{ "node": "Execute V2 SRT", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute V2 SRT": {
+      "main": [
+        [{ "node": "Parse V2 Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse V2 Result": {
+      "main": [
+        [{ "node": "IF V2 Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF V2 Failed": {
+      "main": [
+        [{ "node": "Stop on V2 Failure", "type": "main", "index": 0 }],
+        [{ "node": "Execute V3 QA", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute V3 QA": {
+      "main": [
+        [{ "node": "Parse V3 Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse V3 Result": {
+      "main": [
+        [{ "node": "IF V3 Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF V3 Failed": {
+      "main": [
+        [{ "node": "Stop on V3 Failure", "type": "main", "index": 0 }],
+        [{ "node": "Execute V4 Proxy Gen", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute V4 Proxy Gen": {
+      "main": [
+        [{ "node": "Parse V4 Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse V4 Result": {
+      "main": [
+        [{ "node": "IF V4 Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF V4 Failed": {
+      "main": [
+        [{ "node": "Stop on V4 Failure", "type": "main", "index": 0 }],
+        [{ "node": "V5 Gate Setup", "type": "main", "index": 0 }]
+      ]
+    },
+    "V5 Gate Setup": {
+      "main": [
+        [{ "node": "V5 Wait for DaVinci Resolve Edit", "type": "main", "index": 0 }]
+      ]
+    },
+    "V5 Wait for DaVinci Resolve Edit": {
+      "main": [
+        [{ "node": "V5 Resume Check", "type": "main", "index": 0 }]
+      ]
+    },
+    "V5 Resume Check": {
+      "main": [
+        [{ "node": "Execute V6 Format Export", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute V6 Format Export": {
+      "main": [
+        [{ "node": "Parse V6 Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse V6 Result": {
+      "main": [
+        [{ "node": "IF V6 Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF V6 Failed": {
+      "main": [
+        [{ "node": "Stop on V6 Failure", "type": "main", "index": 0 }],
+        [{ "node": "Execute Delivery Packaging", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute Delivery Packaging": {
+      "main": [
+        [{ "node": "Parse Delivery Result", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-05T00:00:00.000Z",
+  "versionId": "1",
+  "_meta": {
+    "description": "Path V sub-workflow for video pipeline processing. Runs V1 color grade, V1.5 metadata, V2 SRT telemetry, V3 QA, V4 proxy generation in sequence with exit code guards. Pauses at V5 Wait node for DaVinci Resolve manual editing. On operator webhook POST resume, runs V6 format export and delivery packaging. Each step self-reports status via PipelineStatusReporter. Called by Package Router Execute Sub Workflow node.",
+    "n8n_version_required": "2.x",
+    "env_vars_required": ["SENTINEL_SCRIPTS", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
+    "parameters_expected": {
+      "mission_id": "UUID from processing_jobs table",
+      "package_type": "video",
+      "mission_number": "Integer mission number",
+      "folder_path": "Full path to mission folder on disk",
+      "processing_job_id": "UUID of the processing_jobs row for status reporting",
+      "source_platform": "Drone platform (mini4pro, m4e, m3e)",
+      "address": "Property street address",
+      "city": "City name"
+    },
+    "v5_resume_webhook": "POST {N8N_BASE_URL}/webhook-waiting/{executionId}/v5-resolve-complete"
+  }
+}
