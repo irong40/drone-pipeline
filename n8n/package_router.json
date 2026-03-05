@@ -289,13 +289,16 @@
       "notes": "Execute Path C sub-workflow for mapping, site_survey, environmental_survey missions."
     },
     {
-      "parameters": {},
-      "id": "node-stub-path-v",
-      "name": "Execute Path V (Stub)",
-      "type": "n8n-nodes-base.noOp",
+      "parameters": {
+        "workflowId": "sentinel-path-v",
+        "options": {}
+      },
+      "id": "node-path-v",
+      "name": "Execute Path V",
+      "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1,
       "position": [3120, 500],
-      "notes": "Phase 18 will replace with Execute Sub Workflow for Path V video pipeline. Routes: video."
+      "notes": "Execute Path V sub-workflow for video missions. Passes mission_id, package_type, mission_number, folder_path, processing_job_id, source_platform, address, city. Workflow pauses at V5 Wait node for DaVinci Resolve manual editing."
     },
     {
       "parameters": {
@@ -382,7 +385,7 @@
       "main": [
         [{ "node": "Execute Path A", "type": "main", "index": 0 }],
         [{ "node": "Execute Path C", "type": "main", "index": 0 }],
-        [{ "node": "Execute Path V (Stub)", "type": "main", "index": 0 }],
+        [{ "node": "Execute Path V", "type": "main", "index": 0 }],
         [{ "node": "Execute Manual Path", "type": "main", "index": 0 }]
       ]
     }
@@ -404,7 +407,7 @@
     "n8n_version_required": "2.x",
     "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
     "webhook_paths": ["package-router"],
-    "node_sequence": "Webhook -> Normalize -> IF Mission Lookup -> Lookup/Merge -> Check Duplicate -> Fetch Template -> Build Steps -> Create Job -> Prepare Dispatch -> Route Switch -> [Path A | Path C | Path V Stub | Manual Path]",
+    "node_sequence": "Webhook -> Normalize -> IF Mission Lookup -> Lookup/Merge -> Check Duplicate -> Fetch Template -> Build Steps -> Create Job -> Prepare Dispatch -> Route Switch -> [Path A | Path C | Path V | Manual Path]",
     "expected_webhook_payload": {
       "ingest_sorter": {
         "mission_id": "UUID",
@@ -424,7 +427,7 @@
     "routing_table": {
       "output_0_path_a": ["re_standard", "real_estate"],
       "output_1_path_c": ["mapping", "site_survey", "environmental_survey"],
-      "output_2_path_v_stub": ["video"],
+      "output_2_path_v": ["video"],
       "fallback_manual": ["construction_hybrid", "adiat", "unknown"]
     }
   }
