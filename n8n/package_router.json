@@ -262,7 +262,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [2880, 400],
-      "notes": "Routes missions by package_type. Output 0: re_standard/real_estate -> Path A. Output 1: mapping/site_survey/environmental_survey -> Path C (stub). Output 2: video -> Path V (stub). Fallback: construction_hybrid/adiat/unknown -> Manual Path."
+      "notes": "Routes missions by package_type. Output 0: re_standard/real_estate -> Path A. Output 1: mapping/site_survey/environmental_survey -> Path C. Output 2: video -> Path V (stub). Fallback: construction_hybrid/adiat/unknown -> Manual Path."
     },
     {
       "parameters": {
@@ -277,13 +277,16 @@
       "notes": "Execute Path A sub-workflow for re_standard and real_estate missions. Passes mission_id, package_type, mission_number, folder_path, processing_job_id, source_platform, address, city."
     },
     {
-      "parameters": {},
-      "id": "node-stub-path-c",
-      "name": "Execute Path C (Stub)",
-      "type": "n8n-nodes-base.noOp",
+      "parameters": {
+        "workflowId": "sentinel-path-c",
+        "options": {}
+      },
+      "id": "node-exec-path-c",
+      "name": "Execute Path C",
+      "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1,
       "position": [3120, 300],
-      "notes": "Phase 17 will replace with Execute Sub Workflow for Path C MipMap automation. Routes: mapping, site_survey, environmental_survey."
+      "notes": "Execute Path C sub-workflow for mapping, site_survey, environmental_survey missions."
     },
     {
       "parameters": {},
@@ -378,7 +381,7 @@
     "Route by Package Type": {
       "main": [
         [{ "node": "Execute Path A", "type": "main", "index": 0 }],
-        [{ "node": "Execute Path C (Stub)", "type": "main", "index": 0 }],
+        [{ "node": "Execute Path C", "type": "main", "index": 0 }],
         [{ "node": "Execute Path V (Stub)", "type": "main", "index": 0 }],
         [{ "node": "Execute Manual Path", "type": "main", "index": 0 }]
       ]
@@ -401,7 +404,7 @@
     "n8n_version_required": "2.x",
     "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
     "webhook_paths": ["package-router"],
-    "node_sequence": "Webhook -> Normalize -> IF Mission Lookup -> Lookup/Merge -> Check Duplicate -> Fetch Template -> Build Steps -> Create Job -> Prepare Dispatch -> Route Switch -> [Path A | Path C Stub | Path V Stub | Manual Path]",
+    "node_sequence": "Webhook -> Normalize -> IF Mission Lookup -> Lookup/Merge -> Check Duplicate -> Fetch Template -> Build Steps -> Create Job -> Prepare Dispatch -> Route Switch -> [Path A | Path C | Path V Stub | Manual Path]",
     "expected_webhook_payload": {
       "ingest_sorter": {
         "mission_id": "UUID",
@@ -420,7 +423,7 @@
     },
     "routing_table": {
       "output_0_path_a": ["re_standard", "real_estate"],
-      "output_1_path_c_stub": ["mapping", "site_survey", "environmental_survey"],
+      "output_1_path_c": ["mapping", "site_survey", "environmental_survey"],
       "output_2_path_v_stub": ["video"],
       "fallback_manual": ["construction_hybrid", "adiat", "unknown"]
     }
