@@ -41,7 +41,7 @@
 - Integer phases (14, 15, 16...): Planned milestone work
 - Decimal phases (15.1, 15.2): Urgent insertions (marked with INSERTED)
 
-- [x] **Phase 14: Environment Setup** - Verify n8n compatibility and configure environment variables before any workflow development (completed 2026-03-05)
+- [x] **Phase 14: Environment Setup** - Verify n8n compatibility and configure environment variables before any workflow development (completed 2026-03-05)
 - [ ] **Phase 15: Foundation Scripts + Schema** - Build Python scripts and Supabase schema that all n8n workflows depend on
 - [ ] **Phase 16: Package Router Core + Path A** - Build the central router and prove the pattern with the simplest end-to-end path
 - [ ] **Phase 17: Path C MipMap Automation + Path E Connection** - Automate photogrammetry and wire ortho output to vegetation analysis
@@ -135,11 +135,11 @@ Plans:
   2. Folder watcher webhook payload is normalized and routes through the same Package Router entry point as ingest_sorter
   3. All n8n workflow JSON files are syntactically valid and importable into a fresh n8n instance
   4. Integration test confirms Package Router webhook creates a processing_jobs row in Supabase with correct step structure
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19-01: TBD
-- [ ] 19-02: TBD
+- [ ] 19-01-PLAN.md — Build n8n artifacts: manual path sub-workflow, payload normalizer Code node, Python normalizer with tests
+- [ ] 19-02-PLAN.md — Test suite: n8n workflow JSON validation and Package Router integration test
 
 ## Progress
 
