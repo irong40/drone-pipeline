@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_status import PipelineStatusReporter, add_pipeline_args
 from pipeline_utils import (
     LOG_DIR, SUPABASE_URL, SUPABASE_SERVICE_KEY,
     setup_logging, extract_sequence_number, get_supabase_client,
@@ -297,6 +298,7 @@ Examples:
     parser.add_argument("--dump-json", action="store_true", help="Output parsed data as JSON")
     parser.add_argument("--force", action="store_true",
                         help="Clear checkpoint and re-process all SRT files from scratch")
+    add_pipeline_args(parser)
     args = parser.parse_args()
 
     log = setup_logging(SCRIPT_NAME)
@@ -304,8 +306,14 @@ Examples:
     mission_path = os.path.abspath(args.mission_path)
     telemetry_dir = os.path.join(mission_path, "video", "telemetry")
 
+    reporter = PipelineStatusReporter(
+        processing_job_id=getattr(args, "processing_job_id", None),
+        step_name="v2_srt",
+    )
+
     if not os.path.isdir(telemetry_dir):
         log.info(f"No telemetry directory: {telemetry_dir}")
+        reporter.complete(output="No telemetry directory — skipped")
         return
 
     # Find SRT files
@@ -314,98 +322,109 @@ Examples:
 
     if not srt_files:
         log.info("No SRT files found")
+        reporter.complete(output="No SRT files found — skipped")
         return
+
+    reporter.start()
 
     log.info(f"Mission:  {mission_path}")
     log.info(f"Platform: {args.platform}")
     log.info(f"Found {len(srt_files)} SRT file(s)")
 
-    # Checkpoint resume
-    if args.force:
-        clear_checkpoint(mission_path, SCRIPT_NAME)
-        log.info("--force: checkpoint cleared, re-processing all files")
-    completed = load_checkpoint(mission_path, SCRIPT_NAME)
-    if completed:
-        log.info(f"Resuming: {len(completed)} file(s) already completed")
+    try:
+        # Checkpoint resume
+        if args.force:
+            clear_checkpoint(mission_path, SCRIPT_NAME)
+            log.info("--force: checkpoint cleared, re-processing all files")
+        completed = load_checkpoint(mission_path, SCRIPT_NAME)
+        if completed:
+            log.info(f"Resuming: {len(completed)} file(s) already completed")
 
-    all_clips = []
-    results = []
+        all_clips = []
+        results = []
 
-    for srt_path in srt_files:
-        filename = os.path.basename(srt_path)
-        # Derive video filename (DJI_0015.SRT → DJI_0015.MP4)
-        video_filename = os.path.splitext(filename)[0] + ".MP4"
+        for srt_path in srt_files:
+            filename = os.path.basename(srt_path)
+            # Derive video filename (DJI_0015.SRT → DJI_0015.MP4)
+            video_filename = os.path.splitext(filename)[0] + ".MP4"
 
-        item_key = srt_path
-        if item_key in completed:
-            log.info(f"  Skip (checkpoint): {filename}")
-            results.append({"file": filename, "status": "ok"})
-            continue
+            item_key = srt_path
+            if item_key in completed:
+                log.info(f"  Skip (checkpoint): {filename}")
+                results.append({"file": filename, "status": "ok"})
+                continue
 
-        log.info(f"  Parsing: {filename}")
+            log.info(f"  Parsing: {filename}")
 
-        try:
-            frames = parse_srt_file(srt_path)
-        except Exception as e:
-            log.error(f"    Failed to parse {filename}: {e}")
-            results.append({"file": filename, "status": "failed"})
-            continue
+            try:
+                frames = parse_srt_file(srt_path)
+            except Exception as e:
+                log.error(f"    Failed to parse {filename}: {e}")
+                results.append({"file": filename, "status": "failed"})
+                continue
 
-        log.info(f"    Frames: {len(frames)}")
+            log.info(f"    Frames: {len(frames)}")
 
-        clip = aggregate_clip(frames, video_filename, source_platform=args.platform)
-        if clip:
-            clip["srt_file"] = filename
-            clip["frames"] = frames if args.dump_json else None
-            all_clips.append(clip)
+            clip = aggregate_clip(frames, video_filename, source_platform=args.platform)
+            if clip:
+                clip["srt_file"] = filename
+                clip["frames"] = frames if args.dump_json else None
+                all_clips.append(clip)
 
-            log.info(f"    Duration: {clip.get('duration_seconds', 0):.1f}s")
-            log.info(f"    FPS: {clip.get('fps', 0):.1f}")
-            log.info(f"    ISO avg/max: {clip.get('iso_avg', '?')}/{clip.get('iso_max', '?')}")
+                log.info(f"    Duration: {clip.get('duration_seconds', 0):.1f}s")
+                log.info(f"    FPS: {clip.get('fps', 0):.1f}")
+                log.info(f"    ISO avg/max: {clip.get('iso_avg', '?')}/{clip.get('iso_max', '?')}")
 
-            if args.upload:
-                if not args.mission_id:
-                    log.error("--mission-id required for --upload")
-                    sys.exit(2)
-                try:
-                    result = upload_to_supabase(clip, args.mission_id)
-                    log.info(f"    Uploaded to Supabase: {result}")
+                if args.upload:
+                    if not args.mission_id:
+                        raise RuntimeError("--mission-id required for --upload")
+                    try:
+                        result = upload_to_supabase(clip, args.mission_id)
+                        log.info(f"    Uploaded to Supabase: {result}")
+                        results.append({"file": filename, "status": "ok"})
+                        completed.add(item_key)
+                        try:
+                            save_checkpoint(mission_path, SCRIPT_NAME, completed)
+                        except OSError as e:
+                            log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+                    except Exception as e:
+                        log.error(f"    Upload failed: {e}")
+                        results.append({"file": filename, "status": "failed"})
+                else:
                     results.append({"file": filename, "status": "ok"})
                     completed.add(item_key)
                     try:
                         save_checkpoint(mission_path, SCRIPT_NAME, completed)
                     except OSError as e:
                         log.warning(f"    Checkpoint write failed (non-fatal): {e}")
-                except Exception as e:
-                    log.error(f"    Upload failed: {e}")
-                    results.append({"file": filename, "status": "failed"})
             else:
-                results.append({"file": filename, "status": "ok"})
-                completed.add(item_key)
-                try:
-                    save_checkpoint(mission_path, SCRIPT_NAME, completed)
-                except OSError as e:
-                    log.warning(f"    Checkpoint write failed (non-fatal): {e}")
+                log.warning(f"    No aggregate data produced for {filename}")
+                results.append({"file": filename, "status": "failed"})
+
+        if args.dump_json:
+            # Clean up frames for JSON output
+            output = []
+            for clip in all_clips:
+                c = {k: v for k, v in clip.items() if k != "frames" or v is not None}
+                output.append(c)
+            print(json.dumps(output, indent=2))
+
+        ok_count = sum(1 for r in results if r["status"] == "ok")
+        fail_count = sum(1 for r in results if r["status"] == "failed")
+        log.info(f"\nParsed {len(all_clips)} clip(s): {ok_count} ok, {fail_count} failed")
+
+        if fail_count > 0 and ok_count > 0:
+            reporter.fail(f"Partial failure: {fail_count} SRT file(s) failed")
+            sys.exit(1)   # Partial failure
+        elif fail_count > 0:
+            reporter.fail(f"All {fail_count} SRT file(s) failed")
+            sys.exit(2)   # All failed — fatal
         else:
-            log.warning(f"    No aggregate data produced for {filename}")
-            results.append({"file": filename, "status": "failed"})
+            reporter.complete(output=f"{ok_count} SRT file(s) parsed successfully")
 
-    if args.dump_json:
-        # Clean up frames for JSON output
-        output = []
-        for clip in all_clips:
-            c = {k: v for k, v in clip.items() if k != "frames" or v is not None}
-            output.append(c)
-        print(json.dumps(output, indent=2))
-
-    ok_count = sum(1 for r in results if r["status"] == "ok")
-    fail_count = sum(1 for r in results if r["status"] == "failed")
-    log.info(f"\nParsed {len(all_clips)} clip(s): {ok_count} ok, {fail_count} failed")
-
-    if fail_count > 0 and ok_count > 0:
-        sys.exit(1)   # Partial failure
-    elif fail_count > 0:
-        sys.exit(2)   # All failed — fatal
+    except Exception as e:
+        reporter.fail(str(e))
+        raise
 
 
 if __name__ == "__main__":

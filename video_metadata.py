@@ -25,6 +25,7 @@ import subprocess
 import logging
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+from pipeline_status import PipelineStatusReporter, add_pipeline_args
 from pipeline_utils import (
     LOG_DIR, VIDEO_EXTENSIONS, SUPABASE_URL, SUPABASE_SERVICE_KEY,
     setup_logging, extract_sequence_number, get_supabase_client,
@@ -410,6 +411,7 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", help="Show what would be updated without writing")
     parser.add_argument("--force", action="store_true",
                         help="Clear checkpoint and re-process all files from scratch")
+    add_pipeline_args(parser)
     args = parser.parse_args()
 
     log = setup_logging(SCRIPT_NAME)
@@ -422,66 +424,82 @@ Examples:
     if not os.path.isdir(mission_path):
         sys.exit(f"Mission folder not found: {mission_path}")
 
+    reporter = PipelineStatusReporter(
+        processing_job_id=getattr(args, "processing_job_id", None),
+        step_name="v1_5_metadata",
+    )
+    if not args.dry_run:
+        reporter.start()
+
     log.info(f"Video metadata extraction starting")
     log.info(f"  Mission:  {mission_path}")
     log.info(f"  Platform: {args.platform}")
 
-    # Checkpoint resume
-    if args.force:
-        clear_checkpoint(mission_path, SCRIPT_NAME)
-        log.info("--force: checkpoint cleared, re-processing all files")
-    completed = load_checkpoint(mission_path, SCRIPT_NAME)
-    if completed:
-        log.info(f"Resuming: {len(completed)} file(s) already completed")
-
-    # Collect metadata
-    metadata = collect_metadata(mission_path, platform=args.platform, completed=completed)
-
-    if not metadata:
-        log.info("No video files found in video/full/")
-        return
-
-    # Save checkpoint after collection
     try:
-        save_checkpoint(mission_path, SCRIPT_NAME, completed)
-    except OSError as e:
-        log.warning(f"Checkpoint write failed (non-fatal): {e}")
+        # Checkpoint resume
+        if args.force:
+            clear_checkpoint(mission_path, SCRIPT_NAME)
+            log.info("--force: checkpoint cleared, re-processing all files")
+        completed = load_checkpoint(mission_path, SCRIPT_NAME)
+        if completed:
+            log.info(f"Resuming: {len(completed)} file(s) already completed")
 
-    # Summary
-    ok_count = sum(1 for m in metadata if m["status"] == "ok")
-    fail_count = sum(1 for m in metadata if m["status"] == "probe_failed")
-    graded_count = sum(1 for m in metadata if m.get("graded_path"))
-    lrf_count = sum(1 for m in metadata if m.get("has_lrf_proxy"))
+        # Collect metadata
+        metadata = collect_metadata(mission_path, platform=args.platform, completed=completed)
 
-    log.info(f"\nMetadata collected:")
-    log.info(f"  Probed:  {ok_count} ok, {fail_count} failed")
-    log.info(f"  Graded:  {graded_count} clips have graded versions")
-    log.info(f"  LRF:     {lrf_count} clips have LRF proxies")
+        if not metadata:
+            log.info("No video files found in video/full/")
+            reporter.complete(output="No video files found — skipped")
+            return
 
-    # Upload to Supabase
-    if args.upload:
-        if not args.mission_id:
-            sys.exit("--mission-id required for --upload")
-        log.info(f"\nUploading to Supabase (mission: {args.mission_id})...")
-        updated, inserted = upload_metadata(metadata, args.mission_id, dry_run=args.dry_run)
-        if args.dry_run:
-            log.info(f"[DRY RUN] No changes written.")
+        # Save checkpoint after collection
+        try:
+            save_checkpoint(mission_path, SCRIPT_NAME, completed)
+        except OSError as e:
+            log.warning(f"Checkpoint write failed (non-fatal): {e}")
+
+        # Summary
+        ok_count = sum(1 for m in metadata if m["status"] == "ok")
+        fail_count = sum(1 for m in metadata if m["status"] == "probe_failed")
+        graded_count = sum(1 for m in metadata if m.get("graded_path"))
+        lrf_count = sum(1 for m in metadata if m.get("has_lrf_proxy"))
+
+        log.info(f"\nMetadata collected:")
+        log.info(f"  Probed:  {ok_count} ok, {fail_count} failed")
+        log.info(f"  Graded:  {graded_count} clips have graded versions")
+        log.info(f"  LRF:     {lrf_count} clips have LRF proxies")
+
+        # Upload to Supabase
+        if args.upload:
+            if not args.mission_id:
+                raise RuntimeError("--mission-id required for --upload")
+            log.info(f"\nUploading to Supabase (mission: {args.mission_id})...")
+            updated, inserted = upload_metadata(metadata, args.mission_id, dry_run=args.dry_run)
+            if args.dry_run:
+                log.info(f"[DRY RUN] No changes written.")
+            else:
+                log.info(f"Supabase: {updated} updated, {inserted} inserted")
+
+        # JSON output
+        if args.dump_json:
+            # Clean up internal fields for JSON output
+            output = []
+            for m in metadata:
+                entry = {k: v for k, v in m.items() if k != "file_path"}
+                output.append(entry)
+            print(json.dumps(output, indent=2))
+
+        log.info("\nVideo metadata extraction complete.")
+
+        if fail_count > 0:
+            reporter.fail(f"Partial failure: {fail_count} probe(s) failed")
+            sys.exit(1)
         else:
-            log.info(f"Supabase: {updated} updated, {inserted} inserted")
+            reporter.complete(output=f"{ok_count} video(s) metadata extracted")
 
-    # JSON output
-    if args.dump_json:
-        # Clean up internal fields for JSON output
-        output = []
-        for m in metadata:
-            entry = {k: v for k, v in m.items() if k != "file_path"}
-            output.append(entry)
-        print(json.dumps(output, indent=2))
-
-    log.info("\nVideo metadata extraction complete.")
-
-    if fail_count > 0:
-        sys.exit(1)
+    except Exception as e:
+        reporter.fail(str(e))
+        raise
 
 
 if __name__ == "__main__":
