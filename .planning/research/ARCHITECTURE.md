@@ -1,900 +1,631 @@
-# Architecture Research
+# Architecture Research: v3.0 Package Router & End-to-End Automation
 
-**Domain:** Path E — Vegetation Analysis Integration into Existing Drone Pipeline
-**Researched:** 2026-02-24
-**Confidence:** HIGH (based on direct codebase audit of all 14 existing scripts + planning docs)
-
----
-
-## Standard Architecture
-
-### System Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     n8n Orchestration Layer                      │
-│  Package Router → Path C Complete? → Veg Enabled? → Path E      │
-│                                               E5 Review Gate     │
-└─────────────────────────────────────────────────────────────────┘
-                              │ Execute Command nodes
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Path E Script Layer (NEW)                      │
-│  ┌────────────┐  ┌───────────────────┐  ┌──────────────────┐   │
-│  │ E1 canopy_ │→ │ E2 species_       │→ │ E3 health_       │   │
-│  │ detection  │  │ classification    │  │ assessment       │   │
-│  └────────────┘  └───────────────────┘  └──────────────────┘   │
-│         └──────────────────────────────────────┘                │
-│                             │ outputs feed E4                    │
-│                     ┌───────────────┐                           │
-│                     │ E4 vegetation_│                           │
-│                     │ report        │                           │
-│                     └───────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-          ┌───────────────────┼────────────────────┐
-          ▼                   ▼                    ▼
-┌──────────────────┐  ┌──────────────┐  ┌──────────────────────┐
-│ File System      │  │ Supabase DB  │  │ External APIs        │
-│ vegetation/      │  │ (NEW tables) │  │ OpenAI Vision        │
-│ ├─ canopy.gpkg   │  │ vegetation_  │  │ PlantNet             │
-│ ├─ species/      │  │ detections   │  │ (E2, E3 only)        │
-│ ├─ health/       │  │ vegetation_  │  └──────────────────────┘
-│ └─ report/       │  │ analysis_    │
-│                  │  │ summary      │
-│ delivery/        │  │             │
-│ └─ vegetation/   │  │ (MODIFIED)  │
-│   ├─ Report.pdf  │  │ missions     │
-│   ├─ Species.png │  │ processing_  │
-│   ├─ Health.png  │  │ templates    │
-│   ├─ Detect.json │  └──────────────┘
-│   └─ Map.html*   │
-└──────────────────┘
-                        * premium tiers only
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Follows Existing Pattern? |
-|-----------|---------------|--------------------------|
-| E1 `canopy_detection.py` | Tile ortho GeoTIFF, run DeepForest inference, output GeoPackage + GeoJSON polygons | YES — argparse, checkpoint, JSON stdout, supabase update |
-| E2 `species_classification.py` | Crop canopy patches, call OpenAI Vision + PlantNet, tag species on detections rows | YES — same contract; checkpoint critical (API cost) |
-| E3 `health_assessment.py` | Compute VARI/ExG on each canopy mask, optional Vision API, write health_score | YES — same contract; Vision API calls checkpointed |
-| E4 `vegetation_report.py` | Read all prior outputs, generate PDF + maps + HTML, write summary row | YES — no checkpoint needed (single-pass, no loops) |
-| `checkpoint.py` | Existing shared utility — E2/E3 use it for per-canopy resume | REUSE AS-IS |
-| `delivery_packaging.py` | Existing script — needs `--include-vegetation` flag and `collect_vegetation()` function added | MODIFY (additive only) |
-| Supabase migration | New tables + column additions | NEW migration file (never edit existing) |
+**Domain:** n8n workflow orchestration, event-driven pipeline triggers, multi-path processing routing
+**Researched:** 2026-03-05
+**Confidence:** HIGH (based on direct audit of all 18 scripts, 2 n8n workflow JSONs, folder watcher, ingest pipeline, and Supabase schema)
 
 ---
 
-## Recommended Project Structure
+## System Overview
+
+v3.0 adds three architectural layers on top of the existing v1.0/v2.0 pipeline:
+
+1. **Package Router** -- a new n8n workflow that receives ingest webhooks and fans out to per-path sub-workflows based on `package_type`
+2. **Path C Automation** -- MipMap photogrammetry launch, output harvesting, and ortho delivery to `mapping/`
+3. **Event-Driven Triggers** -- folder watcher and ingest sorter fire webhooks that replace manual CLI invocations
 
 ```
-drone-pipeline/
-├── canopy_detection.py        # E1 — NEW
-├── species_classification.py  # E2 — NEW
-├── health_assessment.py       # E3 — NEW
-├── vegetation_report.py       # E4 — NEW
-├── checkpoint.py              # shared utility — REUSE
-├── delivery_packaging.py      # MODIFY (add collect_vegetation + --include-vegetation)
-├── requirements.txt           # ADD: deepforest, torch, rasterio, geopandas, shapely,
-│                              #       reportlab, matplotlib, folium, openai
-├── tests/
-│   ├── test_canopy_detection.py      # NEW
-│   ├── test_species_classification.py # NEW
-│   ├── test_health_assessment.py     # NEW
-│   ├── test_vegetation_report.py     # NEW
-│   └── test_delivery_packaging.py    # UPDATE (add vegetation tests)
-└── .planning/
-    └── milestones/
-        └── v2.0-vegetation/
-            └── migration_001_vegetation.sql   # NEW — never edit applied migrations
+                        ┌────────────────────────────┐
+                        │   SD Card / Copy Event     │
+                        └─────────┬──────────────────┘
+                                  │
+                    ┌─────────────▼──────────────┐
+                    │   folder_watcher.py         │
+                    │   (watchdog + debounce)      │
+                    └─────────────┬──────────────┘
+                                  │ POST /webhook/folder-watcher
+                                  │ {folder_path, photo_count, video_count, has_ppk}
+                                  ▼
+                    ┌─────────────────────────────┐
+                    │   ingest_sorter.py           │
+                    │   (sequence sort → mission   │
+                    │    folders in Incoming/)      │
+                    └─────────────┬───────────────┘
+                                  │ POST /webhook/ingest
+                                  │ {mission_id, package_type, photo_count, video_count}
+                                  ▼
+              ┌───────────────────────────────────────────────┐
+              │              PACKAGE ROUTER (NEW)              │
+              │   n8n workflow: sentinel-package-router         │
+              │                                                 │
+              │   1. Receive ingest webhook                     │
+              │   2. Fetch mission from Supabase (drone_jobs)   │
+              │   3. Fetch processing_templates by package_type │
+              │   4. Create processing_jobs row with steps[]    │
+              │   5. Switch on package_type → fan out           │
+              └───────┬──────┬──────┬──────┬──────┬────────────┘
+                      │      │      │      │      │
+               ┌──────▼──┐ ┌─▼───┐ ┌▼────┐ ┌▼───┐ ┌▼────┐
+               │ Path A  │ │Path │ │Path │ │Path│ │Path │
+               │ RE Photo│ │  V  │ │  C  │ │ B  │ │  D  │
+               │ grade + │ │Video│ │MipMap│ │Con-│ │ADIAT│
+               │ deliver │ │pipe │ │ortho│ │str.│ │     │
+               └────┬────┘ └──┬──┘ └──┬──┘ └──┬─┘ └──┬──┘
+                    │         │       │       │      │
+                    ▼         ▼       ▼       ▼      ▼
+               delivery   delivery  ┌────────────────────┐
+               _packaging _packaging│ MipMap Output       │
+                                    │ Harvester (NEW)     │
+                                    │ copy ortho →        │
+                                    │ mapping/ folder     │
+                                    └────────┬───────────┘
+                                             │
+                                    ┌────────▼───────────┐
+                                    │ vegetation_enabled? │
+                                    │ (from template)     │
+                                    └───┬────────────┬───┘
+                                   YES  │            │ NO
+                                        ▼            ▼
+                                  Path E workflow   delivery
+                                  (existing v2.0)   _packaging
 ```
-
-**Mission folder structure additions:**
-
-```
-SAI_M0047_site_survey_20260218/
-├── photos/raw/
-├── photos/jpeg/
-├── mapping/
-│   └── odm_orthophoto.tif          # INPUT to E1 (from Path C output)
-├── vegetation/                      # NEW top-level subfolder
-│   ├── canopy_detections.gpkg       # E1 output (GeoPackage, source of truth)
-│   ├── canopy_detections.geojson    # E1 output (delivery copy)
-│   ├── species/
-│   │   └── crops/                  # E2 canopy patch crops (PNG tiles)
-│   ├── health/
-│   │   └── indices/                # E3 per-canopy VARI/ExG rasters (optional)
-│   └── report/
-│       ├── Sentinel_{address}_Vegetation_Report.pdf
-│       ├── Sentinel_{address}_Species_Map.png
-│       ├── Sentinel_{address}_Health_Map.png
-│       └── Sentinel_{address}_Interactive_Map.html  (premium)
-├── .checkpoint_canopy_detection.json    # tile-level resume
-├── .checkpoint_species_classification.json # per-canopy resume (API calls)
-└── .checkpoint_health_assessment.json   # per-canopy resume (Vision API calls)
-```
-
-### Structure Rationale
-
-- **`vegetation/` subfolder:** Mirrors existing conventions — `video/`, `photos/`, `mapping/` are top-level sibling folders. Keeps E outputs isolated from Path C ortho inputs.
-- **`canopy_detections.gpkg` as source of truth:** GeoPackage is the authoritative polygon store, updated by E2 and E3. The GeoJSON is a delivery copy written at the end, not the working file.
-- **`vegetation/report/` subfolder:** Isolates the 3-5 large output files from working data. delivery_packaging.py walks `vegetation/report/` for the delivery ZIP, not the full `vegetation/` tree.
-- **Checkpoint files in mission root:** Matches the established pattern (`.checkpoint_{script_name}.json` in mission folder root).
 
 ---
 
-## Architectural Patterns
+## Component Inventory: New vs Modified
 
-### Pattern 1: Script Contract (E1-E4 must match exactly)
+### NEW Components
 
-**What:** Every Path E script follows the same structural contract as the 14 existing scripts.
+| Component | Type | Purpose |
+|-----------|------|---------|
+| Package Router workflow | n8n workflow | Receives ingest webhook, routes by `package_type`, creates `processing_jobs` row |
+| Path A sub-workflow | n8n workflow | RE photo processing: color grade, delivery packaging |
+| Path V sub-workflow | n8n workflow | Video pipeline: metadata, QA, proxy, color grade, manual edit gate, export, delivery |
+| Path C sub-workflow | n8n workflow | MipMap launch, poll for completion, ortho harvest, status update |
+| Path B sub-workflow | n8n workflow | Construction hybrid routing (photos + mapping) |
+| Path D sub-workflow | n8n workflow | ADIAT routing (placeholder) |
+| `mipmap_launcher.py` | Python script | Generate task.json from mission photos, launch `reconstruct_full_engine.exe`, track PID |
+| `ortho_harvester.py` | Python script | Copy GeoTIFF from `D:/{uuid}/project/task/result/` to mission `mapping/` folder |
+| Folder watcher → Package Router webhook | Integration | New webhook endpoint connecting watcher to router |
 
-**Contract requirements:**
-```python
-"""
-Sentinel Aerial Inspections — [Script Title] (Step E[N])
+### MODIFIED Components
 
-[Description]
+| Component | Change | Risk |
+|-----------|--------|------|
+| `folder_watcher.py` | Change webhook URL from `/webhook/folder-watcher` to `/webhook/package-router` OR add second webhook to chain ingest_sorter automatically | LOW -- additive config change |
+| `ingest_sorter.py` | Webhook payload already includes `package_type` and `mission_id` -- no change needed to the script itself; the n8n endpoint it fires at needs to be the Package Router | LOW -- URL config only |
+| `delivery_packaging.py` | Already supports `--include-vegetation` and `--include-mapping` -- no changes needed for v3.0 | NONE |
+| Path E workflow (`path_e_workflow.json`) | Currently standalone with own trigger webhook; needs to become callable as a sub-workflow from the Package Router after Path C completes, OR keep as separate workflow triggered via internal HTTP call | LOW -- routing change only |
+| `ingest.py` | Refactor into `mipmap_launcher.py` -- extract task.json generation + engine launch into a script that follows the pipeline contract (argparse, JSON stdout, `PipelineStatusReporter`) | MEDIUM -- functional rewrite of existing code |
 
-Usage:
-    python script.py path/to/mission --mission-id UUID
-    python script.py path/to/mission --mission-id UUID --dry-run
-    python script.py path/to/mission --mission-id UUID --force
-"""
+### UNCHANGED Components
 
-# ─── CONFIG ───────────────────────────────────────────────────────
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-LOG_DIR = r"E:\Sentinel\logs"
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")   # E2, E3 only
-
-# Required argparse flags:
-# mission_path     (positional)
-# --mission-id     (required, Supabase UUID)
-# --dry-run        (action="store_true")
-# --force          (action="store_true", clears checkpoint)
-
-# Required exit codes:
-# 0 = success
-# 1 = partial failure (some canopies failed, others succeeded)
-# 2 = fatal failure (no output produced)
-
-# Required JSON stdout on success:
-# print(json.dumps({...summary...}))
-# n8n reads this via "Parse JSON" node
-```
-
-**JSON stdout shape for E1-E4:**
-```python
-# E1 output — n8n reads canopy_count to decide if E2 should run
-print(json.dumps({
-    "mission_id": mission_id,
-    "step": "veg_canopy_detection",
-    "canopy_count": int,
-    "gpkg_path": str,
-    "geojson_path": str,
-    "site_area_sqm": float,
-    "processing_time_seconds": float,
-    "status": "ok" | "partial" | "failed"
-}))
-
-# E2 output
-print(json.dumps({
-    "mission_id": mission_id,
-    "step": "veg_species_classification",
-    "classified_count": int,
-    "skipped_count": int,       # over max_canopies threshold
-    "api_calls_used": int,
-    "status": "ok" | "partial" | "failed"
-}))
-
-# E3 output
-print(json.dumps({
-    "mission_id": mission_id,
-    "step": "veg_health_assessment",
-    "assessed_count": int,
-    "needs_attention_count": int,
-    "avg_health_score": float,
-    "status": "ok" | "partial" | "failed"
-}))
-
-# E4 output
-print(json.dumps({
-    "mission_id": mission_id,
-    "step": "veg_report_generation",
-    "pdf_path": str,
-    "species_map_path": str,
-    "health_map_path": str,
-    "geojson_path": str,
-    "interactive_map_path": str | None,
-    "status": "ok" | "failed"
-}))
-```
-
-**When to use:** All 4 Path E scripts without exception.
-**Trade-offs:** Slightly more boilerplate per script, but n8n can use identical node patterns to parse all 4 outputs.
+| Component | Why Unchanged |
+|-----------|---------------|
+| All 4 Path E scripts (E1-E4) | Already have correct contracts; Package Router just triggers them via existing Path E workflow |
+| `checkpoint.py` | Shared utility, no changes needed |
+| `pipeline_status.py` | Already provides `PipelineStatusReporter` -- new scripts use it |
+| `pipeline_utils.py` | Shared constants, no changes |
+| `platform_detect.py` | Used by ingest_sorter, no changes |
+| `gdrive_upload.py` | Called by delivery_packaging, no changes |
+| `archive_sync.py` | Independent of pipeline routing |
+| All video scripts (V1-V7) | Called via Execute Command from Path V sub-workflow |
 
 ---
 
-### Pattern 2: Checkpoint Strategy (per-item key, atomic write)
+## Integration Points
 
-**What:** Use the existing `checkpoint.py` module unchanged. The checkpoint "completed items set" stores unique keys per item processed.
+### Integration Point 1: folder_watcher.py → Package Router
 
-**E1 — Tile-level checkpoint (moderate granularity):**
-```python
-from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
+**Current state:** `folder_watcher.py` fires POST to `/webhook/folder-watcher` with inventory JSON after 60s debounce. This webhook currently has no n8n workflow listening (Path E was triggered separately).
 
-SCRIPT_NAME = "canopy_detection"
-completed = load_checkpoint(mission_path, SCRIPT_NAME)
+**v3.0 change:** Two options:
 
-# Key = tile identifier (row_col or tile index)
-for tile_idx, tile in enumerate(tiles):
-    item_key = f"tile_{tile_idx}"
-    if item_key in completed:
-        log.info(f"  Skip (checkpoint): {item_key}")
-        continue
-
-    polygons = run_deepforest_on_tile(tile)
-    save_detections_to_gpkg(polygons, tile_idx)   # append to GeoPackage
-
-    completed.add(item_key)
-    save_checkpoint(mission_path, SCRIPT_NAME, completed)
+**Option A (Recommended): Two-stage webhook chain**
+```
+folder_watcher.py → POST /webhook/folder-watcher
+                     └→ n8n: "Ingest Trigger" workflow
+                        ├── runs ingest_sorter.py via Execute Command
+                        │   (sorts files into mission folders)
+                        └── for each mission sorted:
+                            POST /webhook/package-router {mission_id, package_type, ...}
 ```
 
-**E2 — Per-canopy checkpoint (CRITICAL — API calls expensive):**
-```python
-SCRIPT_NAME = "species_classification"
-completed = load_checkpoint(mission_path, SCRIPT_NAME)
-
-# Key = detection_id (UUID from Supabase vegetation_detections)
-for detection in fetch_unclassified_canopies(client, mission_id):
-    item_key = detection["id"]
-    if item_key in completed:
-        continue
-
-    crop = extract_crop(ortho, detection["geometry_wkt"])
-    result = call_openai_vision(crop)
-    result = cross_validate_plantnet(crop, result)   # if not skipped
-
-    update_detection(client, detection["id"], species_tag=result)
-
-    completed.add(item_key)
-    save_checkpoint(mission_path, SCRIPT_NAME, completed)   # write after EVERY canopy
+**Option B: Direct to Package Router**
 ```
-
-**E3 — Per-canopy checkpoint (Vision API calls):**
-```python
-SCRIPT_NAME = "health_assessment"
-completed = load_checkpoint(mission_path, SCRIPT_NAME)
-
-# Key = detection_id
-for detection in fetch_canopies_without_health(client, mission_id):
-    item_key = detection["id"]
-    if item_key in completed:
-        continue
-
-    health = compute_vari_exg(ortho, detection["geometry_wkt"])
-    if not args.skip_vision and should_sample_vision(detection, sample_pct):
-        health = enrich_with_vision(crop, health)
-
-    update_detection(client, detection["id"], health_score=health)
-
-    completed.add(item_key)
-    save_checkpoint(mission_path, SCRIPT_NAME, completed)
+folder_watcher.py → POST /webhook/package-router
 ```
+Problem: folder_watcher.py does not know `mission_id` or `package_type` -- it only sees raw folder inventory. The ingest_sorter step is needed first.
 
-**E4 — No checkpoint needed:**
-E4 is a single-pass aggregation + render job. It reads all prior outputs (already persisted in Supabase) and generates the report files. No per-item loop to resume. If E4 fails mid-render, it re-renders from scratch. The detection data in Supabase is the durable state.
+**Decision: Option A.** The folder watcher fires the Ingest Trigger workflow, which runs `ingest_sorter.py`, and then the ingest_sorter's webhook fires the Package Router. This preserves the existing separation of concerns and does not require changing `folder_watcher.py` at all.
 
-**When to use:** E1 for tile loops, E2 and E3 for every external API call, E4 skip.
-**Trade-offs:** Checkpoint file on every single canopy in E2/E3 adds small I/O overhead but the cost of an OpenAI Vision call (~$0.02/image) far outweighs the cost of a JSON write.
-
----
-
-### Pattern 3: Supabase as Accumulating State (E1 seeds, E2/E3 update, E4 reads)
-
-**What:** The `vegetation_detections` table is the shared state store for the E pipeline. Each step adds columns to the same row rather than creating new tables per step.
-
-```
-E1 writes:  id, mission_id, detection_index, geometry_wkt, centroid_lat/lon,
-            canopy_area_sqm, canopy_width_m, canopy_height_m, detection_confidence
-
-E2 updates: species_tag, species_confidence, vegetation_type,
-            cross_validated, classification_details (JSONB)
-
-E3 updates: health_score, health_status, health_details (JSONB)
-
-E4 reads all columns, writes vegetation_analysis_summary
-```
-
-**Pattern for E2/E3 fetch (only unprocessed rows):**
-```python
-# E2 — fetch rows that have detection but no species_tag yet
-detections = (client.table("vegetation_detections")
-    .select("id, geometry_wkt, centroid_lat, centroid_lon")
-    .eq("mission_id", mission_id)
-    .is_("species_tag", "null")   # only unclassified
-    .execute())
-
-# This makes E2/E3 naturally idempotent regardless of checkpoint state:
-# if re-run, already-classified rows are simply not returned
-```
-
-**When to use:** Consistent with how video_qa.py fetches video_assets and updates qa_status.
-**Trade-offs:** Requires mission_id passed to every script. Double-protection: both checkpoint file (local) and Supabase null-column filter (remote) guard against redundant API calls.
-
----
-
-### Pattern 4: vegetation_config JSONB via processing_templates
-
-**What:** Mirror the `video_qa_thresholds` pattern already used by `video_qa.py`. Store E pipeline configuration as JSONB in `processing_templates.vegetation_config`, fetched at startup with hardcoded defaults as fallback.
-
-```python
-# Default config — matches PRD Section 8 configurable parameters
-DEFAULT_VEGETATION_CONFIG = {
-    "tile_size": 1024,           # E1
-    "score_threshold": 0.3,      # E1
-    "iou_threshold": 0.3,        # E1
-    "max_canopies": 200,         # E2
-    "skip_plantnet": False,       # E2
-    "vision_sample_pct": 0.3,    # E3
-    "skip_vision": False,         # E3
+**Webhook contract -- Ingest Trigger (existing, unchanged):**
+```json
+POST /webhook/folder-watcher
+{
+  "folder_path": "E:\\Sentinel\\Incoming\\SAI_M0047_site_survey_20260218",
+  "folder_name": "SAI_M0047_site_survey_20260218",
+  "mission_number": 47,
+  "photo_count": 250,
+  "video_count": 8,
+  "has_ppk_data": true,
+  "total_size_bytes": 145382400,
+  "detected_at": "2026-02-18T20:45:30Z"
 }
-
-def fetch_vegetation_config(client, mission_id):
-    """Fetch vegetation config from processing_templates.
-    Falls back to DEFAULT_VEGETATION_CONFIG if not found.
-    """
-    mission = client.table("missions").select("package_type").eq("id", mission_id).single().execute()
-    if not mission.data:
-        return DEFAULT_VEGETATION_CONFIG
-    package_type = mission.data.get("package_type")
-    template = (client.table("processing_templates")
-                .select("vegetation_config")
-                .eq("preset_name", package_type)
-                .single()
-                .execute())
-    if template.data and template.data.get("vegetation_config"):
-        return {**DEFAULT_VEGETATION_CONFIG, **template.data["vegetation_config"]}
-    return DEFAULT_VEGETATION_CONFIG
 ```
 
-**Each E script accepts `--config` JSON override** (same as `--thresholds` in video_qa.py):
-```bash
-python canopy_detection.py path/to/mission --mission-id UUID \
-  --config '{"tile_size": 512, "score_threshold": 0.4}'
+### Integration Point 2: ingest_sorter.py → Package Router
+
+**Current state:** `ingest_sorter.py` fires POST to `/webhook/ingest` with mission metadata after successful sort.
+
+**v3.0 change:** Point this webhook at the Package Router endpoint.
+
+**Webhook contract -- Package Router entry (from ingest_sorter.py):**
+```json
+POST /webhook/package-router
+{
+  "mission_id": "uuid-from-supabase",
+  "mission_number": 47,
+  "package_type": "site_survey",
+  "photo_count": 250,
+  "video_count": 8,
+  "has_ppk_data": true,
+  "source_platform": "m4e",
+  "ingested_at": "2026-02-18T20:46:30Z"
+}
 ```
 
-**When to use:** All 4 scripts, though E4 only needs `vision_sample_pct` and `skip_vision` for report coverage decisions.
-**Trade-offs:** Consistent with existing templates pattern. Operators adjust per-package behavior without touching scripts.
+The Package Router receives this and begins routing.
 
----
+### Integration Point 3: Package Router → Path Sub-Workflows
 
-## Data Flow
+**Routing logic (Switch node):**
 
-### End-to-End Path E Flow
+| package_type | Paths Activated | Steps Created in processing_jobs |
+|-------------|-----------------|----------------------------------|
+| `re_standard` | A | photo_color_grade, delivery_packaging |
+| `re_premium` | A + V | photo_color_grade, video_metadata, video_qa, video_proxy, video_color_grade, video_edit_gate, video_export, delivery_packaging |
+| `site_survey` | C + (E if veg_enabled) + A | mipmap_launch, ortho_harvest, (veg E1-E4 + review), photo_color_grade, delivery_packaging |
+| `environmental_survey` | C + E + A | mipmap_launch, ortho_harvest, veg E1-E4 + review, photo_color_grade, delivery_packaging |
+| `construction_hybrid` | C + A + (V if video) | mipmap_launch, ortho_harvest, photo_color_grade, (video pipeline if video_count > 0), delivery_packaging |
+| `adiat` | D + C + A | adiat_processing, mipmap_launch, ortho_harvest, photo_color_grade, delivery_packaging |
 
-```
-Ortho GeoTIFF (from Path C output)
-    │ mapping/odm_orthophoto.tif
-    ▼
-E1: canopy_detection.py
-    ├── Tile into 1024x1024 px overlapping windows
-    ├── Run DeepForest on each tile (GPU)
-    ├── Merge predictions, deduplicate via NMS
-    ├── Write → vegetation/canopy_detections.gpkg
-    ├── Upsert N rows → vegetation_detections (geometry, confidence, area)
-    ├── Update processing_steps: veg_canopy_detection = running → complete
-    └── stdout → JSON {canopy_count, gpkg_path, ...}
-    │
-    ▼ (n8n checks canopy_count > 0, else skip E2-E4)
-    │
-E2: species_classification.py
-    ├── Fetch unclassified rows from vegetation_detections (species_tag IS NULL)
-    ├── For each (up to max_canopies):
-    │   ├── Crop canopy patch from ortho (rasterio mask by geometry)
-    │   ├── Encode PNG to base64
-    │   ├── Call OpenAI Vision API (gpt-4o, structured output)
-    │   ├── Optionally call PlantNet API for cross-validation
-    │   └── Update vegetation_detections.species_tag, species_confidence, cross_validated
-    ├── Checkpoint after each detection (API call expensive)
-    └── stdout → JSON {classified_count, api_calls_used, ...}
-    │
-    ▼
-E3: health_assessment.py
-    ├── Fetch all detections for mission (with geometry)
-    ├── For each canopy:
-    │   ├── Mask ortho to canopy polygon (rasterio)
-    │   ├── Compute VARI = (G - R) / (G + R - B) per-pixel, average
-    │   ├── Compute ExG = 2G - R - B per-pixel, average
-    │   ├── Map indices → health_score (0-100), health_status (healthy/stressed/poor)
-    │   └── Optionally call OpenAI Vision (vision_sample_pct % of canopies)
-    ├── Update vegetation_detections.health_score, health_status, health_details
-    ├── Checkpoint after each detection
-    └── stdout → JSON {assessed_count, avg_health_score, needs_attention_count, ...}
-    │
-    ▼
-E4: vegetation_report.py
-    ├── Fetch all vegetation_detections for mission (complete, with species + health)
-    ├── Load canopy_detections.gpkg for map overlays
-    ├── Generate species_map.png (GeoPandas choropleth, colored by species)
-    ├── Generate health_map.png (GeoPandas choropleth, colored by health_status)
-    ├── Generate Interactive_Map.html (Folium, GeoJSON layer + species/health popups)
-    ├── Generate Vegetation_Report.pdf (ReportLab — cover, stats, maps, table, appendix)
-    ├── Copy canopy_detections.geojson from GeoPackage export
-    ├── Upsert 1 row → vegetation_analysis_summary
-    ├── Update missions.vegetation_status = 'complete'
-    └── stdout → JSON {pdf_path, species_map_path, health_map_path, ...}
-    │
-    ▼
-E5: n8n Review Gate
-    ├── Webhook wait node pauses workflow
-    ├── Operator reviews report in staging
-    └── POST /sentinel-vegetation-resume → n8n resumes → delivery_packaging.py
+**Execution model:** Paths can run in parallel where independent. Path C must complete before Path E can start (ortho dependency). Path A (photo grading) and Path V (video) are independent of Path C and can run concurrently.
+
+### Integration Point 4: Package Router → processing_jobs Creation
+
+**New pattern:** The Package Router creates a `processing_jobs` row before dispatching to any path. This is the orchestration record that all scripts report status to via `PipelineStatusReporter`.
+
+```json
+// processing_jobs row created by Package Router
+{
+  "id": "uuid",
+  "mission_id": "uuid",
+  "package_type": "site_survey",
+  "status": "running",
+  "steps": [
+    {"name": "photo_color_grade", "status": "pending"},
+    {"name": "mipmap_launch", "status": "pending"},
+    {"name": "ortho_harvest", "status": "pending"},
+    {"name": "veg_canopy_detection", "status": "pending"},
+    {"name": "veg_species_classification", "status": "pending"},
+    {"name": "veg_health_assessment", "status": "pending"},
+    {"name": "veg_report_generation", "status": "pending"},
+    {"name": "veg_review_gate", "status": "pending"},
+    {"name": "delivery_packaging", "status": "pending"}
+  ],
+  "created_at": "2026-03-05T...",
+  "started_at": "2026-03-05T..."
+}
 ```
 
-### Intermediate File Summary
+Each script receives `--processing-job-id` from the n8n Execute Command node and uses `PipelineStatusReporter` to update its step status. This pattern is already established and used by all v1.0 scripts.
 
-| File | Written By | Read By | Format |
-|------|-----------|---------|--------|
-| `mapping/odm_orthophoto.tif` | Path C (WebODM) | E1, E2, E3 | Cloud-optimized GeoTIFF |
-| `vegetation/canopy_detections.gpkg` | E1 | E4 (map overlays) | GeoPackage (local source of truth) |
-| `vegetation/canopy_detections.geojson` | E4 (export) | delivery_packaging.py | GeoJSON (delivery copy) |
-| `vegetation/species/crops/` | E2 (optional) | none after E2 | PNG tiles (temp, not delivered) |
-| `vegetation/report/Vegetation_Report.pdf` | E4 | delivery_packaging.py | PDF |
-| `vegetation/report/Species_Map.png` | E4 | delivery_packaging.py | PNG |
-| `vegetation/report/Health_Map.png` | E4 | delivery_packaging.py | PNG |
-| `vegetation/report/Interactive_Map.html` | E4 | delivery_packaging.py | HTML |
-| `.checkpoint_canopy_detection.json` | E1 (checkpoint.py) | E1 | JSON |
-| `.checkpoint_species_classification.json` | E2 (checkpoint.py) | E2 | JSON |
-| `.checkpoint_health_assessment.json` | E3 (checkpoint.py) | E3 | JSON |
+### Integration Point 5: Path C -- MipMap Launch and Output Harvesting
 
-**Key insight:** The ortho GeoTIFF is potentially 500MB-5GB. E1, E2, and E3 all open it via `rasterio` with windowed reads (not loading fully into RAM). Never copy it — read in place from `mapping/`.
+**This is the most complex new integration.** `ingest.py` already contains all the MipMap task.json generation logic but does NOT follow the pipeline contract. It needs to be refactored into two contract-compliant scripts:
 
----
+**Step C1: `mipmap_launcher.py`** (refactored from `ingest.py`)
+```
+Input:  mission_path (with photos/jpeg/ populated by ingest_sorter)
+Output: JSON stdout with workspace paths
 
-## Supabase Integration
-
-### New Tables
-
-**`vegetation_detections`** — written by E1, updated by E2 and E3
-
-```sql
-CREATE TABLE vegetation_detections (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    mission_id              UUID NOT NULL REFERENCES missions(id) ON DELETE CASCADE,
-    detection_index         INTEGER NOT NULL,  -- ordered 0..N within mission
-    geometry_wkt            TEXT NOT NULL,     -- WKT polygon (EPSG:4326)
-    centroid_lat            DOUBLE PRECISION,
-    centroid_lon            DOUBLE PRECISION,
-
-    -- E1 outputs
-    canopy_area_sqm         DOUBLE PRECISION,
-    canopy_width_m          DOUBLE PRECISION,
-    canopy_height_m         DOUBLE PRECISION,
-    detection_confidence    DOUBLE PRECISION,
-
-    -- E2 outputs (NULL until classified)
-    species_tag             TEXT,
-    species_confidence      DOUBLE PRECISION,
-    vegetation_type         TEXT,             -- 'tree' | 'shrub' | 'groundcover'
-    cross_validated         BOOLEAN DEFAULT FALSE,
-    classification_details  JSONB,
-
-    -- E3 outputs (NULL until assessed)
-    health_score            DOUBLE PRECISION, -- 0.0 to 100.0
-    health_status           TEXT,             -- 'healthy' | 'stressed' | 'poor'
-    health_details          JSONB,            -- vari, exg, vision_notes, etc.
-
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_veg_detections_mission ON vegetation_detections(mission_id);
-CREATE INDEX idx_veg_detections_species ON vegetation_detections(mission_id, species_tag);
-CREATE INDEX idx_veg_detections_health  ON vegetation_detections(mission_id, health_status);
+1. Scan mission photos/jpeg/ for JPGs with EXIF/GPS
+2. Build task.json (reuse ingest.py functions)
+3. Create D:/ workspace (reuse ingest.py create_workspace)
+4. Launch reconstruct_full_engine.exe --task_json=... (subprocess.Popen)
+5. Write workspace metadata to mission folder (.mipmap_workspace.json)
+6. JSON stdout: {task_dir, result_dir, workspace_id, pid, status: "launched"}
 ```
 
-**`vegetation_analysis_summary`** — written by E4, one row per mission
-
-```sql
-CREATE TABLE vegetation_analysis_summary (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    mission_id              UUID NOT NULL UNIQUE REFERENCES missions(id) ON DELETE CASCADE,
-
-    -- Site metrics
-    site_area_sqm           DOUBLE PRECISION,
-    site_area_acres         DOUBLE PRECISION,
-    total_canopy_count      INTEGER,
-    canopy_coverage_pct     DOUBLE PRECISION,
-
-    -- Species summary
-    unique_species_count    INTEGER,
-    species_distribution    JSONB,  -- {"oak": 12, "pine": 8, "unknown": 5}
-
-    -- Health summary
-    avg_health_score        DOUBLE PRECISION,
-    health_distribution     JSONB,  -- {"healthy": 18, "stressed": 5, "poor": 2}
-    needs_attention_count   INTEGER,
-
-    -- API usage (for cost tracking)
-    api_calls_total         INTEGER,
-    processing_time_seconds DOUBLE PRECISION,
-
-    -- Output file paths
-    pdf_report_path         TEXT,
-    species_map_path        TEXT,
-    health_map_path         TEXT,
-    geojson_path            TEXT,
-    interactive_map_path    TEXT,   -- NULL for standard tier
-
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+**Step C2: MipMap Completion Polling** (n8n workflow nodes, NOT a Python script)
+```
+n8n poll loop (same pattern as Path E ortho polling):
+1. Wait N seconds
+2. Check if result/ folder contains orthomosaic GeoTIFF
+3. If found → proceed to C3
+4. If not found and attempts < max → loop
+5. If timeout → mark failed
 ```
 
-### Schema Modifications
+**Step C3: `ortho_harvester.py`** (NEW script)
+```
+Input:  mission_path, workspace metadata from .mipmap_workspace.json
+Output: JSON stdout with ortho path
 
-**`missions` table additions:**
-```sql
-ALTER TABLE missions
-    ADD COLUMN vegetation_analysis BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN vegetation_status   TEXT     CHECK (vegetation_status IN
-        ('pending', 'running', 'review', 'complete', 'failed'));
+1. Read .mipmap_workspace.json for result_dir
+2. Find GeoTIFF in result_dir (glob for *.tif)
+3. Copy to mission_path/mapping/orthomosaic.tif
+4. Verify file integrity (rasterio.open, check bands/CRS)
+5. Update Supabase drone_jobs.output_path
+6. JSON stdout: {ortho_path, file_size_bytes, crs_epsg, status: "ok"}
 ```
 
-**`processing_templates` table additions:**
-```sql
-ALTER TABLE processing_templates
-    ADD COLUMN vegetation_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN vegetation_config  JSONB;
-
--- Seed config for site_survey and environmental_survey
-UPDATE processing_templates
-SET    vegetation_enabled = TRUE,
-       vegetation_config  = '{
-           "tile_size": 1024,
-           "score_threshold": 0.3,
-           "iou_threshold": 0.3,
-           "max_canopies": 200,
-           "skip_plantnet": false,
-           "vision_sample_pct": 0.3,
-           "skip_vision": false
-       }'::jsonb
-WHERE  preset_name IN ('site_survey', 'environmental_survey');
+**MipMap workspace structure (from ingest.py audit):**
+```
+D:/{user_uuid}/
+├── {project_name}/
+│   └── {task_name}/
+│       ├── task.json         ← input to reconstruct_full_engine.exe
+│       ├── info.json
+│       └── result/
+│           ├── orthomosaic.tif    ← OUTPUT: GeoTIFF to harvest
+│           ├── 3d_tiles/
+│           ├── point_cloud.las
+│           └── ...
+├── indexes.json
+├── project_index.json
+└── task_index.json
 ```
 
-**`processing_steps` — new step_name values (no schema change needed, just new values inserted by scripts):**
-- `veg_canopy_detection`
-- `veg_species_classification`
-- `veg_health_assessment`
-- `veg_report_generation`
+**Key finding from ingest.py:** The workspace root is `D:/` with UUID subdirectories. The result directory is `D:/{user_uuid}/{project_name}/{task_name}/result/`. The GeoTIFF output filename from MipMap is not fixed -- it could be `orthomosaic.tif`, `dom.tif`, or similar. The harvester must glob for `*.tif` and identify the orthomosaic by file size (largest TIF) or metadata.
 
-**Note on processing_steps usage:** The existing codebase does NOT currently write to `processing_steps` from Python scripts (no grep hits). The table is referenced in the PRD as planned. Path E should be the first pipeline layer to actively write step status. Each E script should upsert a `processing_steps` row with `status = 'running'` at startup and `status = 'complete'` or `'failed'` on exit. This establishes the pattern for future scripts.
+### Integration Point 6: Path C Complete → Path E Trigger
 
-**processing_steps upsert pattern for E scripts:**
-```python
-def upsert_processing_step(client, mission_id, step_name, status, details=None):
-    """Update processing step status. Non-fatal if Supabase unavailable."""
-    try:
-        client.table("processing_steps").upsert({
-            "mission_id": mission_id,
-            "step_name": step_name,
-            "status": status,
-            "details": details or {},
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }, on_conflict="mission_id,step_name").execute()
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"processing_steps update failed (non-fatal): {e}")
-```
+**Current state:** Path E workflow (`path_e_workflow.json`) has its own webhook trigger at `/sentinel-vegetation-trigger` and polls for ortho existence internally (E0 poll loop).
 
----
+**v3.0 change:** The Package Router's Path C branch should fire the Path E trigger AFTER ortho harvesting completes, eliminating the need for E0 polling. Two approaches:
 
-## n8n Workflow Integration
-
-### Path E Attachment to Package Router
-
-The existing n8n Package Router node inspects `package_type` from the ingest webhook and routes to Paths A, B, C, D, or V. Path E attaches **after Path C completes** (ortho exists) as a conditional branch, not as a new top-level route.
-
+**Option A (Recommended): Package Router fires Path E webhook after C3**
 ```
 Package Router
-  ├── Path A (RE photos)
-  ├── Path B (construction)
-  ├── Path C (mapping/WebODM) ──→ [C Complete?] ──→ [Veg Enabled?] ──→ Path E
-  ├── Path D (ADIAT)
-  └── Path V (video)
+  └── Path C branch
+      ├── C1: mipmap_launcher.py
+      ├── C2: Poll for MipMap completion (n8n Wait + Check loop)
+      ├── C3: ortho_harvester.py (copies ortho to mapping/)
+      └── IF vegetation_enabled:
+          └── POST /sentinel-vegetation-trigger {mission_id}
+              └── Path E workflow runs E0-E5 (E0 ortho check succeeds immediately)
 ```
 
-**n8n Path E node sequence:**
+This keeps the Path E workflow fully independent and testable. The E0 ortho polling still works as a safety net but will find the ortho on the first check since C3 already placed it.
+
+**Option B: Merge Path E into Package Router as inline nodes**
+Not recommended -- Path E is already 35 nodes and works independently. Merging creates a monolithic workflow.
+
+### Integration Point 7: Path V -- Video Pipeline Orchestration
+
+**The video pipeline has 7 existing scripts that run sequentially:**
 
 ```
-E0: Check Ortho
-    IF: missions.vegetation_analysis = TRUE
-    AND: mapping/odm_orthophoto.tif exists (file system check)
-    → trigger Path E | else: skip
-
-E1: Execute Command
-    cmd: python canopy_detection.py {{mission_path}} --mission-id {{mission_id}}
-    → Parse JSON output → store canopy_count
-
-E1 Gate: IF canopy_count == 0
-    → Set missions.vegetation_status = 'failed' (no canopies found)
-    → Send operator notification "No canopy detected"
-    → End Path E (do not run E2-E4)
-
-E2: Execute Command
-    cmd: python species_classification.py {{mission_path}} --mission-id {{mission_id}}
-    → Parse JSON output → store classified_count
-
-E3: Execute Command
-    cmd: python health_assessment.py {{mission_path}} --mission-id {{mission_id}}
-    → Parse JSON output → store avg_health_score
-
-E4: Execute Command
-    cmd: python vegetation_report.py {{mission_path}} --mission-id {{mission_id}}
-    → Parse JSON output → store pdf_path
-
-E5: Review Gate (Webhook Wait)
-    → Send operator notification with pdf_path (link to report)
-    → Webhook: POST /sentinel-vegetation-resume {mission_id, approved: true|false}
-    IF approved:
-        → delivery_packaging.py --include-vegetation
-    ELSE:
-        → Set missions.vegetation_status = 'failed'
-        → Log rejection reason
+V1: video_metadata.py → V2: video_qa.py → V3: video_proxy_gen.py →
+V4: video_color_grade.py → V5: [DaVinci Resolve manual edit] →
+V6: video_format_export.py → V7: delivery_packaging.py --video-addendum
 ```
 
-**Review gate pattern:** Follows n8n's native "Wait" node capability. The workflow pauses after E4, n8n sends an operator notification (email or Slack), and the operator reviews the PDF report before approving delivery inclusion. The resume webhook re-enters the workflow at the approved/rejected branch.
+**v3.0 approach:** Wrap each as an Execute Command node in the Path V sub-workflow, with a Webhook Wait gate at V5 (manual edit step).
 
-**On E script failure (non-zero exit code from Execute Command):**
-- n8n treats non-zero exit as step failure
-- Workflow should catch error path, set `missions.vegetation_status = 'failed'`, notify operator
-- Path E failure must NOT block delivery of the main package (photos/video) — Path E is an addendum
+**V5 gate pattern:**
+```
+V4 completes → n8n sets processing_jobs step "video_edit_gate" to "awaiting_manual_edit"
+             → Webhook Wait at /sentinel-video-resume
+             → Operator edits in DaVinci Resolve, exports to video/master/
+             → POST /sentinel-video-resume {mission_id, approved: true}
+             → V6 resumes
+```
+
+This mirrors the existing E5 review gate pattern.
+
+### Integration Point 8: Path A -- Photo Processing
+
+**Simplest path.** RE photos need only color grading and delivery packaging.
+
+```
+A1: video_color_grade.py (handles photos too via --mode photo) OR
+    just skip if package already has graded JPEGs from DJI
+A2: delivery_packaging.py --address "..." --city "..."
+```
+
+**Note:** `video_color_grade.py` is misnamed -- audit shows it processes both video and photo LUT application. For RE packages with no video, Path A is just delivery packaging of the sorted photos.
 
 ---
 
-## Delivery Packaging Integration
+## Data Flow by Path
 
-### Strategy: Additive modification to delivery_packaging.py
+### Path A (RE Photos)
 
-Add a `collect_vegetation()` function and `--include-vegetation` flag. No changes to existing collection logic. Matches the same pattern used by `--include-mapping` and `--include-reports`.
-
-**New function:**
-```python
-def collect_vegetation(mission_path):
-    """Collect vegetation analysis outputs for delivery.
-
-    Returns list of (source_path, archive_name) tuples for vegetation/ subfolder.
-    Always included: PDF, Species Map, Health Map, GeoJSON.
-    Conditionally included: Interactive HTML (if present = premium tier).
-    """
-    report_dir = os.path.join(mission_path, "vegetation", "report")
-    if not os.path.isdir(report_dir):
-        return []
-
-    results = []
-    # Ordered by expected client value
-    for fname in sorted(os.listdir(report_dir)):
-        src = os.path.join(report_dir, fname)
-        if not os.path.isfile(src):
-            continue
-        # Include all files in vegetation/report/ — E4 only writes the 4-5 expected files
-        archive_name = f"vegetation/{fname}"
-        results.append((src, archive_name))
-
-    # Also include GeoJSON from vegetation/ root (not in report/)
-    geojson = os.path.join(mission_path, "vegetation", "canopy_detections.geojson")
-    if os.path.isfile(geojson):
-        results.append((geojson, "vegetation/canopy_detections.geojson"))
-
-    return results
+```
+ingest_sorter → photos sorted to photos/jpeg/
+                     │
+                     ▼
+              delivery_packaging.py
+              --address "..." --city "..."
+                     │
+                     ▼
+              Sentinel_{address}_{date}.zip → Google Drive
 ```
 
-**New argparse flag:**
-```python
-parser.add_argument("--include-vegetation", action="store_true",
-                    help="Include vegetation analysis outputs (PDF, maps, GeoJSON)")
+### Path V (Video)
+
+```
+ingest_sorter → video sorted to video/full/, video/proxy/
+                     │
+        ┌────────────▼────────────────────────────────┐
+        │ V1: video_metadata.py                       │
+        │ V2: video_qa.py                             │
+        │ V3: video_proxy_gen.py                      │
+        │ V4: video_color_grade.py                    │
+        │ ── V5 GATE: DaVinci Resolve manual edit ──  │
+        │ V6: video_format_export.py                  │
+        │ V7: delivery_packaging.py --video-addendum  │
+        └─────────────────────────────────────────────┘
 ```
 
-**Integration in full delivery mode:**
-```python
-# In existing full delivery block:
-if args.include_vegetation:
-    vegetation = collect_vegetation(mission_path)
-    veg_count = len(vegetation)
-    for vpath, archive_name in vegetation:
-        manifest.append((vpath, archive_name))
+### Path C (Mapping/MipMap)
+
+```
+ingest_sorter → photos sorted to photos/jpeg/
+                     │
+        ┌────────────▼───────────────────────────────────────┐
+        │ C1: mipmap_launcher.py                             │
+        │     - Scan photos, extract EXIF/XMP/GPS            │
+        │     - Build task.json with camera calibration       │
+        │     - Create D:/ workspace                          │
+        │     - Launch reconstruct_full_engine.exe            │
+        │     - Write .mipmap_workspace.json to mission dir   │
+        │                                                      │
+        │ C2: n8n Poll Loop (Wait 60s + check result/)        │
+        │     - Check D:/{uuid}/.../result/ for *.tif         │
+        │     - MipMap processing takes 15-90 min              │
+        │     - Max 120 attempts = 2 hour timeout              │
+        │                                                      │
+        │ C3: ortho_harvester.py                               │
+        │     - Copy GeoTIFF from D:/ workspace → mapping/    │
+        │     - Verify CRS and band count via rasterio         │
+        │     - Update drone_jobs.output_path in Supabase      │
+        │     - JSON stdout: {ortho_path, crs_epsg, size_mb}  │
+        └──────────────────┬─────────────────────────────────┘
+                           │
+                ┌──────────▼──────────┐
+                │ vegetation_enabled? │
+                │ (processing_templates│
+                │  .vegetation_enabled)│
+                └───┬────────────┬────┘
+               YES  │            │ NO
+                    ▼            ▼
+              POST to Path E   continue to
+              webhook          delivery
 ```
 
-**ZIP structure with vegetation:**
+### Path C → E Combined Flow
+
 ```
-Sentinel_123_Main_St_Virginia_Beach_20260218.zip
-├── photos/
-│   └── Sentinel_123_Main_St_Virginia_Beach_001.jpg
-├── video/
-│   └── Sentinel_123_Main_St_Virginia_Beach_PropertyTour_YouTube.mp4
-├── mapping/
-│   └── Sentinel_123_Main_St_Virginia_Beach_Orthophoto.tif
-└── vegetation/
-    ├── Sentinel_123_Main_St_Virginia_Beach_Vegetation_Report.pdf
-    ├── Sentinel_123_Main_St_Virginia_Beach_Species_Map.png
-    ├── Sentinel_123_Main_St_Virginia_Beach_Health_Map.png
-    ├── Sentinel_123_Main_St_Virginia_Beach_Interactive_Map.html  (premium)
-    └── canopy_detections.geojson
-```
-
-**Note on naming:** E4 writes report files using the address prefix at generation time (it receives `--address` and `--city` as arguments, same as delivery_packaging.py). The `collect_vegetation()` function collects them as-is — no renaming needed inside delivery_packaging.py.
-
-**Alternative approach:** delivery_packaging.py passes `--address` to E4 (or E4 reads it from Supabase `missions.address`). Confirm which approach at implementation time. Recommend reading from Supabase to avoid requiring extra CLI args on E4.
-
----
-
-## Error Handling (Path E Unique Failure Modes)
-
-### Critical: GPU OOM (E1 DeepForest inference)
-
-**What goes wrong:** RTX 5070 has 12GB VRAM. Large orthomosaics (>200MP) may OOM during tile inference if tiles are too large or batch size is too high.
-
-**Prevention pattern:**
-```python
-# E1 — catch CUDA OOM, retry with smaller tile
-try:
-    predictions = model.predict_tile(raster_path, patch_size=tile_size, ...)
-except RuntimeError as e:
-    if "CUDA out of memory" in str(e) or "CUDA" in str(e):
-        torch.cuda.empty_cache()
-        log.warning(f"GPU OOM on tile {tile_idx}, retrying with half patch_size")
-        try:
-            predictions = model.predict_tile(raster_path, patch_size=tile_size // 2, ...)
-        except RuntimeError:
-            log.error(f"GPU OOM persists on tile {tile_idx} after retry — skipping tile")
-            # Mark tile as failed but continue pipeline (partial result is better than abort)
-```
-
-**Exit behavior:** If >50% of tiles OOM, exit code 2 (fatal). If <50% OOM (partial result), exit code 1, still write partial GeoPackage, let n8n operator decide.
-
----
-
-### Critical: API Rate Limits (E2 PlantNet, E2/E3 OpenAI)
-
-**What goes wrong:**
-- PlantNet free tier: 500 requests/day. 200-canopy mission = 200 PlantNet calls. Could hit daily limit mid-mission.
-- OpenAI Vision: Rate limits are per-minute (TPM/RPM). 200 canopies at ~2s each = ~7 minutes. Should stay within limits but burst protection needed.
-
-**Prevention pattern for E2:**
-```python
-import time
-
-PLANTNET_DAILY_LIMIT = 500
-OPENAI_RETRY_DELAYS = [1, 2, 4, 8]  # exponential backoff, seconds
-
-def call_openai_vision_with_retry(crop_b64, max_retries=4):
-    for attempt, delay in enumerate(OPENAI_RETRY_DELAYS):
-        try:
-            return call_openai_vision(crop_b64)
-        except openai.RateLimitError:
-            if attempt < max_retries - 1:
-                log.warning(f"OpenAI rate limit, retrying in {delay}s...")
-                time.sleep(delay)
-            else:
-                raise
-        except openai.APIError as e:
-            log.error(f"OpenAI API error: {e}")
-            return None   # non-fatal: continue with unknown species
-
-def call_plantnet_with_limit_check(crop_path, calls_used):
-    if calls_used >= PLANTNET_DAILY_LIMIT:
-        log.warning("PlantNet daily limit reached — skipping cross-validation for remaining canopies")
-        return None
-    try:
-        return call_plantnet(crop_path)
-    except Exception as e:
-        log.warning(f"PlantNet call failed (non-fatal): {e}")
-        return None
-```
-
-**Checkpoint is the safety net:** If rate-limited mid-run, E2 exits with code 1 (partial). n8n can retry E2 the next day and the checkpoint will skip already-classified canopies.
-
----
-
-### Moderate: No Canopies Detected (E1 returns count=0)
-
-**What goes wrong:** Mission has low-GSD imagery, non-vegetated site, or DeepForest score_threshold too high. E1 completes successfully but writes 0 rows to `vegetation_detections`.
-
-**Prevention pattern:**
-```python
-# E1 stdout includes canopy_count
-# n8n reads canopy_count and branches:
-# IF canopy_count == 0:
-#   → update missions.vegetation_status = 'failed'
-#   → notify operator: "No canopy detected. Check GSD and score_threshold."
-#   → skip E2, E3, E4
-#   → do NOT include vegetation/ in delivery ZIP
-```
-
-**This is not an error in E1** — E1 exits 0 (success) with canopy_count=0. The zero count is informational. The n8n workflow gate decides whether to continue.
-
----
-
-### Moderate: Ortho Not Found (E0 pre-check fails)
-
-**What goes wrong:** Path E triggered but Path C has not finished, or ortho file is in a non-standard location.
-
-**E0 pre-check in n8n:**
-```python
-# canopy_detection.py validates ortho exists before doing anything:
-ortho_candidates = [
-    os.path.join(mission_path, "mapping", "odm_orthophoto.tif"),
-    os.path.join(mission_path, "mapping", "orthophoto.tif"),
-]
-ortho_path = next((p for p in ortho_candidates if os.path.isfile(p)), None)
-if not ortho_path:
-    log.error("No orthophoto found in mapping/. Run Path C (WebODM) first.")
-    sys.exit(2)
+C3 ortho in mapping/
+        │
+        ▼
+E0: Check ortho exists (immediate success since C3 placed it)
+E1: canopy_detection.py
+E2: species_classification.py
+E3: health_assessment.py
+E4: vegetation_report.py
+E5: Review Gate (Webhook Wait at /sentinel-vegetation-resume)
+        │ approved
+        ▼
+delivery_packaging.py --include-mapping --include-vegetation
 ```
 
 ---
 
-### Moderate: Corrupt or Low-GSD Ortho
+## Webhook URL Registry
 
-**What goes wrong:** Ortho opens successfully but GSD is too large (>5cm/px) for reliable DeepForest detection. This is OQ2 from the PRD.
+All webhook endpoints in the v3.0 system:
 
-**Prevention:**
-```python
-# E1 — check GSD before inference
-with rasterio.open(ortho_path) as src:
-    pixel_size_m = abs(src.transform.a)  # x-resolution in meters
-    gsd_cm = pixel_size_m * 100
+| Webhook Path | Sender | Receiver | Payload |
+|-------------|--------|----------|---------|
+| `/webhook/folder-watcher` | `folder_watcher.py` | Ingest Trigger workflow (NEW) | `{folder_path, folder_name, mission_number, photo_count, video_count, has_ppk_data, total_size_bytes}` |
+| `/webhook/package-router` | `ingest_sorter.py` (retarget) | Package Router workflow (NEW) | `{mission_id, mission_number, package_type, photo_count, video_count, has_ppk_data, source_platform}` |
+| `/sentinel-vegetation-trigger` | Package Router (after C3) | Path E workflow (EXISTING) | `{mission_id}` |
+| `/sentinel-vegetation-resume` | Operator (review) | Path E workflow (EXISTING) | `{mission_id, decisions: [{detection_id, action}]}` |
+| `/sentinel-video-resume` | Operator (after V5 edit) | Path V sub-workflow (NEW) | `{mission_id, approved: bool}` |
 
-    if gsd_cm > MAX_GSD_CM:  # recommend 5cm threshold from research
-        log.warning(f"Ortho GSD {gsd_cm:.1f}cm exceeds recommended {MAX_GSD_CM}cm. "
-                    f"Detection accuracy may be reduced.")
-        # Continue with warning — operator decides at review gate
+**Environment variables for webhook URLs:**
+```
+N8N_BASE_URL=http://localhost:5678
+N8N_WEBHOOK_URL=http://localhost:5678/webhook/package-router  (ingest_sorter target)
 ```
 
 ---
 
-### Minor: Report Generation Failures (E4 font/library issues)
+## Supabase Schema Integration
 
-**What goes wrong:** ReportLab PDF generation can fail on missing fonts or Folium map tile fetch failures.
+### Existing Tables Used by Package Router
 
-**Prevention:** E4 should use embedded fonts (no system font dependency) and generate Folium with local tile provider (OSM tiles, or offline leaflet via CDN in HTML). If interactive map generation fails, E4 logs warning and continues — the PDF and PNG maps are the minimum deliverable.
+| Table | How Router Uses It |
+|-------|-------------------|
+| `drone_jobs` (aka missions) | Fetch mission metadata (package_type, vegetation_analysis, output_path) |
+| `processing_templates` | Fetch template by package_type (vegetation_enabled, vegetation_config, video_formats) |
+| `processing_jobs` | CREATE new row with steps[] array; all scripts update via PipelineStatusReporter |
+| `processing_steps` | Path E inserts step rows (existing pattern from v2.0) |
+| `vegetation_detections` | Written by E1-E3, read by E4 (existing, no changes) |
+| `vegetation_analysis_summary` | Written by E4 (existing, no changes) |
+| `video_assets` | Written by V1, updated by V2/V6 (existing, no changes) |
+
+### New Supabase Additions for v3.0
+
+**`processing_templates` -- add columns for all paths:**
+```sql
+ALTER TABLE processing_templates
+    ADD COLUMN IF NOT EXISTS photo_steps JSONB DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS video_steps JSONB DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS mapping_enabled BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS mapping_config JSONB DEFAULT '{}'::jsonb;
+
+-- mapping_config example:
+-- {
+--   "quality_level": 2,      -- 1=Ultra, 2=High, 3=Medium (maps to resolution_level)
+--   "generate_3d_tiles": true,
+--   "generate_las": true,
+--   "generate_geotiff": true,
+--   "timeout_minutes": 120
+-- }
+```
+
+**`drone_jobs` -- add MipMap workspace tracking:**
+```sql
+ALTER TABLE drone_jobs
+    ADD COLUMN IF NOT EXISTS mipmap_workspace JSONB;
+
+-- Stores: {user_id, project_name, task_name, task_dir, result_dir, pid, launched_at}
+-- Written by mipmap_launcher.py, read by ortho_harvester.py
+```
 
 ---
 
-## Integration Points Summary
+## New Script Contracts
 
-### New vs Modified
+### mipmap_launcher.py (Step C1)
 
-| Item | New or Modified | Notes |
-|------|----------------|-------|
-| `canopy_detection.py` | NEW | E1 script |
-| `species_classification.py` | NEW | E2 script |
-| `health_assessment.py` | NEW | E3 script |
-| `vegetation_report.py` | NEW | E4 script |
-| `delivery_packaging.py` | MODIFIED | Add `collect_vegetation()` + `--include-vegetation` flag. Additive only. |
-| `requirements.txt` | MODIFIED | Add deepforest, torch, rasterio, geopandas, shapely, shapely, openai, reportlab, matplotlib, folium |
-| `vegetation_detections` table | NEW | Supabase — new migration file |
-| `vegetation_analysis_summary` table | NEW | Supabase — same migration file |
-| `missions.vegetation_analysis` column | NEW | Supabase — same migration |
-| `missions.vegetation_status` column | NEW | Supabase — same migration |
-| `processing_templates.vegetation_enabled` column | NEW | Supabase — same migration |
-| `processing_templates.vegetation_config` column | NEW | Supabase — same migration |
-| `checkpoint.py` | REUSE AS-IS | No changes needed |
-| n8n Package Router | MODIFIED | Add Path E branch after Path C completion |
-| n8n — new Path E workflow | NEW | E0-E5 nodes with review gate webhook |
+```python
+"""
+Sentinel Aerial Inspections -- MipMap Photogrammetry Launch (Step C1)
 
-### External Service Boundaries
+Generates task.json from mission photos and launches MipMap reconstruct engine.
 
-| Service | Integration Pattern | Unique to Path E? | Notes |
-|---------|---------------------|------------------|-------|
-| Supabase | Existing: `supabase` Python client, service role key | NO — same as video pipeline | Add `OPENAI_API_KEY` env var |
-| OpenAI Vision API | HTTP via `openai` Python SDK, gpt-4o | YES — new | E2 (species) + E3 (health qualitative). Rate limit: per-minute. Retry with backoff. |
-| PlantNet API | HTTP via `requests`, multipart form | YES — new | E2 only, cross-validation. 500/day limit. Non-fatal if unavailable. |
-| DeepForest (local) | Python library, GPU inference via PyTorch | YES — new | E1 only. No network call. CUDA OOM risk. |
-| Google Drive | Existing: `gdrive_upload.py` | NO | Unchanged — `delivery_packaging.py --include-vegetation` adds vegetation/ to ZIP before upload |
+Usage:
+    python mipmap_launcher.py path/to/mission --mission-id UUID
+    python mipmap_launcher.py path/to/mission --mission-id UUID --quality 1
+    python mipmap_launcher.py path/to/mission --mission-id UUID --dry-run
+"""
+
+# Required argparse: mission_path (positional), --mission-id, --dry-run, --force
+# Optional: --quality (1/2/3), --workspace (default D:/)
+# Exit codes: 0=launched, 1=no valid photos, 2=engine not found
+
+# JSON stdout on success:
+{
+    "mission_id": "uuid",
+    "step": "mipmap_launch",
+    "task_dir": "D:\\{uuid}\\{project}\\{task}",
+    "result_dir": "D:\\{uuid}\\{project}\\{task}\\result",
+    "task_json_path": "D:\\{uuid}\\{project}\\{task}\\task.json",
+    "workspace_id": "uuid",
+    "pid": 12345,
+    "photo_count": 250,
+    "quality_level": 2,
+    "status": "launched"
+}
+```
+
+### ortho_harvester.py (Step C3)
+
+```python
+"""
+Sentinel Aerial Inspections -- MipMap Output Harvester (Step C3)
+
+Copies orthomosaic GeoTIFF from MipMap workspace to mission mapping/ folder.
+
+Usage:
+    python ortho_harvester.py path/to/mission --mission-id UUID
+    python ortho_harvester.py path/to/mission --mission-id UUID --dry-run
+"""
+
+# Required argparse: mission_path (positional), --mission-id, --dry-run
+# Exit codes: 0=success, 1=ortho not found, 2=copy failed
+
+# JSON stdout on success:
+{
+    "mission_id": "uuid",
+    "step": "ortho_harvest",
+    "ortho_path": "E:\\Sentinel\\Incoming\\SAI_M0047_...\\mapping\\orthomosaic.tif",
+    "source_path": "D:\\{uuid}\\...\\result\\dom.tif",
+    "file_size_mb": 847.3,
+    "crs_epsg": 32618,
+    "band_count": 4,
+    "width_px": 25600,
+    "height_px": 19200,
+    "gsd_cm": 2.4,
+    "status": "ok"
+}
+```
+
+---
+
+## n8n Workflow Architecture
+
+### Package Router Workflow -- Node Layout
+
+```
+[Webhook Trigger] ─── /webhook/package-router
+        │
+        ▼
+[Fetch Mission] ─── GET drone_jobs WHERE id = mission_id
+        │
+        ▼
+[Fetch Template] ─── GET processing_templates WHERE preset_name = package_type
+        │
+        ▼
+[Build Steps Array] ─── Code node: construct steps[] based on template flags
+        │
+        ▼
+[Create processing_jobs] ─── POST processing_jobs with steps[]
+        │
+        ▼
+[Switch on package_type] ─── Switch node (6 outputs)
+    ├── re_standard → Path A nodes
+    ├── re_premium  → Path A + Path V (parallel branches via n8n "Execute Workflow" or inline)
+    ├── site_survey → Path C nodes → (optional Path E trigger) → Path A
+    ├── environmental_survey → Path C nodes → Path E trigger → Path A
+    ├── construction_hybrid → Path C + Path A (+ Path V if video_count > 0)
+    └── adiat → Path D + Path C + Path A
+```
+
+### Sub-Workflow Strategy
+
+**Two viable approaches:**
+
+**Option A: Monolithic Package Router with inline paths**
+- All path nodes live in the Package Router workflow
+- Simpler to deploy (single workflow import)
+- Hard to maintain at 80+ nodes
+
+**Option B (Recommended): Package Router + separate sub-workflows**
+- Package Router: 15-20 nodes (routing + processing_jobs creation)
+- Path A workflow: 5-8 nodes (photo grade + delivery)
+- Path V workflow: 20-25 nodes (V1-V7 + V5 gate)
+- Path C workflow: 15-20 nodes (C1 launch + C2 poll + C3 harvest + E trigger)
+- Path B workflow: 10-12 nodes (construction variant of C + A)
+- Path D workflow: 5-8 nodes (ADIAT stub)
+- Path E workflow: 35 nodes (EXISTING, unchanged)
+- Uses n8n "Execute Workflow" node to call sub-workflows
+- Each sub-workflow receives `{mission_id, processing_job_id, mission_path}` as input
+
+**Decision: Option B.** The Path E workflow is already 35 nodes and standalone. Maintaining consistency across all paths as separate workflows enables independent testing, version control, and n8n workflow versioning.
+
+### n8n Execute Workflow Pattern
+
+```javascript
+// In Package Router, for each path:
+// Execute Workflow node calls the sub-workflow
+
+// Input passed to sub-workflow:
+{
+  "mission_id": "{{ $json.mission_id }}",
+  "processing_job_id": "{{ $json.processing_job_id }}",
+  "mission_path": "{{ $json.mission_path }}",
+  "package_type": "{{ $json.package_type }}",
+  "template_config": { /* from processing_templates */ }
+}
+```
 
 ---
 
@@ -902,95 +633,146 @@ with rasterio.open(ortho_path) as src:
 
 Build in this order to allow incremental testing at each step:
 
-1. **Supabase migration** — required by all E scripts; write once, validate schema
-2. **E1 `canopy_detection.py`** — no external API dependency, GPU-only; testable with stub ortho
-3. **E2 `species_classification.py`** — depends on E1 (reads vegetation_detections); OpenAI/PlantNet can be mocked
-4. **E3 `health_assessment.py`** — depends on E1 (reads vegetation_detections); Vision API optional
-5. **E4 `vegetation_report.py`** — depends on E1+E2+E3 (reads all columns); no external APIs
-6. **`delivery_packaging.py` modification** — depends on E4 outputs being in `vegetation/report/`; additive-only change
-7. **n8n Path E workflow** — depends on all E scripts being correct; wire up last
-8. **Tests** — write alongside each script (not at end)
+### Phase 1: Foundation (No n8n Changes)
 
-**Key dependency:** E2 and E3 can be built in parallel once E1 is done. E4 requires both E2 and E3 to have valid test data in Supabase.
+1. **`mipmap_launcher.py`** -- Refactor `ingest.py` into pipeline-contract script. All the logic exists; it needs argparse contract, JSON stdout, `PipelineStatusReporter`, and `.mipmap_workspace.json` output.
+
+2. **`ortho_harvester.py`** -- New script. Reads `.mipmap_workspace.json`, finds GeoTIFF, copies to `mapping/`, validates with rasterio. Simple script, testable in isolation.
+
+3. **Supabase migration** -- Add `mapping_config`, `mapping_enabled` columns to `processing_templates`; add `mipmap_workspace` JSONB to `drone_jobs`. Seed template configs.
+
+4. **Tests for C1 and C3** -- Mock subprocess for MipMap engine, mock rasterio for ortho validation.
+
+### Phase 2: Package Router Core
+
+5. **Package Router n8n workflow** -- Webhook trigger, fetch mission/template, create processing_jobs, Switch node routing. Start with just `re_standard` path (simplest).
+
+6. **Path A sub-workflow** -- Execute `delivery_packaging.py` for RE photo packages. Test end-to-end with manual webhook POST.
+
+### Phase 3: Path C Integration
+
+7. **Path C sub-workflow** -- Execute `mipmap_launcher.py`, poll loop for completion, execute `ortho_harvester.py`. Test with a real MipMap run on small dataset.
+
+8. **Path C → Path E trigger** -- After C3 completes, fire POST to `/sentinel-vegetation-trigger` if `vegetation_enabled`. Integration test with existing Path E workflow.
+
+### Phase 4: Path V Integration
+
+9. **Path V sub-workflow** -- Wire V1-V7 Execute Command nodes with V5 manual edit gate (Webhook Wait). Test with an RE Premium mission.
+
+### Phase 5: Remaining Paths and Polish
+
+10. **Path B sub-workflow** -- Construction hybrid (C + A + optional V).
+11. **Path D sub-workflow** -- ADIAT placeholder.
+12. **Folder Watcher → Ingest Trigger** -- Wire folder_watcher webhook to run ingest_sorter automatically, then fire Package Router.
+13. **End-to-end integration test** -- SD card → folder_watcher → ingest_sorter → Package Router → all paths.
+
+**Key dependencies:**
+- Phase 2 depends on Phase 1 (scripts must exist before n8n can call them)
+- Phase 3 depends on Phase 2 (Package Router must route to Path C)
+- Phase 4 is independent of Phase 3 (Path V does not depend on Path C)
+- Phase 5 depends on all prior phases
 
 ---
 
-## Scaling Considerations
+## Error Handling Architecture
 
-Path E is a single-rig, single-mission processing system. Scaling is not a concern for v2.0. The relevant limits are:
+### Global Error Strategy
 
-| Constraint | Current Limit | Mitigation |
-|------------|--------------|------------|
-| GPU VRAM | 12GB RTX 5070 | Tile-based inference; retry with smaller tiles on OOM |
-| PlantNet API | 500 req/day | checkpoint resume; `skip_plantnet` flag for large missions |
-| OpenAI Vision cost | ~$0.02/image | `max_canopies` limit (200 default); `vision_sample_pct` for E3 |
-| Ortho file size | 500MB–5GB | Windowed rasterio reads; never load full ortho into RAM |
-| n8n timeout | 10 min default for Execute Command | Increase n8n Execute Command timeout to 60 min for E1/E4 |
+Every path sub-workflow should have an error handler node that:
+1. Sets `processing_jobs.status = 'failed'`
+2. Sets the failing step's status to `'failed'` with error message
+3. Sends operator notification (email or log)
+4. Does NOT block other independent paths (Path A failure should not block Path C)
+
+### Script Failure Recovery
+
+| Scenario | Detection | Recovery |
+|----------|-----------|----------|
+| MipMap engine crash (C1) | Process PID not running, no output files | Re-run `mipmap_launcher.py --force` (clears workspace, re-launches) |
+| MipMap timeout (C2) | Poll count exceeds max | Operator checks D:/ workspace manually; re-trigger Package Router |
+| Ortho harvest fails (C3) | File not found or rasterio validation fails | Check MipMap output manually; run `ortho_harvester.py` standalone |
+| Path E script fails (E1-E4) | Non-zero exit code | Existing: checkpoint resume + n8n retry |
+| Video script fails (V1-V7) | Non-zero exit code | Script-level checkpoint resume |
+| delivery_packaging fails | Non-zero exit code | Operator runs manually with same args |
+
+### Parallel Path Isolation
+
+```
+Package Router creates processing_jobs
+    │
+    ├── Path A (photos)  ─── independent, can complete even if C fails
+    ├── Path C (mapping)  ─── independent of A and V
+    │     └── Path E (vegetation) ─── depends on C only
+    └── Path V (video)   ─── independent, can complete even if C fails
+```
+
+If Path C fails, Path A and Path V should still complete and produce a partial delivery (photos + video without mapping/vegetation). The `delivery_packaging.py` `--include-mapping` and `--include-vegetation` flags are only passed when those paths completed successfully.
+
+---
+
+## Scalability Considerations
+
+This is a single-rig, single-mission processing system. Concurrency means one mission at a time on the GPU (MipMap uses GPU for photogrammetry, Path E uses GPU for DeepForest). However, multiple missions can be in different pipeline stages simultaneously:
+
+| Resource | Constraint | Mitigation |
+|----------|-----------|------------|
+| GPU (MipMap) | 1 job at a time | n8n workflow should check if MipMap is already running before launching C1 |
+| GPU (Path E) | 1 job at a time | Path E already handles this; runs after MipMap completes |
+| Disk (D:/) | MipMap workspace can be 10-50GB per mission | ortho_harvester cleans workspace after successful harvest (configurable) |
+| n8n concurrent executions | Default 20 | Adequate for single-rig operation |
+| Supabase connections | Service role, single connection | No concern |
 
 ---
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Loading the Full Ortho into RAM
+### Anti-Pattern 1: Monolithic n8n Workflow
 
-**What people do:** `image = rasterio.open(path).read()` — reads entire raster into a numpy array.
-**Why it's wrong:** A 5cm GSD orthomosaic of a 5-acre site is ~1.5GB uncompressed. Doing this in E1, E2, and E3 would consume 4.5GB+ RAM simultaneously.
-**Do this instead:** Use `rasterio.open()` with windowed reads and mask by geometry for each canopy crop:
-```python
-with rasterio.open(ortho_path) as src:
-    for detection in detections:
-        geom = shape(wkt.loads(detection["geometry_wkt"]))
-        crop, transform = rasterio.mask.mask(src, [geom], crop=True)
-        # process crop, then release
-```
+**What people do:** Put all paths in one giant workflow (100+ nodes).
+**Why it's wrong:** Impossible to test individual paths. Any edit risks breaking unrelated paths. n8n editor slows down above ~50 nodes.
+**Do this instead:** Separate sub-workflows per path, called via Execute Workflow node.
 
----
+### Anti-Pattern 2: MipMap Blocking the n8n Execution Thread
 
-### Anti-Pattern 2: Writing GeoJSON as Working State (use GeoPackage)
+**What people do:** Use Execute Command with `subprocess.run()` (blocking) to launch MipMap, tying up the n8n worker for 30-90 minutes.
+**Why it's wrong:** Blocks the n8n execution slot. If n8n restarts, the tracking is lost.
+**Do this instead:** Launch MipMap with `subprocess.Popen()` (non-blocking), record PID in `.mipmap_workspace.json`, use n8n Wait + Poll loop to check for completion. The `mipmap_launcher.py` script returns immediately after launch.
 
-**What people do:** Write polygons to GeoJSON after each tile and append.
-**Why it's wrong:** GeoJSON is a text format; concurrent appends corrupt it. No spatial indexing for E2/E3 geometry queries.
-**Do this instead:** GeoPackage (GPKG) as the working format — GeoPandas supports append mode, SQLite provides ACID transactions. Export GeoJSON from GeoPackage only for delivery.
+### Anti-Pattern 3: Hardcoding Webhook URLs in Python Scripts
 
----
+**What people do:** Embed `http://localhost:5678/webhook/...` directly in scripts.
+**Why it's wrong:** Cannot change n8n URL without editing scripts.
+**Do this instead:** All webhook URLs come from `N8N_WEBHOOK_URL` environment variable or `--webhook-url` CLI argument. This is already the pattern in `folder_watcher.py` and `ingest_sorter.py`.
 
-### Anti-Pattern 3: Blocking Delivery on Path E Failure
+### Anti-Pattern 4: Polling Ortho When the Router Knows It's Ready
 
-**What people do:** delivery_packaging.py raises an error if `--include-vegetation` is specified but `vegetation/report/` doesn't exist.
-**Why it's wrong:** Path E failure should never block the primary RE package delivery. Client photos and video should ship regardless.
-**Do this instead:** `collect_vegetation()` returns empty list if `vegetation/report/` doesn't exist. n8n controls whether `--include-vegetation` is passed based on `missions.vegetation_status == 'complete'`.
+**What people do:** Every downstream consumer (Path E, delivery) independently polls for ortho existence.
+**Why it's wrong:** Wastes time and creates race conditions.
+**Do this instead:** Package Router fires downstream triggers ONLY after `ortho_harvester.py` confirms the file is in place. Path E's E0 poll is a safety net, not the primary trigger.
 
----
+### Anti-Pattern 5: Re-running ingest.py Instead of Refactoring
 
-### Anti-Pattern 4: Re-Calling OpenAI for Already-Classified Canopies
-
-**What people do:** E2 runs from scratch, re-classifying all canopies.
-**Why it's wrong:** 200 canopies × $0.02 = $4/run. Accidental re-runs cost money.
-**Do this instead:** Double protection — checkpoint file (local) + Supabase null-column filter (`species_tag IS NULL`). Both guards must be in place. Even if checkpoint is deleted, Supabase filter prevents re-classification.
-
----
-
-### Anti-Pattern 5: Separate SQL Migration for Each Column Addition
-
-**What people do:** Create one migration per ALTER TABLE statement.
-**Why it's wrong:** Supabase migrations are append-only; 4+ tiny migration files for related schema work is noisy.
-**Do this instead:** One migration file for all v2.0 vegetation schema changes (both new tables + 4 column additions). File naming: `migration_00N_vegetation_analysis.sql` where N follows the existing highest number.
+**What people do:** Call `ingest.py` from n8n as-is without the pipeline contract.
+**Why it's wrong:** `ingest.py` prints to stdout with human-readable text (not JSON), has no `--processing-job-id`, and `subprocess.Popen` in `--run` mode blocks until completion.
+**Do this instead:** Create `mipmap_launcher.py` that extracts the reusable functions from `ingest.py` but follows the pipeline contract. `ingest.py` remains as a standalone manual tool.
 
 ---
 
 ## Sources
 
-- Direct codebase audit: all 14 scripts in `C:/Users/redle/drone-pipeline/` (2026-02-24)
-- `.planning/codebase/ARCHITECTURE.md` — existing pipeline architecture (2026-02-23)
-- `.planning/codebase/CONVENTIONS.md` — coding patterns established in v1.0 (2026-02-23)
-- `.planning/codebase/INTEGRATIONS.md` — Supabase schema, n8n webhook patterns (2026-02-23)
-- `.planning/PRD-vegetation-analysis.md` — v2.0 feature spec (2026-02-24)
-- `checkpoint.py` — shared resume utility examined directly
-- `delivery_packaging.py` — existing ZIP creation logic examined directly
-- `video_qa.py` — processing_templates pattern and Supabase update pattern examined directly
+- Direct codebase audit: all 18 Python scripts + n8n workflow JSON files (2026-03-05)
+- `folder_watcher.py` -- watchdog Observer + debounce handler, POST `/webhook/folder-watcher`
+- `ingest_sorter.py` -- sequence-range sorting, POST `/webhook/ingest` with mission_id + package_type
+- `ingest.py` -- MipMap task.json generation, workspace creation, engine launch via subprocess
+- `delivery_packaging.py` -- `collect_vegetation()`, `--include-vegetation`, `--include-mapping` flags already present
+- `pipeline_status.py` -- `PipelineStatusReporter` + `add_pipeline_args()` pattern
+- `n8n/path_e_workflow.json` -- 35-node workflow with E0 ortho polling, E1-E4 Execute Command, E5 review gate
+- `n8n/package_router_patch.json` -- template_defaults for routing conditions, vegetation_enabled per package_type
+- `.planning/codebase/INTEGRATIONS.md` -- webhook contracts, Supabase schema, env vars
+- `.planning/research/ARCHITECTURE.md` (v2.0) -- Path E architecture patterns, script contracts, Supabase tables
 
 ---
 
-*Architecture research for: Path E Vegetation Analysis Pipeline Integration*
-*Researched: 2026-02-24*
-*Confidence: HIGH — based on direct codebase audit, not inference*
+*Architecture research for: v3.0 Package Router & End-to-End Automation*
+*Researched: 2026-03-05*
+*Confidence: HIGH -- based on direct audit of all source files, n8n workflows, and Supabase schema*

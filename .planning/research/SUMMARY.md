@@ -1,302 +1,184 @@
 # Project Research Summary
 
-**Project:** Sentinel Aerial Inspections — Path E Vegetation Analysis Pipeline
-**Domain:** Drone orthomosaic vegetation analysis — ML canopy detection, species classification, health assessment, professional report generation
-**Researched:** 2026-02-24
-**Confidence:** HIGH (stack, architecture, pitfalls) | MEDIUM (species classification accuracy, feature value assumptions)
+**Project:** Sentinel Drone Pipeline v3.0 -- Package Router & End-to-End Automation
+**Domain:** n8n workflow orchestration, multi-path drone data processing, event-driven pipeline automation on Windows
+**Researched:** 2026-03-05
+**Confidence:** HIGH
 
 ## Executive Summary
 
-Path E is a 4-script extension to the existing drone-pipeline v1.0 codebase, adding GPU-accelerated canopy detection (DeepForest), dual-API species classification (OpenAI Vision + PlantNet), RGB-index health assessment (VARI/ExG), and multi-format report generation (PDF, GeoJSON, interactive HTML). It integrates into the existing n8n orchestration layer as a conditional branch that fires after Path C (WebODM orthomosaic) completes. The architecture is fully determined by direct codebase audit — all 4 scripts follow the established contract (argparse, checkpoint resume, JSON stdout, Supabase update), meaning there are no novel patterns to design. The primary engineering challenge is environment setup: DeepForest 2.0.0 requires Python <3.13, which conflicts with the system Python 3.14, necessitating a dedicated `.venv-path-e` using `py -3.12`.
+v3.0 is an orchestration milestone, not a greenfield build. The 18 Python CLI scripts, Supabase schema, Path E n8n workflow (35 nodes), folder watcher, and ingest sorter are all deployed and tested (402 tests passing). The job is to wire these existing components together through a new n8n Package Router workflow that receives ingest webhooks, routes by `package_type` (real estate, site survey, environmental survey, construction hybrid), fans out to per-path sub-workflows (A/B/C/D/V/E), and tracks status in Supabase. One new Python script is needed: an ortho harvester that copies MipMap photogrammetry output from D:/ workspace to mission folders. No new pip dependencies are required.
 
-The recommended approach is to build E1 through E4 sequentially in dependency order, validate each step on a real orthomosaic before building the next, and wire the n8n workflow last. The Supabase migration goes first because all four scripts depend on it. The two most important quality gates are: (1) a startup GPU assertion in canopy_detection.py to confirm actual CUDA sm_120 execution rather than silent CPU fallback, and (2) a hard API cost cap in species_classification.py and health_assessment.py to prevent runaway Vision API spend. The operator review gate (E5) via n8n webhook wait is non-negotiable for professional credibility and must not be bypassed for launch.
+The recommended architecture uses n8n sub-workflows (one per path) called from a central Package Router via Execute Sub-workflow nodes. This mirrors the proven Path E pattern and keeps each path independently testable. The most complex new integration is Path C (MipMap photogrammetry automation), which involves launching a long-running GPU process (20-90 minutes), detecting completion, and harvesting output. All four researchers converged on a fire-and-forget launch pattern with polling for completion, rather than blocking the n8n execution thread -- this is critical because n8n's Execute Command node has a 1MB stdout buffer that MipMap will overflow.
 
-Key risks are concentrated in Phase 1: the PyTorch/RTX 5070 compatibility story requires PyTorch 2.9.1 with cu128 wheels (not PyPI default), PROJ_LIB environment variable conflicts from QGIS/OSGeo4W are likely on this Windows machine and must be cleared at script startup, and DeepForest's tiling must use predict_tile() or manual cross-tile NMS to prevent duplicate detections that inflate API costs. Species classification accuracy is inherently limited (estimated 30-55% top-1 accuracy from aerial canopy crops) and must be disclosed transparently in all client deliverables — the professional risk of overselling this capability is higher than the risk of underselling it.
-
----
+The top risks are: (1) n8n v2.0 disabling Execute Command nodes by default, which would silently break all automation; (2) MipMap stdout buffer overflow killing the photogrammetry process mid-run; (3) orphaned MipMap processes when n8n workflows are cancelled on Windows; and (4) GPU contention between concurrent Path C (MipMap), Path E (DeepForest), and Path V (FFmpeg NVENC). All are preventable with known mitigations documented in the pitfalls research. The estimated total effort is 10-14 days across 5 phases.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The new stack is a dedicated Python 3.12 venv (`.venv-path-e`) separate from the system Python 3.14 environment. The install order is critical: PyTorch must be installed first with the cu128 wheel index, then DeepForest, which pulls rasterio, geopandas, shapely, opencv-headless, and numpy as sub-dependencies. Installing DeepForest first results in a CPU-only PyTorch build from PyPI.
-
-**Reconciled PyTorch version:** STACK.md reports PyTorch 2.9.1+cu128 as stable. PITFALLS.md reports that stable builds through 2.6.x lack sm_120 support and recommends nightly. The reconciled position: PyTorch 2.7+ introduced stable Blackwell sm_120 support via cu128 wheels (confirmed in PyTorch 2.7 release blog and PyTorch forums). PyTorch 2.9.1+cu128 is the correct stable target. The PITFALLS.md nightly recommendation reflects the pre-2.7 state when stable builds had no sm_120 kernels. Use 2.9.1 stable cu128, not nightly.
+No new frameworks or dependencies are needed. v3.0 builds entirely on the existing stack with n8n built-in nodes and one new stdlib-only Python script.
 
 **Core technologies:**
-- **Python 3.12.10 venv** — DeepForest 2.0.0 requires Python >=3.10,<3.13; system Python 3.14 is incompatible; `py -3.12` is already installed
-- **PyTorch 2.9.1+cu128 + torchvision 0.24.1** — GPU tensor ops for DeepForest; must install first via `--index-url https://download.pytorch.org/whl/cu128`; RTX 5070 sm_120 supported in stable 2.7+ builds
-- **DeepForest 2.0.0** — pretrained RetinaNet for tree crown detection from RGB orthomosaics; only production-ready open-source option; pulls rasterio, geopandas, opencv-headless as sub-deps
-- **rasterio 1.4.4** — GeoTIFF tiled windowed reads; bundled GDAL 3.9.x wheels eliminate separate GDAL install; do not install system GDAL alongside
-- **GeoPandas 1.1.2 + Shapely 2.x** — canopy polygon I/O, GeoPackage as working format, GeoJSON for delivery; pip install now works cleanly on Windows via pyogrio binary wheels
-- **ReportLab 4.4.10** — pure Python PDF generation; no system dependencies (unlike WeasyPrint/pdfkit)
-- **Folium 0.20.0** — self-contained Leaflet HTML map; no server required; appropriate for 50-500 trees per site
-- **OpenAI SDK >=1.0.0 (gpt-4o)** — species calls + qualitative health narrative; ~$0.12/mission at 30% sampling rate on 200-canopy site
-- **PlantNet API v2** — species cross-validation; 500 req/day free tier; start with skip_plantnet=true until behavior is understood
-- **GDAL installed separately: DO NOT** — rasterio wheels bundle GDAL 3.9.x; a system GDAL install creates DLL conflicts on Windows that are hard to diagnose
+- **n8n Switch node (Rules Mode):** Routes by `package_type` to path-specific branches -- handles 4 package types + fallback within built-in 4-output limit
+- **n8n Execute Sub-workflow:** Calls per-path workflows, supports "Wait for Completion" -- keeps paths isolated and independently testable
+- **n8n Execute Command:** Runs Python scripts from n8n -- already proven in Path E with 5 nodes; MUST redirect MipMap stdout to file
+- **mipmap_launcher.py (refactored from ingest.py):** Launches MipMap engine via subprocess.Popen, writes PID file, returns immediately -- stdlib only
+- **ortho_harvester.py (new):** Copies GeoTIFF from D:/ to mission mapping/ folder with integrity verification -- stdlib + rasterio for validation
+- **n8n environment variables (6 new):** MIPMAP_ENGINE_PATH, MIPMAP_WORKSPACE, SENTINEL_INCOMING, SENTINEL_SCRIPTS, VENV_PATH_E_PYTHON, N8N_BASE_URL
 
-See `.planning/research/STACK.md` for full version matrix and install order.
+**What NOT to add:** Airflow/Prefect/Dagster (n8n is sufficient), WebODM (MipMap is superior), Redis/RabbitMQ (overkill for single-rig), Docker for scripts (need local drive access), community n8n nodes (compatibility risk).
 
 ### Expected Features
 
-Species classification accuracy sets the ceiling for what can be credibly delivered. The realistic accuracy envelope from aerial RGB canopy crops is: 60-80% recall for E1 canopy detection (dense Hampton Roads deciduous canopy will bias toward lower end), 30-55% top-1 species accuracy from LLM + PlantNet on aerial crops, and reliable detection of obvious stress events via VARI/ExG with no early-stage stress detection. All outputs must be labeled with confidence scores and the PDF must include a methodology disclosure. The value proposition is "rapid inventory starting point for arborist field verification," not a replacement for arborist judgment.
+**Must have (table stakes):**
+- Package Router webhook receiver + Switch by package_type
+- Path C automation: MipMap launch, completion detection, ortho harvest
+- Path A automation: photo color grade + delivery packaging (most common package)
+- Path E trigger from Path C completion (connect ortho to existing vegetation workflow)
+- Supabase status tracking per processing step (every script reports progress)
+- Error handling: exit code 1 marks step failed and halts the path
+- Template defaults per package_type from processing_templates table
 
-**Must have (table stakes — v2.0 launch):**
-- E1 canopy detection — individual tree count with lat/lon centroids; without this, nothing else runs
-- E2 species classification — "probable species" with confidence score; even 30-55% accuracy differentiates from TreeDetect which offers none
-- E3 health assessment (VARI/ExG only) — Healthy/Concerning/Critical triage; do NOT label as "health score," use "visual health index"
-- PDF report with species map and health map — non-negotiable; primary client deliverable
-- GeoJSON output — standard GIS deliverable; free to produce from GeoPandas
-- Supabase schema (vegetation_detections + vegetation_analysis_summary) — required for review gate and delivery integration
-- n8n E5 Review Gate — webhook wait; operator sign-off before delivery; required for professional credibility
-- delivery_packaging.py integration (--include-vegetation flag) — vegetation/ subfolder in delivery ZIP
-- Methodology and accuracy disclosure in every PDF — legal and professional protection
+**Should have (same release):**
+- Path V automation: V1-V4 automated, V5 manual DaVinci gate (webhook-wait pattern), V6 automated
+- Parallel path fan-out: site_survey runs Path A + Path C simultaneously
+- Folder watcher to Package Router bridge (payload normalization)
+- MipMap completion detection via polling (event-driven alternative deferred)
 
-**Should have (competitive advantage — v2.1, after first 5-10 missions):**
-- Folium interactive HTML map — premium tier differentiator; competitors deliver PDF+GeoJSON but no self-contained interactive map
-- Vision API qualitative health narrative (skip_vision=false) — adds interpretive text; defer until cost/value ratio is established
-- PlantNet cross-validation enabled by default — two-source consensus raises client trust; defer until rate limit behavior understood
-- Species and health distribution charts — high perceived value, low implementation cost (matplotlib)
-- Ground truth tracking schema columns (ground_truth_species, ground_truth_health, etc.) — foundation for DeepForest fine-tuning flywheel
-
-**Defer (v3.0+):**
-- DeepForest fine-tuning on Hampton Roads species — requires 500-1,000 labeled crowns from 5-10 ground-truthed missions first
-- Historical change detection — requires calibration panel, same-season imaging, standardized flight parameters
-- Processing-only intake (client-supplied orthomosaic) — separate ingest path; not needed for Sentinel's own flight operation
-- Multispectral path — only relevant if multispectral sensor acquired for Matrice 4E
-- i-Tree economic valuation integration — contingent on species accuracy improvements via fine-tuning
-
-**Anti-features (never build without documented rationale):**
-- ISA TRA-compliant reports — requires licensed arborist physical inspection; liability and legal risk
-- NDVI from RGB bands — mathematically invalid; label output explicitly as VARI/ExG only
-- Automatic delivery without review — species misclassification without operator review creates client credibility risk
-
-See `.planning/research/FEATURES.md` for full competitor analysis, feature dependency graph, and QA review workflow.
+**Defer (v3.1+):**
+- Path B/D full automation (stub routing sufficient for infrequent package types)
+- Delivery auto-trigger after all paths complete (complex merge logic)
+- n8n dashboard for mission status (use Trestle app or direct Supabase queries)
+- Automatic DaVinci Resolve integration (no reliable CLI automation exists)
+- Parallel FFmpeg processing, multi-rig distribution, real-time progress bars
 
 ### Architecture Approach
 
-Path E integrates with zero changes to the core v1.0 architecture. The four new scripts (E1-E4) follow the established script contract exactly: argparse with mission_path + --mission-id + --dry-run + --force, JSON stdout, exit codes 0/1/2, Supabase update, checkpoint.py for resume. The existing checkpoint.py is reused without modification. delivery_packaging.py receives an additive-only modification (collect_vegetation() function + --include-vegetation flag). The existing n8n Package Router adds a single branch after Path C completion; no existing paths are modified. One Supabase migration file covers all schema changes (two new tables + four column additions to existing tables).
+The system uses a hub-and-spoke architecture: the Package Router is the hub that receives all ingest webhooks and dispatches to per-path sub-workflows (spokes). Each sub-workflow receives `{mission_id, processing_job_id, mission_path}` and operates independently. Paths can run in parallel where independent (A + C + V), but Path E depends on Path C completing first (ortho dependency). The Package Router creates a `processing_jobs` row with all active steps before dispatching, giving operators a single query to see mission progress.
 
 **Major components:**
-1. **Supabase migration** — vegetation_detections (E1 seeds, E2/E3 update in-place), vegetation_analysis_summary (E4 writes), missions.vegetation_analysis/status columns, processing_templates.vegetation_enabled/config columns; one migration file for all v2.0 changes
-2. **E1 canopy_detection.py** — tiles orthomosaic, runs DeepForest via predict_tile() (handles cross-tile NMS internally), writes GeoPackage + Supabase rows; GDAL_CACHEMAX and PROJ env var cleanup at startup
-3. **E2 species_classification.py** — fetches unclassified detections (species_tag IS NULL), crops canopy patches via rasterio windowed read, calls OpenAI Vision + optionally PlantNet, checkpoint after every canopy (API calls are expensive); double-protection: checkpoint file + Supabase null filter
-4. **E3 health_assessment.py** — computes VARI/ExG per canopy mask, optional Vision API sampling (vision_sample_pct), checkpoint for Vision calls; E2 and E3 can run in parallel after E1
-5. **E4 vegetation_report.py** — single-pass aggregation; reads all Supabase detection rows, generates PDF (ReportLab), static PNGs (GeoPandas/matplotlib), and optional HTML map (Folium); no checkpoint needed (Supabase is durable state)
-6. **E5 n8n Review Gate** — webhook wait node after E4; operator reviews PDF before delivery; resume endpoint triggers delivery_packaging.py --include-vegetation
-7. **delivery_packaging.py (modified)** — collect_vegetation() returns empty list if vegetation/report/ missing (Path E failure never blocks primary delivery)
-8. **vegetation/ mission subfolder** — canopy_detections.gpkg as working source of truth, canopy_detections.geojson as delivery copy, report/ subfolder for PDF+PNGs+HTML; mirrors existing photo/, video/, mapping/ conventions
-
-The vegetation_config JSONB in processing_templates mirrors the video_qa_thresholds pattern already in the codebase. All four scripts accept --config JSON override. Build order is strictly: migration → E1 → E2 (parallel with E3) → E3 → E4 → delivery_packaging modification → n8n wiring. Tests write alongside each script.
-
-See `.planning/research/ARCHITECTURE.md` for full SQL schemas, JSON stdout shapes, n8n node sequence, and delivery ZIP structure.
+1. **Package Router workflow (15-20 nodes)** -- webhook receiver, Supabase lookups, processing_jobs creation, Switch routing, sub-workflow dispatch
+2. **Path C sub-workflow (15-20 nodes)** -- mipmap_launcher.py, Wait+Poll loop for completion, ortho_harvester.py, conditional Path E trigger
+3. **Path V sub-workflow (20-25 nodes)** -- V1-V4 Execute Command chain, V5 Webhook Wait gate, V6+delivery
+4. **Path A sub-workflow (5-8 nodes)** -- photo color grade, delivery_packaging.py
+5. **Path B/D sub-workflows (5-8 nodes each)** -- stub routing, status=manual, operator alert
+6. **Path E workflow (35 nodes, existing)** -- unchanged, triggered via existing webhook
 
 ### Critical Pitfalls
 
-1. **PyTorch CPU fallback on RTX 5070** — Installing PyTorch from default pip channel produces a CPU build; DeepForest runs silently on CPU at 10-20x slower speed with no error. Prevention: install `torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128` first, before DeepForest; add startup assertion `assert torch.cuda.get_device_capability()[0] >= 12` in canopy_detection.py; verify wall time per 1GB ortho is <5 minutes.
+1. **n8n v2.0 disables Execute Command nodes** -- All automation silently breaks after upgrade. Set `NODES_EXCLUDE=[]` in n8n config BEFORE any development. Pin n8n to 1.x if uncertain. This is a Phase 0 blocker.
 
-2. **PROJ_LIB / PROJ_DATA environment variable conflict** — QGIS or OSGeo4W on this Windows machine likely sets PROJ_LIB as a system variable pointing to an incompatible PROJ version. rasterio 1.4.4 bundles its own PROJ 9.x but system env vars override it. Prevention: clear `PROJ_LIB`, `PROJ_DATA`, `GDAL_DATA` at top of every E script before importing rasterio; verify with CRS round-trip test on real ortho.
+2. **MipMap stdout overflows n8n's 1MB buffer** -- Execute Command uses Node.js child_process.exec() which buffers all output. MipMap produces 50-200MB of progress text. Process gets killed mid-reconstruction (2-6 hours wasted). Prevention: NEVER run MipMap directly via Execute Command. Use a wrapper that redirects stdout to file and either returns immediately (fire-and-forget + poll) or waits and posts a callback webhook.
 
-3. **DeepForest cross-tile duplicate detections** — Manual tile stitching via pd.concat produces duplicate overlapping polygons at tile boundaries (same tree detected 2-4 times), inflating canopy count and doubling API costs. Prevention: use `model.predict_tile()` (built-in overlap NMS) rather than manual tiling; if manual tiling required, apply torchvision.ops.nms across full ortho coordinate space after concat.
+3. **Orphaned MipMap processes on Windows** -- When n8n workflow stops, MipMap keeps running as orphan (Windows does not cascade kill to child processes). GPU stays locked, disk fills, re-runs launch duplicate instances. Prevention: PID file tracking, pre-flight orphan check via psutil, CREATE_NEW_PROCESS_GROUP flag, atexit cleanup handler.
 
-4. **OpenAI Vision API cost overrun** — Without a hard cap, a 500-tree site at 30% sampling sends 150 Vision API calls; misconfigured max_canopies results in $15-25 spend per mission. Prevention: enforce max_canopies cap (default 200) before any API loop; compute and log estimated cost before first call; abort if estimated cost exceeds configurable threshold (default $10).
+4. **GPU contention between concurrent paths** -- Path C (MipMap), Path E (DeepForest), and Path V (FFmpeg NVENC) all use GPU. Running simultaneously causes CUDA OOM. Prevention: sequential GPU scheduling -- ensure Path E only starts after MipMap completes, and video encoding finishes before Path E inference starts.
 
-5. **rasterio windowed read memory leak** — On rasterio 1.3.10+, windowed reads on tiled GeoTIFFs do not release GDAL block cache between tiles; processing 1GB ortho can consume 8-16GB RAM. Prevention: set `os.environ["GDAL_CACHEMAX"] = "256"` before rasterio import; use `del tile_data` explicitly in tile loop; consider COG format conversion for large orthomosaics.
-
-6. **GeoPandas CRS area calculation error** — Area/perimeter computations in EPSG:4326 (degrees) produce wildly wrong values. Prevention: always project to local UTM before area/distance operations; use EPSG:4326 only for output GeoJSON; verify canopy_area_sqm with a known-area test parcel within 5% of expected value.
-
-See `.planning/research/PITFALLS.md` for full pitfall list, integration gotchas, performance traps, and "Looks Done But Isn't" verification checklist.
-
----
+5. **GeoTIFF copy corruption on cross-drive transfer** -- shutil.copy2() is not atomic. Interrupted copies leave truncated files that pass existence checks but crash rasterio. Prevention: copy to .tmp, verify size + rasterio header validation, then atomic rename.
 
 ## Implications for Roadmap
 
-### Phase 1: Environment and Foundation
+Based on research, suggested phase structure:
 
-**Rationale:** Everything depends on a working Python 3.12 venv with verified GPU inference. The Supabase migration must exist before any script can write to the database. DeepForest model weights must be downloaded before E1 can run. This phase produces no user-visible output but unblocks all subsequent phases. The two most dangerous pitfalls (CPU fallback, PROJ conflict) must be eliminated here before a single line of pipeline code is written.
+### Phase 0: Environment Setup and n8n Configuration
+**Rationale:** Must verify n8n compatibility and configure environment BEFORE writing any workflows. Pitfalls 1 and 3 are blockers.
+**Delivers:** Validated n8n environment with Execute Command enabled, correct timeouts, environment variables configured.
+**Addresses:** n8n v2.0 compatibility, execution timeout configuration, Windows long path support.
+**Avoids:** Pitfall 1 (Execute Command disabled), Pitfall 3 (workflow timeout kills processing), Pitfall 9 (260-char path limit).
+**Effort:** 0.5 days.
 
-**Delivers:** Verified `.venv-path-e` with GPU inference confirmed, migration_001_vegetation.sql applied, test_environment.py passing all assertions, requirements-path-e.txt pinned.
+### Phase 1: Foundation Scripts + Supabase Schema
+**Rationale:** Python scripts must exist before n8n can call them. Database schema must support all path tracking. This phase has zero n8n dependency and can be fully unit tested.
+**Delivers:** mipmap_launcher.py (refactored from ingest.py), ortho_harvester.py (new), Supabase migration (processing_templates columns, mipmap_workspace JSONB on drone_jobs), updated processing step names.
+**Addresses:** Path C automation prerequisites, MipMap output harvesting, status tracking schema.
+**Avoids:** Pitfall 2 (stdout buffer -- launcher redirects to file), Pitfall 5 (orphan process -- PID tracking), Pitfall 6 (GeoTIFF corruption -- safe copy with verification).
+**Effort:** 3-4 days.
 
-**Addresses:** Environment setup for all P1 features.
+### Phase 2: Package Router Core + Path A
+**Rationale:** Start with the simplest end-to-end flow. Path A (RE photos) is the most common package type and the simplest path (2 scripts). This proves the Router + sub-workflow pattern before tackling complex paths.
+**Delivers:** Package Router n8n workflow (webhook, Supabase lookup, template merge, Switch routing, processing_jobs creation), Path A sub-workflow (photo grade + delivery).
+**Addresses:** Package Router webhook receiver, route by package_type, Path A automation, template defaults, Supabase status tracking.
+**Avoids:** Pitfall 13 (static data sharing -- use execution-scoped polling from the start).
+**Effort:** 2-3 days.
 
-**Avoids:**
-- PyTorch CPU fallback (Pitfall 1) — verify CUDA capability >= (12,0) in test_environment.py
-- conda channel mixing (Pitfall 2) — pip-first strategy documented
-- PROJ_LIB conflict (Pitfall 3) — env var clear template established for all E scripts
-- Schema dependency errors — migration applied and verified before any script writes
+### Phase 3: Path C (MipMap Automation) + Path E Connection
+**Rationale:** Path C is the highest-value automation (saves 20-90 minutes of operator time per mapping mission). It also unblocks Path E by placing the ortho automatically. This is the most technically complex phase due to long-running subprocess management.
+**Delivers:** Path C sub-workflow (mipmap_launcher, poll loop, ortho_harvester), Path C to Path E trigger wiring (fire existing vegetation webhook after ortho confirmed).
+**Addresses:** MipMap launch automation, completion detection, ortho harvesting, vegetation trigger connection.
+**Avoids:** Pitfall 2 (stdout buffer), Pitfall 5 (orphan MipMap), Pitfall 8 (GPU contention -- sequential scheduling).
+**Effort:** 3-4 days.
 
-**Research flag:** Standard — environment setup for pip-based Windows Python is well-documented. No additional research needed.
+### Phase 4: Path V (Video Pipeline)
+**Rationale:** Independent of Path C. Can be built in parallel or after Phase 3. Wraps 6 existing scripts with a V5 manual edit gate using the proven webhook-wait pattern from Path E.
+**Delivers:** Path V sub-workflow (V1-V4 automation, V5 DaVinci Resolve gate, V6 + delivery automation).
+**Addresses:** Video pipeline automation, manual edit gate, video delivery.
+**Avoids:** Pitfall 8 (GPU contention -- schedule FFmpeg NVENC around Path E inference).
+**Effort:** 2-3 days.
 
----
-
-### Phase 2: Canopy Detection (E1)
-
-**Rationale:** E1 is the only script with no external API dependency, making it the safest first script to build and test end-to-end. Every downstream script (E2, E3, E4) depends on the vegetation_detections rows E1 creates. Memory management, GPU OOM handling, and cross-tile NMS must be solved here because they cannot be retrofitted later without data re-processing.
-
-**Delivers:** canopy_detection.py, test_canopy_detection.py, verified GeoPackage output with centroid lat/lons, Supabase vegetation_detections rows, JSON stdout shape confirmed, checkpoint resume verified.
-
-**Addresses:** Individual tree count + locations (P1), canopy area per tree (P1), site canopy coverage % (P1), GeoJSON output (P1), Supabase schema foundation.
-
-**Avoids:**
-- Cross-tile NMS duplicates (Pitfall 5) — use predict_tile() or manual NMS; validate canopy count against visual inspection
-- Memory leak on windowed reads (Pitfall 4) — GDAL_CACHEMAX, del tile_data, confirm <2GB peak RSS on 500MB test ortho
-- GPU OOM (Architecture error handling) — catch RuntimeError, retry with tile_size // 2, exit code 1 on partial
-
-**Research flag:** Standard — DeepForest predict_tile() API and rasterio windowed reads are well-documented. The one non-obvious item is the predict_tile() overlap/NMS behavior, documented in DeepForest readthedocs.
-
----
-
-### Phase 3: Species Classification (E2)
-
-**Rationale:** E2 is the most expensive script to run incorrectly (API costs) and has the most complex failure modes (two external APIs, rate limits, daily quota, per-canopy checkpoint criticality). Building it second, after E1 produces real test data in Supabase, allows testing against actual detected canopies rather than synthetic data. PlantNet should start disabled (skip_plantnet=true) for first test runs to isolate OpenAI behavior.
-
-**Delivers:** species_classification.py, test_species_classification.py (with mocked APIs), per-canopy API calls with exponential backoff, PlantNet daily quota guard, cost estimator pre-run, checkpoint verified with simulated mid-run kill.
-
-**Addresses:** Species call with confidence (P1), PlantNet cross-validation (P2, disabled by default at launch).
-
-**Avoids:**
-- API cost overrun (Pitfall 6) — hard max_canopies cap enforced before loop, pre-run cost estimate logged, abort threshold
-- PlantNet quota exhaustion — remainingIdentificationRequests read from every response, warning at <10 remaining
-- Re-calling API on already-classified canopies (Anti-Pattern 4) — double protection: checkpoint + species_tag IS NULL filter
-
-**Research flag:** Standard — OpenAI Vision API and PlantNet API are well-documented. The species accuracy limitation (30-55%) is well-established by research and should be surfaced explicitly in test output.
-
----
-
-### Phase 4: Health Assessment (E3)
-
-**Rationale:** E3 can be built in parallel with E2 (same input: E1 detection rows + orthomosaic) but is listed after E2 for sequential simplicity. VARI/ExG computation is deterministic and does not require external APIs for MVP (skip_vision=true for launch). This is the lowest-risk script to build and the easiest to test because numpy/rasterio pixel math produces verifiable numbers. The Vision API optional path can be added in v2.1.
-
-**Delivers:** health_assessment.py, test_health_assessment.py, VARI/ExG computation verified against known pixel values, health_status bucketing thresholds documented, checkpoint resume verified.
-
-**Addresses:** Health status flag per tree (P1), "needs attention" count (P1).
-
-**Avoids:**
-- GeoPandas CRS area errors (Performance trap) — project to UTM before any spatial operations; verify canopy_area_sqm with known parcel
-- Overselling health assessment — label as "visual health index" not "health score" in all code and outputs
-
-**Research flag:** Standard — VARI/ExG formulas are textbook; rasterio mask operations are well-documented.
-
----
-
-### Phase 5: Report Generation (E4)
-
-**Rationale:** E4 is a single-pass aggregation that requires all three upstream scripts to have produced valid test data. It has no external API dependency, no checkpoint, and no GPU requirement. The main complexity is ReportLab PDF layout and Folium HTML size management. Build last among the scripts; test with real Supabase data from a completed E1+E2+E3 run.
-
-**Delivers:** vegetation_report.py, test_vegetation_report.py, PDF template verified, species and health PNGs generated, GeoJSON delivery copy, optional Folium HTML confirmed <8MB for 200-polygon site, vegetation_analysis_summary row in Supabase.
-
-**Addresses:** PDF report (P1), branded report with site metadata (P1), species/health distribution charts (P2 — include in MVP since matplotlib cost is low), interactive HTML map (P2 — include as conditional on package tier), GeoJSON output (P1).
-
-**Avoids:**
-- Folium HTML size explosion (Performance trap) — single GeoJson layer, smooth_factor=1, verify <8MB in Chrome before shipping
-- Missing methodology disclosure — text block mandated in PDF per FEATURES.md anti-feature section
-
-**Research flag:** Standard — ReportLab Platypus and Folium GeoJson API are well-documented. Folium polygon performance limit is documented in GitHub issues.
-
----
-
-### Phase 6: Integration and Delivery
-
-**Rationale:** The n8n workflow and delivery_packaging.py modification are integration work that can only be validated after all four E scripts are producing correct outputs. The delivery_packaging.py change is additive-only (collect_vegetation() returns empty list on missing vegetation/report/) and must not break existing delivery paths. The n8n workflow is wired last because Execute Command nodes require the scripts to be finalized.
-
-**Delivers:** delivery_packaging.py --include-vegetation flag, collect_vegetation() function, n8n Path E workflow (E0-E5 nodes, review gate webhook), processing_templates seeded with vegetation_config JSONB, end-to-end smoke test on one real mission folder.
-
-**Addresses:** Operator review gate (P1), delivery_packaging.py integration (P1), 24-48 hour turnaround (inherent in automation).
-
-**Avoids:**
-- Blocking delivery on Path E failure (Anti-Pattern 3) — collect_vegetation() returns [] when vegetation/report/ absent; n8n only passes --include-vegetation when vegetation_status == 'complete'
-- n8n timeout on long-running E1/E4 — set Execute Command timeout to 60 minutes
-
-**Research flag:** Standard — n8n webhook wait pattern and delivery_packaging.py additive modification follow established codebase conventions.
-
----
-
-### Phase 7: Test Suite Completion and Acceptance
-
-**Rationale:** Tests write alongside each script during Phases 2-6, but a final consolidation phase ensures coverage meets project standards (pytest-cov), validates end-to-end accuracy on real orthomosaic data, and confirms the "Looks Done But Isn't" checklist from PITFALLS.md. This phase also produces the operator SOP (flight altitude minimums, seasonal disclosure requirements, review gate procedures).
-
-**Delivers:** Full test suite passing at target coverage, end-to-end run on real mission producing PDF report reviewed by operator, "Looks Done But Isn't" checklist verified, operator SOP documented.
-
-**Addresses:** Ground truth tracking schema (P2 — add columns in final migration if not done earlier), seasonal accuracy disclosure in PDF confirmed.
-
-**Avoids:** Shipping false confidence from unit tests alone — validation on real orthomosaic data is required before first commercial mission.
-
-**Research flag:** Standard. One validation item requires attention: DeepForest fine-tuning workflow (v3.0) will require ground truth data collected starting from first commercial missions — set up accuracy tracking columns and SOP in this phase to enable the v3.0 flywheel.
-
----
+### Phase 5: Remaining Paths + Integration + Hardening
+**Rationale:** Path B/D are infrequent and need only stubs. Folder watcher bridge and webhook reliability are polish items. End-to-end testing validates the full flow.
+**Delivers:** Path B/D stub workflows, folder watcher to Package Router bridge, webhook retry with persistent queue, end-to-end integration testing (SD card to delivery).
+**Addresses:** Path B/D stub routing, folder watcher integration, webhook reliability, stale job cleanup.
+**Avoids:** Pitfall 4 (premature folder watcher trigger -- use ingest_sorter as primary), Pitfall 7 (lost webhooks -- retry queue), Pitfall 10 (duplicate watcher events -- separate Observers), Pitfall 12 (stuck status -- stale job cron).
+**Effort:** 2-3 days.
 
 ### Phase Ordering Rationale
 
-- Environment and migration must precede all scripts (hard dependencies)
-- E1 precedes E2 and E3 (E2 and E3 read E1's Supabase rows as input)
-- E2 and E3 are parallelizable but ordered here for sequential simplicity; if timeline is aggressive, build them in parallel
-- E4 requires completed E2 and E3 test data in Supabase
-- Integration (Phase 6) requires finalized script outputs to wire correctly
-- Test consolidation (Phase 7) is final to catch cross-script integration issues
+- Phase 0 before everything: n8n configuration mistakes break all subsequent work. Five minutes of verification prevents days of debugging.
+- Phase 1 before Phase 2: Scripts must exist before n8n can call them. Phase 1 is pure Python with full test coverage, no n8n coupling.
+- Phase 2 before Phase 3: Prove the Router + sub-workflow pattern on the simplest path (A) before tackling the complex Path C with long-running subprocesses.
+- Phase 3 before Phase 4: Path C is higher value (saves 20-90 min/mission) and more technically risky. Solve the hard problem early.
+- Phase 4 is independent: Can be built alongside Phase 3 if two developers are available. No dependency on Path C.
+- Phase 5 last: Polish, stubs, and reliability hardening. The core automation works after Phase 4.
 
 ### Research Flags
 
-**Phases needing deeper research during planning:**
-- None identified — all technology choices are well-documented with specific version numbers and working examples. The codebase audit (ARCHITECTURE.md) provides exact patterns to follow.
+Phases likely needing deeper research during planning:
+- **Phase 1 (mipmap_launcher.py):** Needs careful audit of ingest.py to identify which functions to extract vs. leave. The refactoring risk is MEDIUM -- functional rewrite of existing code that works.
+- **Phase 3 (Path C poll loop):** The MipMap completion detection pattern needs validation. Options: poll for result/ files, check info.json status, or use a MipMap completion marker. Test with a real small-dataset MipMap run before building the full workflow.
 
-**Phases with standard patterns (skip research-phase):**
-- All 7 phases — research is complete. The only unknowns are execution details (exact VARI/ExG threshold values for Hampton Roads species, optimal tile_size for RTX 5070 12GB VRAM) that should be determined empirically during Phase 2-3 development rather than by further research.
-
----
+Phases with standard patterns (skip research-phase):
+- **Phase 0:** Pure configuration. Just verify and set env vars.
+- **Phase 2:** Direct copy of Path E workflow pattern. Router + Switch + sub-workflow is well-documented in n8n docs.
+- **Phase 4:** Wrapping existing scripts in Execute Command nodes is the exact pattern used in Path E. The V5 webhook-wait gate copies the E5 review gate pattern.
+- **Phase 5:** Stubs are trivial. Webhook retry is a standard pattern.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All versions verified against PyPI, official docs, PyTorch forums. One reconciliation required (see below). |
-| Features | MEDIUM | Table stakes features HIGH confidence. Species classification accuracy is LOW confidence for exact numbers (30-55% is a bounded estimate, not a measured value for this specific region/drone combination). |
-| Architecture | HIGH | Based on direct codebase audit of all 14 existing scripts. Patterns are explicit, not inferred. |
-| Pitfalls | HIGH (infrastructure) / MEDIUM (model behavior) | GDAL/rasterio/PyTorch pitfalls are HIGH confidence with cited GitHub issues. DeepForest accuracy degradation in dense Hampton Roads canopy is MEDIUM confidence (extrapolated from published benchmarks, not local ground truth). |
+| Stack | HIGH | No new dependencies; all n8n nodes are built-in and documented. Patterns verified against official docs and existing Path E workflow. |
+| Features | HIGH | Features derived from direct codebase audit of all 18 scripts. Package router design already documented in package_router_patch.json. |
+| Architecture | HIGH | Based on direct audit of all source files, n8n workflows, and Supabase schema. Sub-workflow pattern proven by Path E (35 nodes in production). |
+| Pitfalls | HIGH/MEDIUM | n8n timeout/buffer/v2.0 issues verified against official docs and community reports (HIGH). MipMap process lifecycle inferred from ingest.py source, not MipMap docs (MEDIUM). |
 
-**Overall confidence: HIGH** for build plan. MEDIUM for accuracy expectations delivered to clients.
-
-### PyTorch Version Reconciliation
-
-STACK.md recommends PyTorch 2.9.1+cu128 (stable). PITFALLS.md states "stable builds only went to 2.6.x" and recommends nightly. These are not contradictory — they reflect different points in time. PITFALLS.md's advice was accurate as of PyTorch 2.6.x; stable Blackwell sm_120 support landed in 2.7 (April 2025 release blog). As of 2026-02-24, PyTorch 2.9.1 stable cu128 is the correct target. The PITFALLS.md startup assertion (`torch.cuda.get_device_capability()[0] >= 12`) remains valuable regardless — it catches any future regression where the wrong wheel is installed.
-
-**Recommendation:** Use `torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128` (stable). Add the capability assertion. Do not use nightly.
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **VARI/ExG health threshold values** — The mapping from VARI/ExG scores to Healthy/Concerning/Critical must be tuned empirically on Hampton Roads imagery. The literature provides general guidance but no Hampton Roads-specific calibration. Start with published thresholds (VARI > 0.2 = healthy, 0.1-0.2 = stressed, < 0.1 = poor) and refine after first 3-5 missions. This is acceptable — accuracy tracking schema will capture discrepancies.
-
-- **Optimal tile_size for RTX 5070 with VRAM 12GB** — STACK.md specifies tile_size=1024 as default. The actual optimal value for the RTX 5070 depends on VRAM allocation at inference time. Start with 1024, watch GPU-Z VRAM usage during first E1 run, reduce to 512 if VRAM utilization exceeds 10GB. Document observed value in vegetation_config defaults after first real mission.
-
-- **DeepForest accuracy on Hampton Roads deciduous canopy** — The 60-80% recall estimate is extrapolated from published urban tree detection benchmarks (Sofia, Bulgaria; NEON training data). Hampton Roads' dense mixed deciduous canopy in summer may perform at the lower end of this range. Recommend setting operator expectations at 60% recall for initial missions and measuring against visual inspection counts.
-
-- **PlantNet aerial canopy accuracy** — FEATURES.md estimates 30-55% top-1 species accuracy for the combined OpenAI Vision + PlantNet approach. This is a conservative estimate based on known limitations of both APIs with aerial canopy crops. Start with skip_plantnet=true for first missions to establish a OpenAI-only baseline, then enable PlantNet to measure whether cross-validation improves or introduces noise.
-
----
+- **MipMap output filename:** The GeoTIFF output filename is not fixed (could be `orthomosaic.tif`, `dom.tif`, or other). The harvester must glob for `*.tif` and identify the orthomosaic by size or metadata. Validate during Phase 1 by running MipMap on a test dataset.
+- **n8n current version:** Need to verify whether the deployed n8n is v1.x or v2.x before Phase 0. If v2.x, Execute Command re-enabling is the first task.
+- **ingest.py refactoring scope:** STACK.md recommends a simpler mipmap_harvester.py (file copy only); ARCHITECTURE.md recommends a fuller refactor into mipmap_launcher.py (C1) + ortho_harvester.py (C3). Resolution: follow ARCHITECTURE.md -- refactor into two pipeline-contract-compliant scripts. Keep ingest.py as a standalone manual tool.
+- **GPU scheduling mechanism:** The exact mechanism (file-based lock vs. n8n concurrency control vs. sequential workflow design) needs a decision during Phase 3 planning. Recommendation: start with sequential design (Path E only fires after MipMap + FFmpeg complete), add file-based GPU lock only if concurrent scheduling is needed later.
+- **re_premium package type:** ARCHITECTURE.md references `re_premium` as a distinct type; other research files list only 4 types. Clarify whether this is a 5th type or handled as re_standard with video_count > 0.
+- **Delivery merge logic:** How the system knows "all paths are complete" before triggering final delivery. Deferred to v3.1 per feature research; manual delivery trigger is acceptable initially.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `.planning/research/STACK.md` — all technologies verified against PyPI, official docs, PyTorch forums (2026-02-24)
-- `.planning/research/ARCHITECTURE.md` — direct codebase audit of all 14 existing scripts (2026-02-24)
-- `.planning/research/PITFALLS.md` — confirmed issues from rasterio GitHub #3241, PyTorch GitHub #164342, #159207 (2026-02-24)
-- [PyTorch 2.7 Release Blog](https://pytorch.org/blog/pytorch-2-7/) — CUDA 12.8 sm_120 stable support confirmed
-- [DeepForest pyproject.toml](https://github.com/weecology/DeepForest/blob/main/pyproject.toml) — Python version constraint >=3.10,<3.13 verified
-- [rasterio PyPI](https://pypi.org/project/rasterio/) — v1.4.4, bundled GDAL 3.9.x on Windows
-- [GeoPandas PyPI](https://pypi.org/project/geopandas/) — v1.1.2, shapely>=2.0 required
-- [ReportLab PyPI](https://pypi.org/project/reportlab/) — v4.4.10 (2026-02-12)
-- [GPT-4o Pricing](https://pricepertoken.com/pricing-page/model/openai-gpt-4o) — $2.50/1M input (verified 2026-02-24)
+- n8n official documentation: Switch node, Sub-workflows, Execute Sub-workflow, Execute Command, Execution Timeout, Blocking Nodes, Concurrency Control
+- Existing codebase: all 18 Python scripts (402 tests), path_e_workflow.json (35 nodes), package_router_patch.json, folder_watcher.py, ingest_sorter.py, ingest.py
+- n8n community forums: stdout maxBuffer issues, Execute Command removal in v2.0, long-running workflow failures
 
 ### Secondary (MEDIUM confidence)
-- `.planning/research/FEATURES.md` — feature value judgments and competitor analysis (2026-02-24)
-- [Fine-Tuning DeepForest for UAV Imagery (ISPRS 2025)](https://isprs-archives.copernicus.org/articles/XLVIII-4-W15-2025/39/2025/) — urban tree detection performance benchmarks
-- [GPT-4 vs Plant.id Plant Identification (Kindwise)](https://www.kindwise.com/post/the-plant-identification-battle-gpt-4-vs-plant-id) — 55.8% zero-shot accuracy baseline
-- [Folium GitHub Issue #975](https://github.com/python-visualization/folium/issues/975) — HTML file size limits
-- [rasterio GitHub Issue #3241](https://github.com/rasterio/rasterio/issues/3241) — windowed read memory leak
+- MipMap SDK documentation (software overview) -- CLI specifics verified from ingest.py source code rather than MipMap docs
+- watchdog GitHub issues: duplicate event behavior on Windows, large file modified events
 
 ### Tertiary (LOW confidence)
-- Hampton Roads species accuracy estimates (30-55%) — extrapolated from general aerial RGB benchmarks; no Hampton Roads-specific studies found; validate after first 3-5 commercial missions
-- Winter deciduous canopy accuracy degradation (0.55-0.70 F1) — estimated from published literature on bare-crown RGB detection; not validated for Hampton Roads climate or specific drone altitudes
+- n8n internal memory behavior under multi-hour executions -- no official documentation, inferred from community reports
+- MipMap process lifecycle on crash/timeout -- inferred from subprocess behavior, not from MipMap documentation
 
 ---
-*Research completed: 2026-02-24*
+*Research completed: 2026-03-05*
 *Ready for roadmap: yes*

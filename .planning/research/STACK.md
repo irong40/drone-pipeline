@@ -1,8 +1,8 @@
-# Stack Research — Path E Vegetation Analysis
+# Stack Research — v3.0 Package Router & End-to-End Automation
 
-**Domain:** Drone orthomosaic vegetation analysis pipeline (Python CLI)
-**Researched:** 2026-02-24
-**Confidence:** HIGH (all versions verified against PyPI, official docs, and PyTorch forums)
+**Domain:** n8n workflow orchestration, MipMap photogrammetry automation, event-driven pipeline triggers
+**Researched:** 2026-03-05
+**Confidence:** HIGH (n8n patterns verified against official docs; MipMap CLI verified against existing ingest.py)
 
 ---
 
@@ -10,119 +10,346 @@
 
 The existing stack is validated and stays unchanged:
 
-| Already Have | Do Not Reinstall |
-|--------------|-----------------|
-| Python 3.14.3 (system) | — |
-| pytest, pytest-mock, pytest-cov | — |
-| supabase>=2.0.0 | — |
-| google-api-python-client, google-auth | — |
-| Pillow, pyexiftool, requests, watchdog | — |
-| pywin32 | — |
+| Already Have | Status |
+|--------------|--------|
+| Python 3.14 (system) + 3.12 (.venv-path-e) | Validated v2.0 |
+| 18 Python CLI scripts (all v1/v2 pipeline) | 402 tests passing |
+| n8n self-hosted (Path E workflow, 35 nodes) | Deployed |
+| watchdog-based folder_watcher.py + Windows service | Deployed |
+| MipMap Desktop + ingest.py task.json generator | Working |
+| Supabase (drone_jobs, processing_steps, video_assets, vegetation_detections) | Deployed |
+| FFmpeg, Google Drive API, Pillow, requests | Deployed |
+| Path E dependencies (DeepForest, PyTorch, rasterio, etc.) | In .venv-path-e |
 
-Everything in this document is NEW — additions to `requirements.txt` for Path E only.
-
----
-
-## Critical Constraint: Python Version Split
-
-**The existing pipeline runs Python 3.14.3 (system default). DeepForest 2.0.0 requires Python >=3.10, <3.13.**
-
-This means Path E scripts MUST run in a separate Python 3.12 virtual environment.
-
-**Resolution:** Python 3.12.10 is already installed on this machine (confirmed via `py -3.12 --version`). Create a dedicated venv:
-
-```cmd
-py -3.12 -m venv C:\Users\redle\drone-pipeline\.venv-path-e
-.venv-path-e\Scripts\activate
-```
-
-All Path E dependency installs below run inside this venv. The existing 14 scripts remain in the system Python 3.14 environment with their current requirements.txt untouched.
+Everything in this document is NEW for v3.0: n8n workflow architecture, MipMap output harvesting, and webhook contracts.
 
 ---
 
-## Recommended Stack (New Additions Only)
+## Recommended Stack Additions
 
-### Core ML: GPU-Accelerated Canopy Detection
+### n8n Workflow Nodes (No Install Required)
+
+These are built-in n8n nodes. No npm packages or community nodes needed.
+
+| Node Type | n8n ID | Purpose | Where Used |
+|-----------|--------|---------|------------|
+| Webhook | `n8n-nodes-base.webhook` | Entry point for Package Router (receives ingest_sorter POST) | Package Router trigger |
+| Switch | `n8n-nodes-base.switch` | Route by `package_type` to Path A/B/C/D/V branches | Package Router core |
+| IF | `n8n-nodes-base.if` | Binary conditions (has_video, has_ppk, vegetation_enabled) | Path branching |
+| Execute Sub-workflow | `n8n-nodes-base.executeworkflow` | Call Path A/B/C/D/V/E as separate workflows | Router to path dispatch |
+| Execute Sub-workflow Trigger | `n8n-nodes-base.executeworkflowtrigger` | Entry point in each sub-workflow | Path A/B/C/D/V start |
+| Execute Command | `n8n-nodes-base.executeCommand` | Run Python scripts and MipMap engine | All paths |
+| HTTP Request | `n8n-nodes-base.httpRequest` | Supabase REST API calls | Status updates |
+| Code | `n8n-nodes-base.code` | JSON parsing, path construction, result transformation | Between script steps |
+| Wait | `n8n-nodes-base.wait` | Poll loops (ortho wait) and delay for MipMap processing | Path C ortho polling |
+| Respond to Webhook | `n8n-nodes-base.respondToWebhook` | Immediate 200 response to ingest webhook | Router entry |
+| Set | `n8n-nodes-base.set` | Pass mission data between nodes | Data shaping |
+
+**Why Sub-workflows Instead of One Giant Workflow:**
+- Path E already has 35 nodes. Adding A/B/C/D/V inline would create an unmanageable 100+ node monolith.
+- Sub-workflows can be tested independently (fire their trigger webhook directly).
+- n8n's Execute Sub-workflow node supports "Wait for Sub-Workflow Completion" -- the router can fire Path C, wait for it, then conditionally fire Path E.
+- Bug in one path doesn't break the others.
+
+### n8n Switch Node Configuration (Package Router Core)
+
+The Switch node is the heart of the Package Router. Use **Rules Mode** with `package_type` as the routing field.
+
+| Output | Condition | Routes To |
+|--------|-----------|-----------|
+| Output 0 | `package_type` equals `re_standard` | Path A (photos) + Path V (video) |
+| Output 1 | `package_type` equals `site_survey` | Path C (mapping) + Path A (photos) |
+| Output 2 | `package_type` equals `environmental_survey` | Path C (mapping) + Path A (photos) |
+| Output 3 | `package_type` equals `construction_hybrid` | Path B (construction) + Path C (mapping) |
+| Fallback | No match | Log warning + manual routing |
+
+**Critical:** The Switch node supports up to 4 named outputs by default. With 4 package types + fallback, this fits within the built-in limit. No community Dynamic Switch node needed.
+
+**After the Switch, use parallel Execute Sub-workflow calls** -- e.g., `re_standard` fires both Path A and Path V sub-workflows. n8n handles this by connecting the Switch output to multiple Execute Sub-workflow nodes.
+
+### New Python Script: mipmap_harvester.py
+
+One new Python script is needed for v3.0. Runs on system Python 3.14.
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| PyTorch | 2.9.1 (cu128) | Tensor ops, GPU execution for DeepForest | 2.9.x is the latest stable with official CUDA 12.8 wheels. RTX 5070 (sm_120/Blackwell) support is confirmed stable as of PyTorch 2.7+ — no source build required. |
-| torchvision | 0.24.1 (cu128) | Object detection backbone, image transforms | Required by DeepForest; version must match torch exactly. |
-| torchaudio | 2.9.1 (cu128) | Side dependency of torch ecosystem | Install alongside torch/torchvision to avoid version conflicts. |
-| DeepForest | 2.0.0 | Tree crown / canopy detection from RGB orthomosaic | Pretrained RetinaNet model on NEON airborne imagery. Only production-ready open source package for this task. Pulls in pytorch-lightning, rasterio, geopandas, albumentations, opencv as sub-dependencies. |
+| Python 3.14 | System | mipmap_harvester.py -- copies MipMap output GeoTIFF to mission mapping/ folder | No GPU deps; standard file operations only |
+| shutil (stdlib) | Built-in | File copy with metadata preservation | Already used in ingest_sorter.py |
+| pathlib (stdlib) | Built-in | Cross-platform path handling | Already used across pipeline |
+| json (stdlib) | Built-in | Parse MipMap info.json for status checking | Already used in ingest.py |
 
-### Geospatial Processing
+**No new pip dependencies for mipmap_harvester.py.** It uses only stdlib + existing pipeline_utils.py imports (setup_logging, get_supabase_client, validate_webhook_url).
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| rasterio | 1.4.4 | GeoTIFF reading, tile windowing, pixel extraction | 1.5.0 requires Python 3.12+ and numpy 2.x — compatible in this venv, but 1.4.4 is safer. Bundles GDAL 3.9.x for Windows. No separate GDAL install needed. |
-| GeoPandas | 1.1.2 | Canopy polygon operations, GeoJSON/GeoPackage I/O | 1.x series is the modern release with Shapely 2.x required. pip install works cleanly on Windows since Shapely and pyogrio now ship binary wheels. |
-| Shapely | >=2.0.6 | Geometry primitives (Point, Polygon, MultiPolygon) | Shapely 2.x is C-extension only (dropped pure Python), so it's significantly faster. GeoPandas 1.x mandates it. Installed automatically as a GeoPandas dependency. |
-| pyproj | >=3.6.0 | CRS transformations (UTM ↔ WGS84) | Required by GeoPandas and rasterio. Bundles PROJ 9.x. Automatically installed. |
+### MipMap CLI Automation Pattern
 
-### Visualization and Reporting
+Verified from existing `ingest.py` (line 517-529):
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Folium | 0.20.0 | Interactive Leaflet.js map as HTML output | Latest stable. Pure Python, no C extensions. Generates standalone HTML with embedded Leaflet tiles — no server needed, ships in client ZIP. |
-| ReportLab | 4.4.10 | Branded PDF report generation | Latest stable (released 2026-02-12). Open-source tier covers all needed features: text, images, charts, page layout. No license cost. |
-| matplotlib | 3.10.8 | Health score charts, species distribution bar charts, annotated map PNGs | Almost certainly already installed as a DeepForest sub-dependency. Pin to >=3.9.0 to ensure compatibility with numpy 2.x. |
+```python
+# MipMap engine is invoked via subprocess, not Python API
+MIPMAP_ENGINE = r"C:\Program Files\MipMap\MipMapDesktop\resources\resources\catch3d\reconstruct_full_engine.exe"
 
-### External APIs
+cmd = [
+    MIPMAP_ENGINE,
+    f'--task_json={task_json_path}',
+    "--reconstruct_type=0",
+]
+proc = subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr)
+ret = proc.wait()  # Blocks until MipMap finishes
+```
 
-| Service | Version/Endpoint | Purpose | Auth |
-|---------|-----------------|---------|------|
-| OpenAI Vision API | gpt-4o, API v1 | Species classification from canopy crops, qualitative health assessment | API key via env var `OPENAI_API_KEY`. Use `openai>=1.0.0` Python client. |
-| PlantNet API | v2, `https://my-api.plantnet.org/v2/identify/all` | Cross-validation of species classification | API key as query param `?api-key=`. Free tier: 500 identifications/day. |
+**MipMap output structure** (from ingest.py workspace creation):
+```
+D:/{user_id}/{project_name}/{task_name}/
+    task.json           <-- Input (generated by ingest.py)
+    info.json           <-- Status tracking
+    result/
+        orthomosaic.tif <-- GeoTIFF output (what we need to harvest)
+        3d_tiles/       <-- 3D tileset
+        pointcloud.las  <-- LAS point cloud
+        model.osgb      <-- 3D model
+```
+
+The harvester needs to:
+1. Monitor `info.json` for `"status": "complete"` (or watch for `result/orthomosaic.tif` to appear)
+2. Copy `result/orthomosaic.tif` to `E:\Sentinel\Incoming\{mission_folder}\mapping\orthomosaic.tif`
+3. Update Supabase `processing_steps` with `step_name=mapping, status=complete`
+
+### Folder Watcher Enhancement
+
+The existing `folder_watcher.py` fires to `http://localhost:5678/webhook/folder-watcher`. For v3.0, it needs a second webhook target or the existing webhook URL needs to point to the Package Router instead.
+
+**Recommendation:** Change `folder_watcher.py`'s default webhook URL to point to the Package Router webhook, OR add a `--webhook-url` override (already exists as CLI arg). The Package Router replaces direct Path E triggering -- it routes everything.
+
+**No code change needed** in folder_watcher.py itself. The `--webhook-url` arg already supports pointing to any n8n webhook endpoint. The folder_watcher fires an inventory payload; the Package Router receives it and routes.
+
+However, the ingest_sorter webhook payload is richer (includes `mission_id`, `package_type`). The folder_watcher payload only has file counts. **The Package Router should receive its trigger from ingest_sorter.py, not folder_watcher.py.** The folder_watcher remains useful for detecting new SD card dumps before ingest_sorter runs.
 
 ---
 
-## Installation
+## Webhook Contract Definitions
 
-Run all of the following inside the Python 3.12 venv at `.venv-path-e\`:
+### Webhook 1: Ingest Complete -> Package Router
 
-```bash
-# Step 1: PyTorch with CUDA 12.8 (RTX 5070 Blackwell support)
-pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 \
-    --index-url https://download.pytorch.org/whl/cu128
+**URL:** `http://localhost:5678/webhook/package-router`
+**Method:** POST
+**Source:** `ingest_sorter.py --webhook`
+**Payload (existing from ingest_sorter.py line 301-311):**
 
-# Step 2: DeepForest (installs rasterio, geopandas, shapely, opencv, etc. as sub-deps)
-pip install deepforest==2.0.0
-
-# Step 3: Visualization and reporting (may already be sub-deps; pin anyway)
-pip install "folium==0.20.0" "reportlab==4.4.10" "matplotlib>=3.9.0"
-
-# Step 4: OpenAI client
-pip install "openai>=1.0.0"
-
-# Step 5: Verify GPU is visible
-python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+```json
+{
+    "mission_id": "uuid-from-supabase",
+    "mission_number": 47,
+    "package_type": "re_standard",
+    "photo_count": 150,
+    "video_count": 3,
+    "has_ppk_data": true,
+    "source_platform": "m4e",
+    "ingested_at": "2026-03-05T14:30:00Z"
+}
 ```
 
-Expected output from Step 5:
-```
-True
-NVIDIA GeForce RTX 5070
+**Change required in ingest_sorter.py:** Update `N8N_WEBHOOK_URL` default from `/webhook/ingest` to `/webhook/package-router`. This is a one-line change.
+
+### Webhook 2: Path C Complete -> Path E Trigger
+
+**URL:** `http://localhost:5678/webhook/sentinel-vegetation-trigger` (already exists)
+**Method:** POST
+**Source:** Package Router (after Path C sub-workflow completes)
+**Payload:**
+
+```json
+{
+    "mission_id": "uuid-from-supabase"
+}
 ```
 
-### Why This Install Order Matters
+This webhook already exists in `path_e_workflow.json`. The Package Router's Path C handler fires it after MipMap output is harvested and `mapping/orthomosaic.tif` is confirmed.
 
-DeepForest's pip install pulls torch, torchvision, rasterio, geopandas, shapely, and opencv as dependencies. If you install DeepForest first, pip will resolve torch from PyPI (no CUDA). Install PyTorch with `--index-url cu128` FIRST, then DeepForest. pip will see torch already satisfied and won't overwrite it with a CPU build.
+### Webhook 3: Folder Watcher -> n8n (unchanged)
+
+**URL:** `http://localhost:5678/webhook/folder-watcher`
+**Method:** POST
+**Source:** `folder_watcher.py`
+**Payload (existing, unchanged):**
+
+```json
+{
+    "folder_path": "E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218",
+    "folder_name": "SAI_M0047_RE_Standard_20260218",
+    "mission_number": 47,
+    "photo_count": 150,
+    "video_count": 3,
+    "has_ppk_data": true,
+    "total_size_bytes": 5368709120,
+    "detected_at": "2026-03-05T14:25:00Z"
+}
+```
+
+The folder_watcher webhook remains separate. It notifies n8n of new folders; the operator then runs ingest_sorter which fires the Package Router webhook. These are sequential, not redundant.
+
+### Webhook 4: Path E Review Gate (unchanged)
+
+**URL:** `http://localhost:5678/webhook/sentinel-vegetation-resume`
+Already documented in path_e_workflow.json. No changes needed.
 
 ---
 
-## Alternatives Considered
+## n8n Environment Variables
 
-| Recommended | Alternative | Why Alternative Was Rejected |
-|-------------|-------------|-------------------------------|
-| DeepForest 2.0.0 | Detectron2 | No pretrained tree crown model; requires training from scratch; Meta's maintenance cadence is slow. |
-| DeepForest 2.0.0 | YOLOv8 + custom labels | Would need labeled training data we don't have. DeepForest's NEON pretrained weights work out-of-the-box on residential trees. |
-| rasterio 1.4.4 | rasterio 1.5.0 | 1.5.0 requires numpy>=2 and is newer than we need. 1.4.4 is the stable LTS-equivalent and is installed automatically by deepforest anyway. |
-| ReportLab | WeasyPrint / pdfkit | WeasyPrint requires Cairo system lib (painful on Windows). pdfkit wraps wkhtmltopdf (large binary dep). ReportLab is pure Python. |
-| ReportLab | fpdf2 | fpdf2 is lighter but lacks the Platypus layout engine needed for multi-column reports with embedded charts. |
-| Folium | Deck.gl / Kepler.gl | Overkill for 200-canopy maps. Folium generates self-contained HTML, no server required. |
-| gpt-4o | gpt-4o-mini | Mini uses same high-detail vision pricing formula but has lower accuracy for plant identification. For 30% sample of canopies (vision_sample_pct=0.3), gpt-4o quality is worth the marginal cost. |
-| PlantNet (cross-validate only) | iNaturalist API | iNaturalist's identification API is rate-limited and requires observation context. PlantNet is designed for programmatic image-only queries. |
+### Existing (already configured for Path E)
+
+| Variable | Value | Used By |
+|----------|-------|---------|
+| `SUPABASE_URL` | `https://qjpujskwqaehxnqypxzu.supabase.co` | All Supabase HTTP nodes |
+| `SUPABASE_SERVICE_KEY` | Service role key | All Supabase HTTP nodes |
+
+### New for v3.0
+
+| Variable | Value | Used By |
+|----------|-------|---------|
+| `N8N_BASE_URL` | `http://localhost:5678` | Inter-workflow webhook calls (Router -> Path E) |
+| `MIPMAP_ENGINE_PATH` | `C:\Program Files\MipMap\MipMapDesktop\resources\resources\catch3d\reconstruct_full_engine.exe` | Path C Execute Command nodes |
+| `MIPMAP_WORKSPACE` | `D:/` | Path C MipMap workspace root |
+| `SENTINEL_INCOMING` | `E:\Sentinel\Incoming` | Path A/V/C script working directory |
+| `SENTINEL_SCRIPTS` | `E:\Sentinel\Scripts` | Execute Command node script paths |
+| `VENV_PATH_E_PYTHON` | `E:\Sentinel\.venv-path-e\Scripts\python.exe` | Path E script execution |
+
+---
+
+## n8n Workflow Architecture
+
+### Package Router Workflow (NEW)
+
+```
+[Webhook: /package-router]
+    |
+[HTTP: Fetch drone_job from Supabase by mission_id]
+    |
+[Code: Enrich with template_defaults from package_router_patch.json]
+    |
+[Switch: package_type]
+    |
+    +-- re_standard -----> [Execute Sub-workflow: Path A] + [Execute Sub-workflow: Path V]
+    |
+    +-- site_survey -----> [Execute Sub-workflow: Path C] --> [IF: vegetation_enabled?] --> [HTTP: Fire Path E webhook]
+    |                                                                                          + [Execute Sub-workflow: Path A]
+    +-- env_survey ------> [Execute Sub-workflow: Path C] --> [IF: vegetation_enabled?] --> [HTTP: Fire Path E webhook]
+    |                                                                                          + [Execute Sub-workflow: Path A]
+    +-- construction ----> [Execute Sub-workflow: Path B] + [Execute Sub-workflow: Path C]
+    |
+    +-- fallback --------> [Set: status=manual_routing] --> [Stop]
+```
+
+### Path C Sub-workflow (NEW)
+
+```
+[Execute Sub-workflow Trigger]
+    |
+[Code: Build task.json path from mission folder]
+    |
+[Execute Command: python ingest.py {source} --run]
+    |  (blocks until MipMap completes)
+    |
+[Execute Command: python mipmap_harvester.py --mission-id {id} --workspace D:/]
+    |
+[HTTP: PATCH processing_steps SET status=complete WHERE step_name=mapping]
+    |
+[Code: Return {ortho_path, mission_id}]
+```
+
+### Path A Sub-workflow (NEW)
+
+```
+[Execute Sub-workflow Trigger]
+    |
+[Execute Command: python video_color_grade.py {mission_dir} --platform {platform}]
+    |
+[Execute Command: python delivery_packaging.py {mission_dir} --address {addr} --photos-only]
+    |
+[HTTP: PATCH processing_steps SET status=complete WHERE step_name=photo_delivery]
+```
+
+### Path V Sub-workflow (NEW)
+
+```
+[Execute Sub-workflow Trigger]
+    |
+[Execute Command: python video_metadata.py {mission_dir}]
+    |
+[Execute Command: python video_qa.py {mission_dir}]
+    |
+[Execute Command: python video_proxy_gen.py {mission_dir}]
+    |
+[Execute Command: python video_color_grade.py {mission_dir}]
+    |
+[Wait: Manual DaVinci Resolve step (V5) -- webhook resume or skip]
+    |
+[Execute Command: python video_format_export.py {mission_dir}]
+    |
+[Execute Command: python delivery_packaging.py {mission_dir} --video-addendum]
+    |
+[HTTP: PATCH processing_steps SET status=complete WHERE step_name=video_delivery]
+```
+
+### Path E Workflow (EXISTING -- no changes)
+
+Already deployed with 35 nodes. Triggered by POST to `/sentinel-vegetation-trigger`.
+
+---
+
+## n8n Timeout Configuration
+
+MipMap photogrammetry processing takes 15-90 minutes depending on image count and quality level. The n8n default execution timeout must be increased for Path C.
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `EXECUTIONS_TIMEOUT` | `7200` (2 hours) | MipMap can run 90+ minutes for large datasets |
+| `EXECUTIONS_TIMEOUT_MAX` | `14400` (4 hours) | Safety ceiling for stuck processes |
+| Per-workflow timeout | 2 hours on Path C | Only Path C needs extended timeout |
+
+Set in n8n Docker compose or environment:
+```
+EXECUTIONS_TIMEOUT=7200
+EXECUTIONS_TIMEOUT_MAX=14400
+```
+
+**Alternative:** Use `Wait for Sub-Workflow Completion: false` on Path C, then poll for completion via Supabase `processing_steps.status`. This avoids the timeout issue entirely but adds polling complexity.
+
+**Recommendation:** Use blocking `Wait for Sub-Workflow Completion: true` with extended timeout. Simpler, and MipMap's `reconstruct_full_engine.exe` exits cleanly with exit code on completion (verified in ingest.py).
+
+---
+
+## Supabase Schema Additions
+
+### New Columns on `drone_jobs`
+
+| Column | Type | Default | Purpose |
+|--------|------|---------|---------|
+| `vegetation_analysis` | BOOLEAN | false | Already in package_router_patch.json |
+| `vegetation_status` | TEXT | null | Already used by Path E workflow |
+
+These are already documented in `package_router_patch.json` migration checklist. Verify they exist before v3.0 deployment.
+
+### New `processing_steps` Rows per Mission
+
+Each path creates its own processing_steps rows:
+
+| step_name | Created By | Status Flow |
+|-----------|------------|-------------|
+| `photo_color_grade` | Path A | waiting -> running -> complete/failed |
+| `photo_delivery` | Path A | waiting -> running -> complete/failed |
+| `video_metadata` | Path V | waiting -> running -> complete/failed |
+| `video_qa` | Path V | waiting -> running -> complete/failed |
+| `video_proxy` | Path V | waiting -> running -> complete/failed |
+| `video_color_grade` | Path V | waiting -> running -> complete/failed |
+| `video_export` | Path V | waiting -> running -> complete/failed |
+| `video_delivery` | Path V | waiting -> running -> complete/failed |
+| `mapping` | Path C | waiting -> running -> complete/failed |
+| `mapping_harvest` | Path C | waiting -> running -> complete/failed |
+| `veg_canopy_detection` | Path E | (already exists) |
+| `veg_species_classification` | Path E | (already exists) |
+| `veg_health_assessment` | Path E | (already exists) |
+| `veg_report_generation` | Path E | (already exists) |
 
 ---
 
@@ -130,94 +357,94 @@ DeepForest's pip install pulls torch, torchvision, rasterio, geopandas, shapely,
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| GDAL installed separately (OSGeo4W, etc.) | rasterio 1.4.x PyPI wheels bundle GDAL 3.9.x. Installing a separate system GDAL creates conflicting DLLs on Windows and breaks both installs. | Let rasterio's wheel manage GDAL. Never set `GDAL_DATA` or `PROJ_DATA` env vars in the venv. |
-| tensorflow | DeepForest 2.0.0 dropped TensorFlow entirely (was in 1.x). PyPI still has the old `deepforest-pytorch` package — do not install that. | The standard `deepforest` package on PyPI is now PyTorch-only. |
-| CUDA toolkit installer | RTX 5070 with CUDA 12.8 is already on the rig. PyTorch cu128 wheels bundle their own cudnn libs. Don't reinstall system CUDA. | Verify with `nvidia-smi` that driver 581.57 is present; that's sufficient. |
-| numpy pinned to 1.x | rasterio 1.4.4 requires numpy>=1.24; DeepForest and matplotlib work with numpy 2.x. Pinning 1.x blocks upgrades. | Let pip resolve numpy; it will land on 2.x which everything supports. |
-| opencv-python | DeepForest installs `opencv-python-headless`. Installing `opencv-python` alongside it causes DLL conflicts on Windows (two different cv2 builds fighting). | Use `opencv-python-headless` only, which deepforest pulls automatically. |
-| Pillow version conflict | The existing requirements.txt has `Pillow>=10.0.0`. DeepForest requires Pillow as well. Both are compatible; no pin change needed. | Verify with `pip check` after install. |
+| Airflow / Prefect / Dagster | n8n is already deployed and working. Adding a second orchestrator creates operational complexity for a single-operator business. | n8n sub-workflows handle the routing. |
+| WebODM | MipMap Desktop is licensed and produces superior orthomosaics with 3D tiles, Gaussian splats. WebODM is a downgrade. | Continue using MipMap via CLI. |
+| n8n community nodes | The built-in Switch, IF, Execute Sub-workflow, and Execute Command nodes cover all routing needs. Community nodes add update/compatibility risk. | Built-in nodes only. |
+| Redis / RabbitMQ message queue | Overkill for single-rig, single-operator pipeline. n8n webhooks + Supabase status columns provide sufficient event coordination. | Webhook + Supabase polling. |
+| Docker for Python scripts | Scripts run directly on the processing rig with access to local drives (E:, D:, F:). Docker would require volume mounts and complicate MipMap GPU access. | Direct execution via Execute Command node. |
+| New Python web framework (Flask/FastAPI) | The webhook endpoints are handled by n8n. Python scripts remain CLI-only. No need for a Python HTTP server. | n8n webhooks. |
+| Celery task queue | Single-rig, single-operator. No need for distributed task management. | n8n orchestration handles sequencing. |
 
 ---
 
-## Stack Patterns by Variant
+## Alternatives Considered
 
-**If GPU not available (fallback to CPU):**
-- DeepForest will automatically detect no CUDA and run on CPU
-- E1 (canopy detection) will take 5-20x longer; tile_size reduction to 512 helps
-- Use `DEEPFOREST_DEVICE=cpu` env var to force CPU explicitly
-- Do NOT use CPU mode in production; RTX 5070 makes E1 tractable in seconds per tile
-
-**If PlantNet 500/day limit is hit:**
-- Set `--skip-plantnet` flag on E2; OpenAI Vision becomes sole classifier
-- PlantNet is cross-validation only; PRD states `skip_plantnet: false` as default but it's a configurable parameter
-- In high-volume periods (5+ missions/day), distribute calls across hours or upgrade to PlantNet Pro (€0.005/identification)
-
-**If OpenAI API costs need reducing:**
-- Reduce `vision_sample_pct` from 0.3 to 0.1 (sample 10% of canopies)
-- Use low-detail mode for initial health triage, only high-detail on flagged canopies
-- gpt-4o high-detail: ~765 tokens per 1024x1024 crop = ~$0.002/image at $2.50/1M input tokens
-- At 200 canopies, 30% sample = 60 images = ~$0.12 per mission in Vision API calls
+| Recommended | Alternative | Why Alternative Was Rejected |
+|-------------|-------------|-------------------------------|
+| n8n Switch node (Rules Mode) | n8n IF chains | Switch handles 4+ branches cleanly; IF chains create visual spaghetti in n8n canvas |
+| Execute Sub-workflow per path | Single monolithic workflow | Path E already has 35 nodes; adding 4 more paths inline creates unmaintainable 100+ node workflow |
+| mipmap_harvester.py (new script) | n8n Code node with file ops | n8n's Code node runs in Node.js sandbox; Windows file copy with error handling and Supabase update is cleaner in Python with existing pipeline_utils |
+| Blocking subprocess.wait() for MipMap | Fire-and-forget + polling | MipMap engine exits with code 0 on success; blocking is simpler and ingest.py already uses this pattern |
+| ingest_sorter.py fires Package Router | folder_watcher.py fires Package Router | folder_watcher payload lacks mission_id and package_type; ingest_sorter has the full context needed for routing |
+| Extended n8n timeout (2 hours) | Non-blocking sub-workflow + poll | Polling adds complexity; MipMap finishes deterministically; timeout is the simpler approach |
 
 ---
 
-## Version Compatibility Matrix
+## Installation Summary
 
-| Package | Version | Compatible With | Notes |
-|---------|---------|-----------------|-------|
-| deepforest==2.0.0 | Python >=3.10, <3.13 | Use Python 3.12.10 (available via `py -3.12`) | Does NOT run on system Python 3.14 |
-| torch==2.9.1+cu128 | torchvision==0.24.1 | RTX 5070 sm_120 confirmed working | Must install before deepforest to get CUDA build |
-| rasterio==1.4.4 | GDAL 3.9.x (bundled) | numpy>=1.24, Python 3.10-3.14 | Bundled GDAL; do not install GDAL system-wide |
-| geopandas==1.1.2 | shapely>=2.0, pyproj>=3.3 | Python>=3.10 | pip install works clean on Windows; no Fiona needed (uses pyogrio) |
-| reportlab==4.4.10 | Python 3.9-3.14 | matplotlib, Pillow | pip install; no system deps |
-| folium==0.20.0 | Python 3.x | branca, Jinja2, numpy, requests | All pure Python; already have requests in base env |
-| matplotlib>=3.9.0 | numpy>=1.21 | Python>=3.9 | DeepForest sub-dep; will be installed automatically |
-| openai>=1.0.0 | Python>=3.8 | Any | Modern v1 client with async support |
+### n8n Configuration Changes
 
----
+```bash
+# Add to n8n Docker environment or .env file
+N8N_BASE_URL=http://localhost:5678
+MIPMAP_ENGINE_PATH=C:\Program Files\MipMap\MipMapDesktop\resources\resources\catch3d\reconstruct_full_engine.exe
+MIPMAP_WORKSPACE=D:/
+SENTINEL_INCOMING=E:\Sentinel\Incoming
+SENTINEL_SCRIPTS=E:\Sentinel\Scripts
+VENV_PATH_E_PYTHON=E:\Sentinel\.venv-path-e\Scripts\python.exe
+EXECUTIONS_TIMEOUT=7200
+EXECUTIONS_TIMEOUT_MAX=14400
+```
 
-## requirements-path-e.txt (New File)
+### Python Changes
 
-Create `C:\Users\redle\drone-pipeline\requirements-path-e.txt` (separate from the main `requirements.txt`):
+```bash
+# No new pip dependencies for v3.0
+# mipmap_harvester.py uses only stdlib + existing pipeline_utils.py
 
-```text
-# Path E — Vegetation Analysis Pipeline
-# Install in Python 3.12 venv ONLY (.venv-path-e)
-# PyTorch must be installed FIRST via: pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu128
-# Then: pip install -r requirements-path-e.txt
+# One-line change in ingest_sorter.py:
+# N8N_WEBHOOK_URL default: "http://localhost:5678/webhook/ingest" -> "http://localhost:5678/webhook/package-router"
+```
 
-deepforest==2.0.0
-folium==0.20.0
-reportlab==4.4.10
-matplotlib>=3.9.0
-openai>=1.0.0
+### n8n Workflow Files to Create
 
-# Note: rasterio, geopandas, shapely, pyproj, opencv-python-headless, numpy
-# are installed automatically as DeepForest sub-dependencies.
-# Do not pin them separately to avoid version conflicts.
+| File | Nodes (estimated) | Purpose |
+|------|-------------------|---------|
+| `n8n/package_router_workflow.json` | 15-20 | Main router: webhook -> switch -> sub-workflow dispatch |
+| `n8n/path_a_workflow.json` | 8-10 | Photo processing: color grade -> delivery packaging |
+| `n8n/path_v_workflow.json` | 15-18 | Video pipeline: metadata -> QA -> proxy -> grade -> export -> delivery |
+| `n8n/path_c_workflow.json` | 12-15 | Mapping: ingest.py -> MipMap -> harvester -> ortho confirmation |
+| `n8n/path_b_workflow.json` | 5-8 | Construction/ADIAT: placeholder routing |
+| `n8n/path_e_workflow.json` | 35 | (already exists, no changes) |
+
+### Supabase Migration
+
+```sql
+-- Run ONLY if columns don't already exist (check package_router_patch.json migration_checklist)
+ALTER TABLE drone_jobs ADD COLUMN IF NOT EXISTS vegetation_analysis BOOLEAN DEFAULT false;
+ALTER TABLE drone_jobs ADD COLUMN IF NOT EXISTS vegetation_status TEXT;
 ```
 
 ---
 
 ## Sources
 
-- [PyTorch 2.7 Release Blog](https://pytorch.org/blog/pytorch-2-7/) — CUDA 12.8 wheels confirmed, Blackwell support introduced (April 2025)
-- [PyTorch Forums: sm_120 support timeline](https://discuss.pytorch.org/t/when-will-sm120-support-be-available/223621) — Stable 2.9.0 + cu128 confirmed working on RTX 50 series (HIGH confidence)
-- [PyTorch sm_120 GitHub Issue #164342](https://github.com/pytorch/pytorch/issues/164342) — Official tracking issue for Blackwell support
-- [deepforest PyPI](https://pypi.org/project/deepforest/) — v2.0.0 released November 4, 2025; Python >=3.10,<3.13; Windows wheels available
-- [DeepForest Installation Docs](https://deepforest.readthedocs.io/en/stable/getting_started/install.html) — pip install deepforest; strongly recommends virtualenv
-- [DeepForest pyproject.toml](https://github.com/weecology/DeepForest/blob/main/pyproject.toml) — torch>2.2.0, torchvision>0.17.0, pytorch-lightning>2.6.0,<3.0.0 (HIGH confidence)
-- [rasterio PyPI](https://pypi.org/project/rasterio/) — v1.4.4 stable, Python>=3.10, Windows wheels bundled with GDAL 3.9.x
-- [rasterio 1.5.0 release announcement](https://rasterio.readthedocs.io/en/latest/installation.html) — Python>=3.12, numpy>=2 requirement (confirms need to stay on 1.4.4)
-- [GeoPandas PyPI](https://pypi.org/project/geopandas/) — v1.1.2 released December 22, 2025; shapely>=2.0 required
-- [Folium PyPI](https://pypi.org/project/folium/) — v0.20.0 latest stable
-- [ReportLab PyPI](https://pypi.org/project/reportlab/) — v4.4.10 released February 12, 2026
-- [PlantNet API Pricing](https://my.plantnet.org/pricing) — Free tier: 500 identifications/day; Pro: €0.005/identification (HIGH confidence, fetched directly)
-- [PlantNet API Endpoint](https://my.plantnet.org/doc/getting-started/introduction) — `https://my-api.plantnet.org/v2/identify/{project}`; API key as query param
-- [GPT-4o Pricing](https://pricepertoken.com/pricing-page/model/openai-gpt-4o) — $2.50/1M input, $10.00/1M output tokens (verified February 24, 2026)
-- [matplotlib stable docs](https://matplotlib.org/stable/install/index.html) — v3.10.8 latest stable
+- [n8n Switch Node Documentation](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.switch/) -- Rules Mode, Expression Mode, fallback handling (HIGH confidence)
+- [n8n Sub-workflows Documentation](https://docs.n8n.io/flow-logic/subworkflows/) -- Execute Workflow node, data passing (HIGH confidence)
+- [n8n Execute Sub-workflow Node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.executeworkflow/) -- Wait for completion option (HIGH confidence)
+- [n8n Execute Sub-workflow Trigger](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.executeworkflowtrigger/) -- Sub-workflow entry point (HIGH confidence)
+- [n8n Execution Timeout Configuration](https://docs.n8n.io/hosting/configuration/configuration-examples/execution-timeout/) -- EXECUTIONS_TIMEOUT env var (HIGH confidence)
+- [n8n Execute Command Common Issues](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.executecommand/common-issues/) -- Windows shell, stdout buffer (HIGH confidence)
+- [n8n Splitting with Conditionals](https://docs.n8n.io/flow-logic/splitting/) -- Switch vs IF branching patterns (HIGH confidence)
+- [MipMap SDK Documentation](https://na.mipmap3d.com/document/docs/MipMapDesktop/softwareoverview/) -- Software overview (MEDIUM confidence -- CLI specifics verified from ingest.py source code)
+- Existing `ingest.py` (lines 517-529) -- MipMap CLI invocation pattern (HIGH confidence -- project source code)
+- Existing `path_e_workflow.json` -- n8n node patterns, Supabase API conventions (HIGH confidence -- project source)
+- Existing `package_router_patch.json` -- Template defaults, routing conditions (HIGH confidence -- project source)
+- Existing `folder_watcher.py` -- Webhook payload contract (HIGH confidence -- project source)
+- Existing `ingest_sorter.py` -- Webhook payload contract, CLI args (HIGH confidence -- project source)
 
 ---
 
-*Stack research for: Path E Vegetation Analysis — drone-pipeline v2.0*
-*Researched: 2026-02-24*
-*Scope: NEW additions only — existing stack (Python, pytest, Supabase, Drive, Pillow, etc.) not re-researched*
+*Stack research for: v3.0 Package Router & End-to-End Automation -- drone-pipeline*
+*Researched: 2026-03-05*
+*Scope: n8n workflow patterns, MipMap automation, webhook contracts, new script (mipmap_harvester.py). No new pip dependencies.*
