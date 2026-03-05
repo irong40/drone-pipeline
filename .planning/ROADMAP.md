@@ -45,7 +45,7 @@
 - [x] **Phase 15: Foundation Scripts + Schema** - Build Python scripts and Supabase schema that all n8n workflows depend on (completed 2026-03-05)
 - [x] **Phase 16: Package Router Core + Path A** - Build the central router and prove the pattern with the simplest end-to-end path (completed 2026-03-05)
 - [x] **Phase 17: Path C MipMap Automation + Path E Connection** - Automate photogrammetry and wire ortho output to vegetation analysis (completed 2026-03-05)
-- [ ] **Phase 18: Path V Video Pipeline** - Automate the 6-script video pipeline with manual DaVinci Resolve gate
+- [x] **Phase 18: Path V Video Pipeline** - Automate the 6-script video pipeline with manual DaVinci Resolve gate (completed 2026-03-05)
 - [x] **Phase 19: Remaining Paths + Integration + Hardening** - Path B/D stubs, folder watcher bridge, and end-to-end validation (completed 2026-03-05)
 
 ## Phase Details
@@ -163,6 +163,6 @@ Phases execute in numeric order: 14 -> 14.x -> 15 -> 15.x -> 16 -> ... -> 19
 | 14. Environment Setup | 2/2 | Complete    | 2026-03-05 | - |
 | 15. Foundation Scripts + Schema | 3/3 | Complete    | 2026-03-05 | - |
 | 16. Package Router Core + Path A | v3.0 | Complete    | 2026-03-05 | 2026-03-05 |
-| 17. Path C MipMap + Path E | 1/1 | Complete   | 2026-03-05 | - |
-| 18. Path V Video Pipeline | 1/2 | In Progress|  | - |
+| 17. Path C MipMap + Path E | 1/1 | Complete    | 2026-03-05 | - |
+| 18. Path V Video Pipeline | 2/2 | Complete   | 2026-03-05 | - |
 | 19. Remaining Paths + Hardening | 2/2 | Complete    | 2026-03-05 | - |
