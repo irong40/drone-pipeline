@@ -105,11 +105,6 @@ Deferred to future release. Tracked but not in current roadmap.
 | ENV-01 | Phase 14 | Pending |
 | ENV-02 | Phase 14 | Pending |
 | ENV-03 | Phase 14 | Pending |
-| RTR-01 | Phase 16 | Pending |
-| RTR-02 | Phase 16 | Pending |
-| RTR-03 | Phase 16 | Pending |
-| RTR-04 | Phase 16 | Pending |
-| RTR-05 | Phase 16 | Pending |
 | MPC-01 | Phase 15 | Pending |
 | MPC-02 | Phase 15 | Pending |
 | MPC-03 | Phase 17 | Pending |
@@ -117,6 +112,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | MPC-05 | Phase 15 | Pending |
 | MPC-06 | Phase 17 | Pending |
 | MPC-07 | Phase 15 | Pending |
+| RTR-01 | Phase 16 | Pending |
+| RTR-02 | Phase 16 | Pending |
+| RTR-03 | Phase 16 | Pending |
+| RTR-04 | Phase 16 | Pending |
+| RTR-05 | Phase 16 | Pending |
 | PHA-01 | Phase 16 | Pending |
 | PHA-02 | Phase 16 | Pending |
 | PHA-03 | Phase 16 | Pending |
@@ -144,4 +144,4 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-05 after initial definition*
+*Last updated: 2026-03-05 after roadmap creation*
