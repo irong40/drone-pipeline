@@ -3,14 +3,29 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Package Router & End-to-End Automation
 status: in-progress
-stopped_at: Completed 15-01-PLAN.md (schema migrations for processing_jobs, mipmap_workspace, template configs)
-last_updated: "2026-03-05T15:27:09.712Z"
-last_activity: 2026-03-05 — Completed 19-02 (n8n workflow validation + Package Router integration tests)
+stopped_at: Completed 15-02-PLAN.md (mipmap_launcher fire-and-forget subprocess launcher)
+last_updated: "2026-03-05T15:28:26.185Z"
+last_activity: 2026-03-05 — Completed 15-03 (ortho_harvester GeoTIFF copy utility)
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 5
+---
+
+---
+gsd_state_version: 1.0
+milestone: v3.0
+milestone_name: Package Router & End-to-End Automation
+status: in-progress
+stopped_at: Completed 15-03-PLAN.md (ortho_harvester GeoTIFF copy with integrity verification)
+last_updated: "2026-03-05T15:27:30Z"
+last_activity: 2026-03-05 — Completed 15-03 (ortho_harvester GeoTIFF copy utility)
+progress:
+  total_phases: 6
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
 ---
 
 ---
@@ -36,16 +51,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** Phase 19 complete - Remaining Paths Integration Hardening (v3.0)
+**Current focus:** Phase 15 - Foundation Scripts & Schema (v3.0)
 
 ## Current Position
 
-Phase: 19 of 19 (Remaining Paths Integration Hardening)
-Plan: 2 of 2 in current phase (19-02 complete — phase done)
-Status: Phase 19 complete, all plans executed
-Last activity: 2026-03-05 — Completed 19-02 (n8n workflow validation + Package Router integration tests)
+Phase: 15 of 19 (Foundation Scripts & Schema)
+Plan: 3 of 5 in current phase (15-03 complete)
+Status: Executing Phase 15 plans
+Last activity: 2026-03-05 — Completed 15-03 (ortho_harvester GeoTIFF copy utility)
 
-Progress: [█████████░] 89% (v3.0)
+Progress: [██████████] 100% (v3.0)
 
 ## Performance Metrics
 
@@ -65,6 +80,7 @@ Progress: [█████████░] 89% (v3.0)
 - 14-02: 2 min, 2 tasks, 2 files
 - 19-01: 3 min, 3 tasks, 5 files
 - 19-02: 3 min, 2 tasks, 2 files
+- 15-03: 2 min, 1 task (TDD), 2 files
 
 ## Accumulated Context
 
@@ -84,6 +100,9 @@ Recent decisions affecting current work:
 - v3.0: build_processing_steps helper lives in test file as test utility
 - v3.0: Step mapping covers all 6 automated + 2 manual types + unknown fallback
 - [Phase 15]: UNIQUE(mission_id) on processing_jobs enforces one active job per mission
+- [Phase 15]: rasterio fallback to TIFF magic bytes when not installed
+- [Phase 15]: temp-file-then-rename copy pattern for safe GeoTIFF transfer
+- [Phase 15]: No shell=True in Popen -- preserves MipMap PID for orphan detection
 
 ### Pending Todos
 
@@ -99,6 +118,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:27:09.711Z
-Stopped at: Completed 15-01-PLAN.md (schema migrations for processing_jobs, mipmap_workspace, template configs)
+Last session: 2026-03-05T15:28:26.184Z
+Stopped at: Completed 15-02-PLAN.md (mipmap_launcher fire-and-forget subprocess launcher)
 Resume file: None
