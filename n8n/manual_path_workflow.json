@@ -1,0 +1,97 @@
+{
+  "id": "sentinel-manual-path",
+  "name": "Sentinel Manual Path — B/D Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-trigger",
+      "name": "Execute Sub Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Entry point. Called by Package Router Execute Sub Workflow node. Receives: { mission_id, package_type, mission_number, folder_path }"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_jobs?mission_id=eq.{{ $json.mission_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\"status\": \"manual\", \"updated_at\": \"now()\"}",
+        "options": {}
+      },
+      "id": "node-set-manual-status",
+      "name": "Set Manual Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "notes": "PATCH processing_jobs to status=manual for the given mission_id. Signals that this mission type requires manual operator intervention."
+    },
+    {
+      "parameters": {
+        "fromEmail": "sentinel@localhost",
+        "toEmail": "={{ $env.OPERATOR_EMAIL }}",
+        "subject": "=[Sentinel] Manual Processing Required — Mission {{ $json.mission_number }} ({{ $json.package_type }})",
+        "text": "=Sentinel Aerial Inspections — Manual Processing Required\n\n---\n\nMission Number: {{ $json.mission_number }}\nPackage Type: {{ $json.package_type }}\nMission ID: {{ $json.mission_id }}\nFolder Path: {{ $json.folder_path }}\n\n---\n\nThis mission type ({{ $json.package_type }}) requires manual processing.\nThe automated pipeline has set the processing status to \"manual\" and is\nawaiting operator action.\n\nPlease review the mission data at the folder path above and process\naccording to the standard operating procedure for {{ $json.package_type }}\nmissions.\n\nOnce processing is complete, update the processing_jobs status in\nSupabase to \"complete\" for mission {{ $json.mission_number }}.\n\n---\nSentinel Automated Pipeline Notification",
+        "options": {}
+      },
+      "id": "node-notify-operator",
+      "name": "Notify Operator",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [680, 300],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-operator-notifications",
+          "name": "SMTP - Operator Notifications"
+        }
+      },
+      "notes": "Send email notification to OPERATOR_EMAIL env var recipient. Uses SMTP credential configured in n8n UI."
+    }
+  ],
+  "connections": {
+    "Execute Sub Workflow Trigger": {
+      "main": [
+        [{ "node": "Set Manual Status", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Manual Status": {
+      "main": [
+        [{ "node": "Notify Operator", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-05T00:00:00.000Z",
+  "versionId": "1",
+  "_meta": {
+    "description": "Shared sub-workflow for Path B (construction) and Path D (ADIAT) manual handling. Sets processing_jobs status to 'manual' and sends operator email notification. Called by Package Router Execute Sub Workflow node.",
+    "n8n_version_required": "1.x",
+    "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "OPERATOR_EMAIL"],
+    "credential_required": "SMTP - Operator Notifications",
+    "parameters_expected": {
+      "mission_id": "UUID from processing_jobs table",
+      "package_type": "construction_hybrid | adiat",
+      "mission_number": "Integer mission number",
+      "folder_path": "Full path to mission folder on disk"
+    }
+  }
+}
