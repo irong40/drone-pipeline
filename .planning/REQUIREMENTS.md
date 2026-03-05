@@ -1,0 +1,147 @@
+# Requirements: Sentinel Drone Pipeline v3.0
+
+**Defined:** 2026-03-05
+**Core Value:** Every script runs reliably, recovers from failures, and has tests proving it works — so the pipeline can be trusted in production without manual babysitting.
+
+## v3.0 Requirements
+
+Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadmap phases.
+
+### Environment Setup
+
+- [ ] **ENV-01**: n8n Execute Command node is verified enabled and functional before any workflow development
+- [ ] **ENV-02**: n8n EXECUTIONS_TIMEOUT is set to 7200s (2 hours) to support long-running MipMap jobs
+- [ ] **ENV-03**: Six new n8n environment variables are configured (MIPMAP_ENGINE_PATH, MIPMAP_WORKSPACE, SENTINEL_INCOMING, SENTINEL_SCRIPTS, VENV_PATH_E_PYTHON, N8N_BASE_URL)
+
+### Package Router
+
+- [ ] **RTR-01**: n8n webhook receives POST from ingest_sorter.py with mission_id, package_type, and inventory payload
+- [ ] **RTR-02**: n8n Switch node routes missions to Path A/B/C/D/V sub-workflows based on package_type
+- [ ] **RTR-03**: Package Router fetches processing_templates config from Supabase and merges with mission-specific overrides
+- [ ] **RTR-04**: Package Router creates a processing_jobs row in Supabase with all active steps before dispatching to path sub-workflows
+- [ ] **RTR-05**: Package Router normalizes both folder_watcher.py and ingest_sorter.py payloads into a common format via Code node
+
+### Path C (MipMap Mapping)
+
+- [ ] **MPC-01**: mipmap_launcher.py launches MipMap reconstruct_full_engine.exe with stdout redirected to log file, writes PID file, and returns immediately
+- [ ] **MPC-02**: mipmap_launcher.py follows pipeline contract (argparse, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
+- [ ] **MPC-03**: n8n Path C sub-workflow polls MipMap output directory for GeoTIFF completion with configurable interval and timeout
+- [ ] **MPC-04**: ortho_harvester.py copies completed GeoTIFF from D:/ MipMap workspace to mission mapping/ folder with integrity verification (size + rasterio header check)
+- [ ] **MPC-05**: ortho_harvester.py follows pipeline contract (argparse, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
+- [ ] **MPC-06**: After ortho confirmed in mapping/, Path C sub-workflow fires POST to /sentinel-vegetation-trigger to start existing Path E workflow (if vegetation_analysis=true)
+- [ ] **MPC-07**: MipMap orphan process detection via PID file check before launching new instance
+
+### Path A (Real Estate Photos)
+
+- [ ] **PHA-01**: n8n Path A sub-workflow executes photo color grading script on mission photos
+- [ ] **PHA-02**: n8n Path A sub-workflow executes delivery_packaging.py to create client delivery ZIP
+- [ ] **PHA-03**: Path A sub-workflow updates Supabase processing_steps status at each stage (running/complete/failed)
+
+### Path V (Video Pipeline)
+
+- [ ] **PHV-01**: n8n Path V sub-workflow executes V1 (color grade), V1.5 (metadata), V2 (SRT telemetry), V3 (QA), V4 (proxy gen) in sequence via Execute Command nodes
+- [ ] **PHV-02**: After V4 completes, Path V pauses at a webhook-wait gate for operator to signal DaVinci Resolve manual edit (V5) is complete
+- [ ] **PHV-03**: On V5 resume webhook, Path V executes V6 (format export) and delivery_packaging.py
+- [ ] **PHV-04**: Path V sub-workflow updates Supabase processing_steps status at each stage (running/complete/failed)
+- [ ] **PHV-05**: Path V handles V script exit code 1 (fatal) by marking step failed and halting the path without blocking other paths
+
+### Path B/D (Construction / ADIAT)
+
+- [ ] **PBD-01**: n8n Path B sub-workflow sets processing status to manual and sends operator notification
+- [ ] **PBD-02**: n8n Path D sub-workflow sets processing status to manual and sends operator notification
+
+### Supabase Schema
+
+- [ ] **SCH-01**: Supabase migration adds processing_jobs table (or columns) to track active steps per mission
+- [ ] **SCH-02**: Supabase migration adds mipmap_workspace JSONB column to drone_jobs for tracking MipMap workspace path and task IDs
+- [ ] **SCH-03**: processing_templates table has columns for all path-specific configuration (video_formats, vegetation_config, etc.)
+
+### Folder Watcher Integration
+
+- [ ] **FWI-01**: Package Router Code node normalizes folder_watcher.py webhook payload (inventory format) to match ingest_sorter payload format
+- [ ] **FWI-02**: Folder watcher webhook and ingest_sorter webhook both route to the same Package Router entry point
+
+### Testing
+
+- [ ] **TST-01**: mipmap_launcher.py has unit tests with mocked subprocess (no real MipMap needed)
+- [ ] **TST-02**: ortho_harvester.py has unit tests with mocked file operations and rasterio validation
+- [ ] **TST-03**: All n8n workflow JSON files are syntactically valid and importable
+- [ ] **TST-04**: Integration test validates Package Router webhook → Supabase processing_jobs creation
+
+## v3.1 Requirements
+
+Deferred to future release. Tracked but not in current roadmap.
+
+### Automation Enhancements
+
+- **AUT-01**: DaVinci Resolve scripting API integration for automated color grading and rendering
+- **AUT-02**: Delivery auto-trigger after all active paths complete (merge logic)
+- **AUT-03**: n8n dashboard for real-time mission status monitoring
+- **AUT-04**: Concurrent GPU scheduling with file-based lock (Path C/E/V contention management)
+
+### Path B/D Full Automation
+
+- **PBD-03**: Full Path B (construction) automation beyond stub
+- **PBD-04**: Full Path D (ADIAT) automation beyond stub
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| WebODM integration | MipMap Desktop is the photogrammetry engine; WebODM is not needed |
+| Airflow/Prefect/Dagster | n8n is sufficient for this orchestration complexity |
+| Redis/RabbitMQ message queue | Overkill for single-rig processing |
+| Docker containerization of scripts | Scripts need local drive access (E:/, D:/, F:/) |
+| Multi-rig distribution | Single processing rig; defer to v4.0 if needed |
+| Real-time progress bars in n8n | n8n does not support streaming progress; use Supabase polling |
+| Parallel FFmpeg processing | Performance optimization deferred per PROJECT.md |
+| Community n8n nodes | Compatibility risk; built-in nodes only |
+| Automatic DaVinci Resolve integration | No reliable headless CLI; V5 stays manual with webhook gate |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| ENV-01 | Phase 14 | Pending |
+| ENV-02 | Phase 14 | Pending |
+| ENV-03 | Phase 14 | Pending |
+| RTR-01 | Phase 16 | Pending |
+| RTR-02 | Phase 16 | Pending |
+| RTR-03 | Phase 16 | Pending |
+| RTR-04 | Phase 16 | Pending |
+| RTR-05 | Phase 16 | Pending |
+| MPC-01 | Phase 15 | Pending |
+| MPC-02 | Phase 15 | Pending |
+| MPC-03 | Phase 17 | Pending |
+| MPC-04 | Phase 15 | Pending |
+| MPC-05 | Phase 15 | Pending |
+| MPC-06 | Phase 17 | Pending |
+| MPC-07 | Phase 15 | Pending |
+| PHA-01 | Phase 16 | Pending |
+| PHA-02 | Phase 16 | Pending |
+| PHA-03 | Phase 16 | Pending |
+| PHV-01 | Phase 18 | Pending |
+| PHV-02 | Phase 18 | Pending |
+| PHV-03 | Phase 18 | Pending |
+| PHV-04 | Phase 18 | Pending |
+| PHV-05 | Phase 18 | Pending |
+| PBD-01 | Phase 19 | Pending |
+| PBD-02 | Phase 19 | Pending |
+| SCH-01 | Phase 15 | Pending |
+| SCH-02 | Phase 15 | Pending |
+| SCH-03 | Phase 15 | Pending |
+| FWI-01 | Phase 19 | Pending |
+| FWI-02 | Phase 19 | Pending |
+| TST-01 | Phase 15 | Pending |
+| TST-02 | Phase 15 | Pending |
+| TST-03 | Phase 19 | Pending |
+| TST-04 | Phase 19 | Pending |
+
+**Coverage:**
+- v3.0 requirements: 34 total
+- Mapped to phases: 34
+- Unmapped: 0
+
+---
+*Requirements defined: 2026-03-05*
+*Last updated: 2026-03-05 after initial definition*
