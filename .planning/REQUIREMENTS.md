@@ -65,8 +65,8 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 - [ ] **TST-01**: mipmap_launcher.py has unit tests with mocked subprocess (no real MipMap needed)
 - [ ] **TST-02**: ortho_harvester.py has unit tests with mocked file operations and rasterio validation
-- [ ] **TST-03**: All n8n workflow JSON files are syntactically valid and importable
-- [ ] **TST-04**: Integration test validates Package Router webhook → Supabase processing_jobs creation
+- [x] **TST-03**: All n8n workflow JSON files are syntactically valid and importable
+- [x] **TST-04**: Integration test validates Package Router webhook → Supabase processing_jobs creation
 
 ## v3.1 Requirements
 
@@ -134,8 +134,8 @@ Deferred to future release. Tracked but not in current roadmap.
 | FWI-02 | Phase 19 | Complete |
 | TST-01 | Phase 15 | Pending |
 | TST-02 | Phase 15 | Pending |
-| TST-03 | Phase 19 | Pending |
-| TST-04 | Phase 19 | Pending |
+| TST-03 | Phase 19 | Complete |
+| TST-04 | Phase 19 | Complete |
 
 **Coverage:**
 - v3.0 requirements: 34 total
