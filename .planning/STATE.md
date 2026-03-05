@@ -3,30 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Package Router & End-to-End Automation
 status: in-progress
-stopped_at: Completed 14-02-PLAN.md (environment verification - Phase 14 complete)
-last_updated: "2026-03-05T15:09:38.722Z"
-last_activity: 2026-03-05 — Completed 14-02 (environment verification artifacts + auto-approved)
+stopped_at: Completed 19-01-PLAN.md (manual paths + payload normalization)
+last_updated: "2026-03-05T15:15:23Z"
+last_activity: 2026-03-05 — Completed 19-01 (manual-path sub-workflow + payload normalizer)
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
----
-
----
-gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: Package Router & End-to-End Automation
-status: in-progress
-stopped_at: Completed 14-02-PLAN.md (environment verification)
-last_updated: "2026-03-05T15:04:30Z"
-last_activity: 2026-03-05 — Completed Phase 14 (all ENV requirements verified)
-progress:
-  total_phases: 6
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 17
+  total_plans: 4
+  completed_plans: 3
 ---
 
 # Project State
@@ -36,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** Phase 14 - Environment Setup (v3.0)
+**Current focus:** Phase 19 - Remaining Paths Integration Hardening (v3.0)
 
 ## Current Position
 
-Phase: 14 of 19 (Environment Setup) -- COMPLETE
-Plan: 2 of 2 in current phase (all done)
-Status: Phase 14 complete, ready for Phase 15
-Last activity: 2026-03-05 — Completed 14-02 (environment verification artifacts + auto-approved)
+Phase: 19 of 19 (Remaining Paths Integration Hardening)
+Plan: 1 of 2 in current phase (19-01 complete)
+Status: 19-01 complete, ready for 19-02
+Last activity: 2026-03-05 — Completed 19-01 (manual-path sub-workflow + payload normalizer)
 
-Progress: [██░░░░░░░░] 17% (v3.0)
+Progress: [████████░░] 75% (v3.0)
 
 ## Performance Metrics
 
@@ -59,10 +43,11 @@ Progress: [██░░░░░░░░] 17% (v3.0)
 - Total execution time: ~154 min
 
 **Velocity (v3.0):**
-- Total plans completed: 2
+- Total plans completed: 3
 - Estimated plans: 12
 - 14-01: 4 min, 2 tasks, 3 files
 - 14-02: 2 min, 2 tasks, 2 files
+- 19-01: 3 min, 3 tasks, 5 files
 
 ## Accumulated Context
 
@@ -75,6 +60,9 @@ Recent decisions affecting current work:
 - v3.0: Sub-workflow per path (mirrors proven Path E pattern)
 - v3.0: Fire-and-forget MipMap launch with polling (avoid n8n stdout buffer overflow)
 - v3.0: Sequential GPU scheduling (Path E after MipMap completes, not concurrent)
+- v3.0: Single shared sub-workflow for Path B/D manual handling (package_type as parameter)
+- v3.0: Folder name regex non-greedy match for package_type with underscore support
+- v3.0: is_fallback flag on folder_watcher payloads for deduplication downstream
 
 ### Pending Todos
 
@@ -90,6 +78,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:04:30Z
-Stopped at: Completed 14-02-PLAN.md (environment verification - Phase 14 complete)
-Resume file: .planning/phases/15-sentinel-workflow/ (next phase)
+Last session: 2026-03-05T15:15:23Z
+Stopped at: Completed 19-01-PLAN.md (manual paths + payload normalization)
+Resume file: .planning/milestones/v3.0-phases/19-remaining-paths-integration-hardening/19-02-PLAN.md

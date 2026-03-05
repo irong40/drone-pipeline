@@ -166,4 +166,4 @@ Phases execute in numeric order: 14 -> 14.x -> 15 -> 15.x -> 16 -> ... -> 19
 | 16. Package Router Core + Path A | v3.0 | 0/3 | Not started | - |
 | 17. Path C MipMap + Path E | v3.0 | 0/1 | Not started | - |
 | 18. Path V Video Pipeline | v3.0 | 0/2 | Not started | - |
-| 19. Remaining Paths + Hardening | v3.0 | 0/2 | Not started | - |
+| 19. Remaining Paths + Hardening | 1/2 | In Progress|  | - |

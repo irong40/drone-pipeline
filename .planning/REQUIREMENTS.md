@@ -47,8 +47,8 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Path B/D (Construction / ADIAT)
 
-- [ ] **PBD-01**: n8n Path B sub-workflow sets processing status to manual and sends operator notification
-- [ ] **PBD-02**: n8n Path D sub-workflow sets processing status to manual and sends operator notification
+- [x] **PBD-01**: n8n Path B sub-workflow sets processing status to manual and sends operator notification
+- [x] **PBD-02**: n8n Path D sub-workflow sets processing status to manual and sends operator notification
 
 ### Supabase Schema
 
@@ -58,8 +58,8 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Folder Watcher Integration
 
-- [ ] **FWI-01**: Package Router Code node normalizes folder_watcher.py webhook payload (inventory format) to match ingest_sorter payload format
-- [ ] **FWI-02**: Folder watcher webhook and ingest_sorter webhook both route to the same Package Router entry point
+- [x] **FWI-01**: Package Router Code node normalizes folder_watcher.py webhook payload (inventory format) to match ingest_sorter payload format
+- [x] **FWI-02**: Folder watcher webhook and ingest_sorter webhook both route to the same Package Router entry point
 
 ### Testing
 
@@ -125,13 +125,13 @@ Deferred to future release. Tracked but not in current roadmap.
 | PHV-03 | Phase 18 | Pending |
 | PHV-04 | Phase 18 | Pending |
 | PHV-05 | Phase 18 | Pending |
-| PBD-01 | Phase 19 | Pending |
-| PBD-02 | Phase 19 | Pending |
+| PBD-01 | Phase 19 | Complete |
+| PBD-02 | Phase 19 | Complete |
 | SCH-01 | Phase 15 | Pending |
 | SCH-02 | Phase 15 | Pending |
 | SCH-03 | Phase 15 | Pending |
-| FWI-01 | Phase 19 | Pending |
-| FWI-02 | Phase 19 | Pending |
+| FWI-01 | Phase 19 | Complete |
+| FWI-02 | Phase 19 | Complete |
 | TST-01 | Phase 15 | Pending |
 | TST-02 | Phase 15 | Pending |
 | TST-03 | Phase 19 | Pending |
