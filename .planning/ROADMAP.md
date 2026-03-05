@@ -46,7 +46,7 @@
 - [ ] **Phase 16: Package Router Core + Path A** - Build the central router and prove the pattern with the simplest end-to-end path
 - [ ] **Phase 17: Path C MipMap Automation + Path E Connection** - Automate photogrammetry and wire ortho output to vegetation analysis
 - [ ] **Phase 18: Path V Video Pipeline** - Automate the 6-script video pipeline with manual DaVinci Resolve gate
-- [x] **Phase 19: Remaining Paths + Integration + Hardening** - Path B/D stubs, folder watcher bridge, and end-to-end validation (completed 2026-03-05)
+- [x] **Phase 19: Remaining Paths + Integration + Hardening** - Path B/D stubs, folder watcher bridge, and end-to-end validation (completed 2026-03-05)
 
 ## Phase Details
 
@@ -91,12 +91,11 @@ Plans:
   3. Package Router fetches template defaults from processing_templates and merges with mission-specific overrides
   4. Each processing step in Path A updates its Supabase status to running/complete/failed as it progresses
   5. Both folder_watcher and ingest_sorter payloads are normalized to the same internal format before routing
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 16-01: TBD
-- [ ] 16-02: TBD
-- [ ] 16-03: TBD
+- [ ] 16-01-PLAN.md — Package Router main n8n workflow: webhook, normalizer, dedup, template fetch, job creation, Switch routing
+- [ ] 16-02-PLAN.md — Path A sub-workflow + delivery_packaging.py PipelineStatusReporter enhancement
 
 ### Phase 17: Path C MipMap Automation + Path E Connection
 **Goal**: Mapping missions automatically launch MipMap, harvest the orthomosaic, and trigger vegetation analysis -- saving 20-90 minutes of operator time per mission
@@ -163,7 +162,7 @@ Phases execute in numeric order: 14 -> 14.x -> 15 -> 15.x -> 16 -> ... -> 19
 | 13. Test Suite and Acceptance | v2.0 | 3/3 | Complete | 2026-02-25 |
 | 14. Environment Setup | 2/2 | Complete    | 2026-03-05 | - |
 | 15. Foundation Scripts + Schema | 3/3 | Complete    | 2026-03-05 | - |
-| 16. Package Router Core + Path A | v3.0 | 0/3 | Not started | - |
+| 16. Package Router Core + Path A | v3.0 | 0/2 | Not started | - |
 | 17. Path C MipMap + Path E | v3.0 | 0/1 | Not started | - |
 | 18. Path V Video Pipeline | v3.0 | 0/2 | Not started | - |
 | 19. Remaining Paths + Hardening | 2/2 | Complete    | 2026-03-05 | - |
