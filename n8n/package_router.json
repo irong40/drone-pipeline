@@ -1,0 +1,428 @@
+{
+  "id": "sentinel-package-router",
+  "name": "Sentinel Package Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "package-router",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Package Router Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "notes": "Entry point. Accepts POST from both ingest_sorter.py and folder_watcher.py. Payload shape determines normalization path."
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Package Router Payload Normalizer — n8n Code Node\n *\n * Normalizes both folder_watcher and ingest_sorter webhook payloads\n * into a common format before the Package Router Switch node routes\n * them to the appropriate sub-workflow.\n *\n * Input: items[0].json from either folder_watcher or ingest_sorter webhook\n * Output: Normalized payload with consistent keys for routing\n *\n * Paste this into an n8n Code node in the Package Router workflow,\n * positioned between the webhook trigger and the Switch node.\n */\n\nconst input = items[0].json;\n\n// Detect source based on payload shape\nconst hasIngestSorterFields = input.mission_id && !input.folder_name;\nconst hasFolderWatcherFields = input.folder_name && !input.mission_id;\n\nlet normalized;\n\nif (hasIngestSorterFields) {\n  // --- ingest_sorter payload: pass through with metadata ---\n  normalized = {\n    mission_id: input.mission_id,\n    mission_number: input.mission_number,\n    package_type: input.package_type,\n    photo_count: input.photo_count || 0,\n    video_count: input.video_count || 0,\n    has_ppk_data: input.has_ppk_data || false,\n    source: \"ingest_sorter\",\n    needs_mission_lookup: false,\n    is_fallback: false,\n    folder_path: input.sorted_folder || input.folder_path || \"\",\n  };\n} else if (hasFolderWatcherFields) {\n  // --- folder_watcher payload: parse folder name for package_type ---\n  const folderName = input.folder_name;\n  const regex = /^SAI_M(\\d{4})_(.+?)_(\\d{8})$/;\n  const match = folderName.match(regex);\n\n  let missionNumber = input.mission_number || 0;\n  let packageType = \"unknown\";\n\n  if (match) {\n    missionNumber = parseInt(match[1], 10);\n    packageType = match[2];\n  }\n\n  normalized = {\n    mission_id: null,\n    mission_number: missionNumber,\n    package_type: packageType,\n    photo_count: input.photo_count || 0,\n    video_count: input.video_count || 0,\n    has_ppk_data: input.has_ppk_data || false,\n    source: \"folder_watcher\",\n    needs_mission_lookup: true,\n    is_fallback: true,\n    folder_path: input.folder_path || \"\",\n  };\n} else {\n  // --- Unknown payload shape: pass through with unknown markers ---\n  normalized = {\n    mission_id: input.mission_id || null,\n    mission_number: input.mission_number || 0,\n    package_type: input.package_type || \"unknown\",\n    photo_count: input.photo_count || 0,\n    video_count: input.video_count || 0,\n    has_ppk_data: input.has_ppk_data || false,\n    source: \"unknown\",\n    needs_mission_lookup: !input.mission_id,\n    is_fallback: false,\n    folder_path: input.folder_path || \"\",\n  };\n}\n\nreturn [{ json: normalized }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "notes": "Normalizes both ingest_sorter and folder_watcher payloads into a common format. Source: n8n/package_router_normalizer.js"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-needs-lookup",
+              "leftValue": "={{ $json.needs_mission_lookup }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-needs-lookup",
+      "name": "IF Needs Mission Lookup",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "notes": "folder_watcher payloads need mission_id lookup from drone_jobs. ingest_sorter payloads already have mission_id but need address/city lookup."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/drone_jobs?mission_number=eq.{{ $json.mission_number }}&select=id,address,city",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-lookup-mission",
+      "name": "Lookup Mission ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200],
+      "notes": "GET drone_jobs by mission_number to resolve mission_id for folder_watcher payloads. Also fetches address and city."
+    },
+    {
+      "parameters": {
+        "jsCode": "const lookup = items[0].json;\nconst prev = $('Normalize Payload').first().json;\nconst mission = Array.isArray(lookup) ? lookup[0] : lookup;\nreturn [{json: {\n  ...prev,\n  mission_id: mission?.id || prev.mission_id,\n  address: mission?.address || '',\n  city: mission?.city || '',\n  needs_mission_lookup: false\n}}];"
+      },
+      "id": "node-merge-mission",
+      "name": "Merge Mission ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200],
+      "notes": "Merges mission_id, address, city from drone_jobs lookup into the normalized payload."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/drone_jobs?id=eq.{{ $json.mission_id }}&select=address,city",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-lookup-address",
+      "name": "Lookup Address",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 400],
+      "notes": "GET address/city from drone_jobs for ingest_sorter payloads that already have mission_id."
+    },
+    {
+      "parameters": {
+        "jsCode": "const lookup = items[0].json;\nconst prev = $('Normalize Payload').first().json;\nconst mission = Array.isArray(lookup) ? lookup[0] : lookup;\nreturn [{json: {\n  ...prev,\n  address: mission?.address || '',\n  city: mission?.city || ''\n}}];"
+      },
+      "id": "node-merge-address",
+      "name": "Merge Address",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 400],
+      "notes": "Merges address/city from drone_jobs lookup into the ingest_sorter payload."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_jobs?mission_id=eq.{{ $json.mission_id }}&select=id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-check-duplicate",
+      "name": "Check Duplicate Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300],
+      "notes": "Check if a processing_jobs row already exists for this mission_id. Prevents duplicate processing when both folder_watcher and ingest_sorter fire."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-duplicate-exists",
+              "leftValue": "={{ Array.isArray($json) ? $json.length : 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-duplicate",
+      "name": "IF Duplicate Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1680, 300],
+      "notes": "True = duplicate found, stop processing. False = no duplicate, continue to create job."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_templates?package_type=eq.{{ $('Normalize Payload').first().json.package_type }}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-fetch-template",
+      "name": "Fetch Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 400],
+      "notes": "Fetch processing_templates row for this package_type. Template config provides defaults that can be overridden by mission-specific settings."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build processing steps and prepare job creation payload\nconst templateData = items[0].json;\nconst prev = $('Check Duplicate Job').first().json;\n// Recover the normalized payload from before the duplicate check\n// The duplicate check HTTP node returns the Supabase response, so we\n// need to get the normalized payload from an earlier node.\n// After merge nodes, the payload flows through Check Duplicate Job.\n// We reference Normalize Payload and merge nodes for original data.\nconst normalizedBase = $('Normalize Payload').first().json;\n\n// Try to get merged address/city from whichever merge node ran\nlet address = '';\nlet city = '';\nlet missionId = normalizedBase.mission_id;\ntry {\n  const merged = $('Merge Mission ID').first().json;\n  address = merged.address || '';\n  city = merged.city || '';\n  missionId = merged.mission_id || missionId;\n} catch (e) {\n  try {\n    const merged = $('Merge Address').first().json;\n    address = merged.address || '';\n    city = merged.city || '';\n  } catch (e2) {\n    // No merge data available\n  }\n}\n\nconst packageType = normalizedBase.package_type;\n\n// Step mapping — source of truth from test_package_router_integration.py\nconst STEP_MAP = {\n  re_standard: [\n    {name: 'color_grade', status: 'pending'},\n    {name: 'delivery_packaging', status: 'pending'}\n  ],\n  real_estate: [\n    {name: 'color_grade', status: 'pending'},\n    {name: 'delivery_packaging', status: 'pending'}\n  ],\n  mapping: [\n    {name: 'mipmap_launch', status: 'pending'},\n    {name: 'ortho_harvest', status: 'pending'},\n    {name: 'delivery_packaging', status: 'pending'}\n  ],\n  site_survey: [\n    {name: 'mipmap_launch', status: 'pending'},\n    {name: 'ortho_harvest', status: 'pending'},\n    {name: 'delivery_packaging', status: 'pending'}\n  ],\n  environmental_survey: [\n    {name: 'mipmap_launch', status: 'pending'},\n    {name: 'ortho_harvest', status: 'pending'},\n    {name: 'delivery_packaging', status: 'pending'}\n  ],\n  video: [\n    {name: 'v1_color', status: 'pending'},\n    {name: 'v1_5_metadata', status: 'pending'},\n    {name: 'v2_srt', status: 'pending'},\n    {name: 'v3_qa', status: 'pending'},\n    {name: 'v4_proxy', status: 'pending'},\n    {name: 'v5_resolve_gate', status: 'pending'},\n    {name: 'v6_export', status: 'pending'},\n    {name: 'delivery_packaging', status: 'pending'}\n  ],\n  construction_hybrid: [],\n  adiat: []\n};\n\nconst steps = STEP_MAP[packageType] || [];  // Unknown -> empty (manual)\nconst status = steps.length > 0 ? 'queued' : 'manual';\n\n// Parse template config (Supabase returns array)\nconst template = Array.isArray(templateData) ? templateData[0] : templateData;\nconst templateConfig = template?.config || template?.vegetation_config || {};\n\nreturn [{json: {\n  // Fields for INSERT into processing_jobs\n  mission_id: missionId,\n  package_type: packageType,\n  status: status,\n  steps: steps,\n  source: normalizedBase.source,\n  template_config: templateConfig,\n  // Pass-through fields for downstream sub-workflows\n  folder_path: normalizedBase.folder_path,\n  mission_number: normalizedBase.mission_number,\n  source_platform: normalizedBase.source,\n  address: address,\n  city: city\n}}];"
+      },
+      "id": "node-build-steps",
+      "name": "Build Steps and Create Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 400],
+      "notes": "Builds the steps JSONB array using the canonical STEP_MAP (matches test_package_router_integration.py). Merges template config from processing_templates. Determines status: queued if automated steps exist, manual if empty."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ mission_id: $json.mission_id, package_type: $json.package_type, status: $json.status, steps: $json.steps, source: $json.source }) }}",
+        "options": {}
+      },
+      "id": "node-create-job",
+      "name": "Create Processing Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 400],
+      "notes": "INSERT into processing_jobs with mission_id, package_type, status, steps, source. Returns created row with UUID via Prefer: return=representation."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge processing_job_id from INSERT response into payload for sub-workflows\nconst created = items[0].json;\nconst jobRow = Array.isArray(created) ? created[0] : created;\nconst prev = $('Build Steps and Create Job').first().json;\n\nreturn [{json: {\n  mission_id: prev.mission_id,\n  package_type: prev.package_type,\n  mission_number: prev.mission_number,\n  folder_path: prev.folder_path,\n  processing_job_id: jobRow?.id || null,\n  source_platform: prev.source_platform,\n  address: prev.address,\n  city: prev.city\n}}];"
+      },
+      "id": "node-prepare-dispatch",
+      "name": "Prepare Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 400],
+      "notes": "Merges processing_job_id from the INSERT response back into the payload for downstream sub-workflows."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{ $json.package_type }}", "rightValue": "re_standard", "operator": { "type": "string", "operation": "equals" } },
+                  { "leftValue": "={{ $json.package_type }}", "rightValue": "real_estate", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "or"
+              },
+              "outputIndex": 0
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{ $json.package_type }}", "rightValue": "mapping", "operator": { "type": "string", "operation": "equals" } },
+                  { "leftValue": "={{ $json.package_type }}", "rightValue": "site_survey", "operator": { "type": "string", "operation": "equals" } },
+                  { "leftValue": "={{ $json.package_type }}", "rightValue": "environmental_survey", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "or"
+              },
+              "outputIndex": 1
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{ $json.package_type }}", "rightValue": "video", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 2
+            }
+          ]
+        },
+        "fallbackOutput": "extra",
+        "options": {}
+      },
+      "id": "node-switch",
+      "name": "Route by Package Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2880, 400],
+      "notes": "Routes missions by package_type. Output 0: re_standard/real_estate -> Path A. Output 1: mapping/site_survey/environmental_survey -> Path C (stub). Output 2: video -> Path V (stub). Fallback: construction_hybrid/adiat/unknown -> Manual Path."
+    },
+    {
+      "parameters": {
+        "workflowId": "sentinel-path-a",
+        "options": {}
+      },
+      "id": "node-exec-path-a",
+      "name": "Execute Path A",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [3120, 100],
+      "notes": "Execute Path A sub-workflow for re_standard and real_estate missions. Passes mission_id, package_type, mission_number, folder_path, processing_job_id, source_platform, address, city."
+    },
+    {
+      "parameters": {},
+      "id": "node-stub-path-c",
+      "name": "Execute Path C (Stub)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [3120, 300],
+      "notes": "Phase 17 will replace with Execute Sub Workflow for Path C MipMap automation. Routes: mapping, site_survey, environmental_survey."
+    },
+    {
+      "parameters": {},
+      "id": "node-stub-path-v",
+      "name": "Execute Path V (Stub)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [3120, 500],
+      "notes": "Phase 18 will replace with Execute Sub Workflow for Path V video pipeline. Routes: video."
+    },
+    {
+      "parameters": {
+        "workflowId": "sentinel-manual-path",
+        "options": {}
+      },
+      "id": "node-exec-manual",
+      "name": "Execute Manual Path",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [3120, 700],
+      "notes": "Execute Manual Path sub-workflow for construction_hybrid, adiat, and unknown package types. Passes mission_id, package_type, mission_number, folder_path."
+    }
+  ],
+  "connections": {
+    "Package Router Webhook": {
+      "main": [
+        [{ "node": "Normalize Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Payload": {
+      "main": [
+        [{ "node": "IF Needs Mission Lookup", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF Needs Mission Lookup": {
+      "main": [
+        [{ "node": "Lookup Mission ID", "type": "main", "index": 0 }],
+        [{ "node": "Lookup Address", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup Mission ID": {
+      "main": [
+        [{ "node": "Merge Mission ID", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge Mission ID": {
+      "main": [
+        [{ "node": "Check Duplicate Job", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup Address": {
+      "main": [
+        [{ "node": "Merge Address", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge Address": {
+      "main": [
+        [{ "node": "Check Duplicate Job", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Duplicate Job": {
+      "main": [
+        [{ "node": "IF Duplicate Exists", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF Duplicate Exists": {
+      "main": [
+        [],
+        [{ "node": "Fetch Template", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Template": {
+      "main": [
+        [{ "node": "Build Steps and Create Job", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Steps and Create Job": {
+      "main": [
+        [{ "node": "Create Processing Job", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Processing Job": {
+      "main": [
+        [{ "node": "Prepare Dispatch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Dispatch": {
+      "main": [
+        [{ "node": "Route by Package Type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Package Type": {
+      "main": [
+        [{ "node": "Execute Path A", "type": "main", "index": 0 }],
+        [{ "node": "Execute Path C (Stub)", "type": "main", "index": 0 }],
+        [{ "node": "Execute Path V (Stub)", "type": "main", "index": 0 }],
+        [{ "node": "Execute Manual Path", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-05T00:00:00.000Z",
+  "versionId": "1",
+  "_meta": {
+    "description": "Central Package Router for Sentinel Aerial Inspections. Receives webhook POSTs from ingest_sorter.py and folder_watcher.py, normalizes payloads, creates processing_jobs rows in Supabase, and routes missions to the correct sub-workflow by package_type.",
+    "n8n_version_required": "2.x",
+    "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
+    "webhook_paths": ["package-router"],
+    "node_sequence": "Webhook -> Normalize -> IF Mission Lookup -> Lookup/Merge -> Check Duplicate -> Fetch Template -> Build Steps -> Create Job -> Prepare Dispatch -> Route Switch -> [Path A | Path C Stub | Path V Stub | Manual Path]",
+    "expected_webhook_payload": {
+      "ingest_sorter": {
+        "mission_id": "UUID",
+        "mission_number": "integer",
+        "package_type": "string",
+        "photo_count": "integer",
+        "video_count": "integer",
+        "has_ppk_data": "boolean",
+        "sorted_folder": "string (path)"
+      },
+      "folder_watcher": {
+        "folder_name": "string (SAI_MXXXX_type_YYYYMMDD)",
+        "folder_path": "string (path)",
+        "photo_count": "integer (optional)"
+      }
+    },
+    "routing_table": {
+      "output_0_path_a": ["re_standard", "real_estate"],
+      "output_1_path_c_stub": ["mapping", "site_survey", "environmental_survey"],
+      "output_2_path_v_stub": ["video"],
+      "fallback_manual": ["construction_hybrid", "adiat", "unknown"]
+    }
+  }
+}
