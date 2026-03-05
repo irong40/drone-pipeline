@@ -1,0 +1,66 @@
+{
+  "name": "14-env-verification",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "command": "python \"{{ $env.SENTINEL_SCRIPTS }}\\verify_n8n.py\""
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Execute Command",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const vars = [\n  'MIPMAP_ENGINE_PATH',\n  'MIPMAP_WORKSPACE',\n  'SENTINEL_INCOMING',\n  'SENTINEL_SCRIPTS',\n  'VENV_PATH_E_PYTHON',\n  'N8N_BASE_URL'\n];\nconst results = {};\nlet allPresent = true;\nfor (const v of vars) {\n  const val = $env[v] || 'MISSING';\n  results[v] = val;\n  if (val === 'MISSING') allPresent = false;\n}\nresults.all_present = allPresent;\nresults.timeout = $env.EXECUTIONS_TIMEOUT || 'NOT SET';\nresults.timeout_max = $env.EXECUTIONS_TIMEOUT_MAX || 'NOT SET';\nreturn [{ json: results }];"
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Check Env Vars",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Check Env Vars",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "drone-pipeline-phase-14"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "tags": []
+}
