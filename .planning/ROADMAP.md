@@ -161,7 +161,7 @@ Phases execute in numeric order: 14 -> 14.x -> 15 -> 15.x -> 16 -> ... -> 19
 | 11. Report Generation (E4) | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 12. Integration and Delivery | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 13. Test Suite and Acceptance | v2.0 | 3/3 | Complete | 2026-02-25 |
-| 14. Environment Setup | v3.0 | 0/2 | Not started | - |
+| 14. Environment Setup | 1/2 | In Progress|  | - |
 | 15. Foundation Scripts + Schema | v3.0 | 0/3 | Not started | - |
 | 16. Package Router Core + Path A | v3.0 | 0/3 | Not started | - |
 | 17. Path C MipMap + Path E | v3.0 | 0/1 | Not started | - |

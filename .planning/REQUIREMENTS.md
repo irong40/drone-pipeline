@@ -10,8 +10,8 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 ### Environment Setup
 
 - [ ] **ENV-01**: n8n Execute Command node is verified enabled and functional before any workflow development
-- [ ] **ENV-02**: n8n EXECUTIONS_TIMEOUT is set to 7200s (2 hours) to support long-running MipMap jobs
-- [ ] **ENV-03**: Six new n8n environment variables are configured (MIPMAP_ENGINE_PATH, MIPMAP_WORKSPACE, SENTINEL_INCOMING, SENTINEL_SCRIPTS, VENV_PATH_E_PYTHON, N8N_BASE_URL)
+- [x] **ENV-02**: n8n EXECUTIONS_TIMEOUT is set to 7200s (2 hours) to support long-running MipMap jobs
+- [x] **ENV-03**: Six new n8n environment variables are configured (MIPMAP_ENGINE_PATH, MIPMAP_WORKSPACE, SENTINEL_INCOMING, SENTINEL_SCRIPTS, VENV_PATH_E_PYTHON, N8N_BASE_URL)
 
 ### Package Router
 
@@ -103,8 +103,8 @@ Deferred to future release. Tracked but not in current roadmap.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ENV-01 | Phase 14 | Pending |
-| ENV-02 | Phase 14 | Pending |
-| ENV-03 | Phase 14 | Pending |
+| ENV-02 | Phase 14 | Complete |
+| ENV-03 | Phase 14 | Complete |
 | MPC-01 | Phase 15 | Pending |
 | MPC-02 | Phase 15 | Pending |
 | MPC-03 | Phase 17 | Pending |
