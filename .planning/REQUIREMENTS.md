@@ -25,10 +25,10 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 - [x] **MPC-01**: mipmap_launcher.py launches MipMap reconstruct_full_engine.exe with stdout redirected to log file, writes PID file, and returns immediately
 - [x] **MPC-02**: mipmap_launcher.py follows pipeline contract (argparse, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
-- [ ] **MPC-03**: n8n Path C sub-workflow polls MipMap output directory for GeoTIFF completion with configurable interval and timeout
+- [x] **MPC-03**: n8n Path C sub-workflow polls MipMap output directory for GeoTIFF completion with configurable interval and timeout
 - [x] **MPC-04**: ortho_harvester.py copies completed GeoTIFF from D:/ MipMap workspace to mission mapping/ folder with integrity verification (size + rasterio header check)
 - [x] **MPC-05**: ortho_harvester.py follows pipeline contract (argparse, JSON stdout, setup_logging, Supabase status update, exit codes 0/1/2)
-- [ ] **MPC-06**: After ortho confirmed in mapping/, Path C sub-workflow fires POST to /sentinel-vegetation-trigger to start existing Path E workflow (if vegetation_analysis=true)
+- [x] **MPC-06**: After ortho confirmed in mapping/, Path C sub-workflow fires POST to /sentinel-vegetation-trigger to start existing Path E workflow (if vegetation_analysis=true)
 - [x] **MPC-07**: MipMap orphan process detection via PID file check before launching new instance
 
 ### Path A (Real Estate Photos)
@@ -107,10 +107,10 @@ Deferred to future release. Tracked but not in current roadmap.
 | ENV-03 | Phase 14 | Complete |
 | MPC-01 | Phase 15 | Complete |
 | MPC-02 | Phase 15 | Complete |
-| MPC-03 | Phase 17 | Pending |
+| MPC-03 | Phase 17 | Complete |
 | MPC-04 | Phase 15 | Complete |
 | MPC-05 | Phase 15 | Complete |
-| MPC-06 | Phase 17 | Pending |
+| MPC-06 | Phase 17 | Complete |
 | MPC-07 | Phase 15 | Complete |
 | RTR-01 | Phase 16 | Complete |
 | RTR-02 | Phase 16 | Complete |

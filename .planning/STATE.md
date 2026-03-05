@@ -3,11 +3,42 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Package Router & End-to-End Automation
 status: in-progress
+stopped_at: Completed 17-01-PLAN.md (Path C MipMap sub-workflow + Package Router update)
+last_updated: "2026-03-05T16:20:37.456Z"
+last_activity: 2026-03-05 — Completed 18-01 (V-path PipelineStatusReporter for all 6 scripts)
+progress:
+  total_phases: 6
+  completed_phases: 4
+  total_plans: 10
+  completed_plans: 9
+---
+
+---
+gsd_state_version: 1.0
+milestone: v3.0
+milestone_name: Package Router & End-to-End Automation
+status: in-progress
+stopped_at: Completed 18-01-PLAN.md (V-path PipelineStatusReporter integration)
+last_updated: "2026-03-05T16:20:14.981Z"
+last_activity: 2026-03-05 — Completed 18-01 (V-path PipelineStatusReporter for all 6 scripts)
+progress:
+  total_phases: 6
+  completed_phases: 4
+  total_plans: 10
+  completed_plans: 9
+  percent: 96
+---
+
+---
+gsd_state_version: 1.0
+milestone: v3.0
+milestone_name: Package Router & End-to-End Automation
+status: in-progress
 stopped_at: Completed 18-01-PLAN.md (V-path PipelineStatusReporter integration)
 last_updated: "2026-03-05T16:17:15Z"
 last_activity: 2026-03-05 — Completed 18-01 (V-path PipelineStatusReporter for all 6 scripts)
 progress:
-  total_phases: 6
+  [██████████] 96%
   completed_phases: 3
   total_plans: 10
   completed_plans: 8
@@ -53,6 +84,7 @@ Progress: [█████████░] 92% (v3.0)
 - 16-01: 3 min, 1 task, 1 file
 - 16-02: 3 min, 2 tasks, 2 files
 - 18-01: 4 min, 2 tasks, 6 files
+- 17-01: 3 min, 2 tasks, 2 files
 
 ## Accumulated Context
 
@@ -81,6 +113,9 @@ Recent decisions affecting current work:
 - [Phase 16]: Dry-run mode skips reporter.start() entirely (no Supabase side effects)
 - [Phase 18]: V-script reporter pattern: create after arg parse, start after pre-flight, try/except core logic
 - [Phase 18]: sys.exit() inside try blocks converted to raise RuntimeError() for reporter.fail() capture
+- [Phase 17]: Wildcard *.tif polling handles unknown MipMap output filenames
+- [Phase 17]: dir /b discovers actual GeoTIFF filename before harvest
+- [Phase 17]: Vegetation flag checked via direct Supabase GET (same pattern as Path E)
 
 ### Pending Todos
 
@@ -96,6 +131,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-05T16:17:15Z
-Stopped at: Completed 18-01-PLAN.md (V-path PipelineStatusReporter integration)
+Last session: 2026-03-05T16:20:37.454Z
+Stopped at: Completed 17-01-PLAN.md (Path C MipMap sub-workflow + Package Router update)
 Resume file: None
