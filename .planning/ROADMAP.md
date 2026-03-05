@@ -164,5 +164,5 @@ Phases execute in numeric order: 14 -> 14.x -> 15 -> 15.x -> 16 -> ... -> 19
 | 15. Foundation Scripts + Schema | 3/3 | Complete    | 2026-03-05 | - |
 | 16. Package Router Core + Path A | v3.0 | Complete    | 2026-03-05 | 2026-03-05 |
 | 17. Path C MipMap + Path E | v3.0 | 0/1 | Not started | - |
-| 18. Path V Video Pipeline | v3.0 | 0/2 | Not started | - |
+| 18. Path V Video Pipeline | 1/2 | In Progress|  | - |
 | 19. Remaining Paths + Hardening | 2/2 | Complete    | 2026-03-05 | - |

@@ -39,11 +39,11 @@ Requirements for v3.0 Package Router & End-to-End Automation. Each maps to roadm
 
 ### Path V (Video Pipeline)
 
-- [ ] **PHV-01**: n8n Path V sub-workflow executes V1 (color grade), V1.5 (metadata), V2 (SRT telemetry), V3 (QA), V4 (proxy gen) in sequence via Execute Command nodes
+- [x] **PHV-01**: n8n Path V sub-workflow executes V1 (color grade), V1.5 (metadata), V2 (SRT telemetry), V3 (QA), V4 (proxy gen) in sequence via Execute Command nodes
 - [ ] **PHV-02**: After V4 completes, Path V pauses at a webhook-wait gate for operator to signal DaVinci Resolve manual edit (V5) is complete
 - [ ] **PHV-03**: On V5 resume webhook, Path V executes V6 (format export) and delivery_packaging.py
-- [ ] **PHV-04**: Path V sub-workflow updates Supabase processing_steps status at each stage (running/complete/failed)
-- [ ] **PHV-05**: Path V handles V script exit code 1 (fatal) by marking step failed and halting the path without blocking other paths
+- [x] **PHV-04**: Path V sub-workflow updates Supabase processing_steps status at each stage (running/complete/failed)
+- [x] **PHV-05**: Path V handles V script exit code 1 (fatal) by marking step failed and halting the path without blocking other paths
 
 ### Path B/D (Construction / ADIAT)
 
@@ -120,11 +120,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | PHA-01 | Phase 16 | Complete |
 | PHA-02 | Phase 16 | Complete |
 | PHA-03 | Phase 16 | Complete |
-| PHV-01 | Phase 18 | Pending |
+| PHV-01 | Phase 18 | Complete |
 | PHV-02 | Phase 18 | Pending |
 | PHV-03 | Phase 18 | Pending |
-| PHV-04 | Phase 18 | Pending |
-| PHV-05 | Phase 18 | Pending |
+| PHV-04 | Phase 18 | Complete |
+| PHV-05 | Phase 18 | Complete |
 | PBD-01 | Phase 19 | Complete |
 | PBD-02 | Phase 19 | Complete |
 | SCH-01 | Phase 15 | Complete |

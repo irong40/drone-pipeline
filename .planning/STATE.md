@@ -3,29 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Package Router & End-to-End Automation
 status: in-progress
-stopped_at: Completed 16-02-PLAN.md (Path A sub-workflow + delivery_packaging.py PipelineStatusReporter)
-last_updated: "2026-03-05T16:03:26.920Z"
-last_activity: 2026-03-05 — Completed 16-02 (Path A sub-workflow + delivery packaging status)
+stopped_at: Completed 18-01-PLAN.md (V-path PipelineStatusReporter integration)
+last_updated: "2026-03-05T16:17:15Z"
+last_activity: 2026-03-05 — Completed 18-01 (V-path PipelineStatusReporter for all 6 scripts)
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
----
-
----
-gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: Package Router & End-to-End Automation
-status: in-progress
-stopped_at: Completed 16-02-PLAN.md (Path A sub-workflow + delivery_packaging.py PipelineStatusReporter)
-last_updated: "2026-03-05T15:59:00Z"
-last_activity: 2026-03-05 — Completed 16-02 (Path A sub-workflow + delivery packaging status)
-progress:
-  total_phases: 6
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
 ---
 
 # Project State
@@ -35,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** Phase 16 - Package Router Core + Path A (v3.0) -- COMPLETE
+**Current focus:** Phase 18 - Path V Video Pipeline (v3.0)
 
 ## Current Position
 
-Phase: 16 of 19 (Package Router Core + Path A)
-Plan: 2 of 2 in current phase (16-02 complete)
-Status: Phase 16 complete
-Last activity: 2026-03-05 — Completed 16-02 (Path A sub-workflow + delivery packaging status)
+Phase: 18 of 19 (Path V Video Pipeline)
+Plan: 1 of 2 in current phase (18-01 complete)
+Status: In progress
+Last activity: 2026-03-05 — Completed 18-01 (V-path PipelineStatusReporter for all 6 scripts)
 
-Progress: [██████████] 100% (v3.0)
+Progress: [█████████░] 92% (v3.0)
 
 ## Performance Metrics
 
@@ -67,6 +52,7 @@ Progress: [██████████] 100% (v3.0)
 - 15-03: 2 min, 1 task (TDD), 2 files
 - 16-01: 3 min, 1 task, 1 file
 - 16-02: 3 min, 2 tasks, 2 files
+- 18-01: 4 min, 2 tasks, 6 files
 
 ## Accumulated Context
 
@@ -93,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 16]: Dual lookup branches: folder_watcher gets mission_id, ingest_sorter gets address/city
 - [Phase 16]: Extracted _run_packaging() for clean PipelineStatusReporter try/except wrapping
 - [Phase 16]: Dry-run mode skips reporter.start() entirely (no Supabase side effects)
+- [Phase 18]: V-script reporter pattern: create after arg parse, start after pre-flight, try/except core logic
+- [Phase 18]: sys.exit() inside try blocks converted to raise RuntimeError() for reporter.fail() capture
 
 ### Pending Todos
 
@@ -108,6 +96,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:59:00Z
-Stopped at: Completed 16-02-PLAN.md (Path A sub-workflow + delivery_packaging.py PipelineStatusReporter)
+Last session: 2026-03-05T16:17:15Z
+Stopped at: Completed 18-01-PLAN.md (V-path PipelineStatusReporter integration)
 Resume file: None
