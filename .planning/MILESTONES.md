@@ -1,4 +1,25 @@
 # Milestones
+## v3.0 Package Router & End-to-End Automation (Shipped: 2026-03-05)
+
+**Phases completed:** 6 phases, 12 plans
+**Test suite:** 494 tests (+92 v3.0 tests: workflow validation, integration, mipmap, ortho)
+**Timeline:** 2026-03-05 (46 commits, 69 files, 11,185 LOC added)
+**Requirements:** 34/34 complete
+
+**Key accomplishments:**
+1. Central Package Router n8n workflow: webhook entry point normalizes both folder_watcher and ingest_sorter payloads, deduplicates, creates processing_jobs row, and dispatches to 5 path sub-workflows via Switch node
+2. Path A (real estate photos): automated color grade + delivery packaging with PipelineStatusReporter tracking each step in Supabase
+3. Path C (MipMap mapping): fire-and-forget MipMap launch with PID-based orphan detection, polling-based ortho harvest with rasterio integrity verification, and automatic Path E vegetation trigger
+4. Path V (video pipeline): 30-node sub-workflow executing V1-V4 automatically, V5 Wait node for DaVinci Resolve manual gate, V6 + delivery on resume — all 6 V scripts report status to Supabase
+5. Path B/D (construction/ADIAT): shared manual sub-workflow sets status to "manual" and sends operator email notification via SMTP
+6. Foundation: mipmap_launcher.py, ortho_harvester.py, payload_normalizer.py, pipeline_status.py PipelineStatusReporter with --step-name override, Supabase processing_jobs/processing_templates schema
+
+**Archives:**
+- `milestones/v3.0-ROADMAP.md`
+- `milestones/v3.0-REQUIREMENTS.md`
+
+---
+
 
 ## v1.0 Hardening & Testing (Shipped: 2026-02-24)
 

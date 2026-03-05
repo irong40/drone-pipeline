@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Post-flight processing pipeline for Sentinel Aerial Inspections (Faith & Harmony LLC). 18 Python CLI scripts handle everything from SD card ingest to client delivery for DJI drones (Mini 4 Pro, Matrice 4E, Mavic 3 Enterprise). v1.0 shipped 14 hardened scripts with 282 tests. v2.0 added Path E — automated vegetation analysis (canopy detection, species classification, health assessment, branded PDF reporting) from orthomosaic imagery, bringing the total to 18 scripts and 402 tests.
+Post-flight processing pipeline for Sentinel Aerial Inspections (Faith & Harmony LLC). 18+ Python CLI scripts handle everything from SD card ingest to client delivery for DJI drones (Mini 4 Pro, Matrice 4E, Mavic 3 Enterprise). v1.0 shipped 14 hardened scripts with 282 tests. v2.0 added Path E — automated vegetation analysis from orthomosaic imagery (18 scripts, 402 tests). v3.0 added n8n Package Router for end-to-end automation: webhook-driven routing across 5 processing paths (A/B/C/D/V), MipMap photogrammetry automation, video pipeline with DaVinci Resolve gate, and Supabase status tracking (21+ scripts, 494 tests).
 
 ## Core Value
 
@@ -28,20 +28,19 @@ Every script runs reliably, recovers from failures, and has tests proving it wor
 - ✓ INT-01 through INT-07: n8n workflow, review gate, delivery packaging — v2.0
 - ✓ TST-01 through TST-06: E1-E4 unit and integration tests — v2.0
 
+- ✓ ENV-01 through ENV-03: n8n environment setup, Execute Command, timeout config — v3.0
+- ✓ RTR-01 through RTR-05: Package Router webhook, Switch routing, normalizer, dedup, job creation — v3.0
+- ✓ MPC-01 through MPC-07: MipMap launcher, ortho harvester, Path C sub-workflow, PID detection — v3.0
+- ✓ PHA-01 through PHA-03: Path A sub-workflow, color grade + delivery, status reporting — v3.0
+- ✓ PHV-01 through PHV-05: Path V sub-workflow, V1-V6 automation, Wait gate, status reporting — v3.0
+- ✓ PBD-01, PBD-02: Path B/D manual sub-workflow, operator email — v3.0
+- ✓ SCH-01 through SCH-03: processing_jobs, mipmap_workspace, processing_templates schema — v3.0
+- ✓ FWI-01, FWI-02: Folder watcher normalization, unified Package Router entry — v3.0
+- ✓ TST-01 through TST-04: MipMap/ortho tests, workflow validation, integration tests — v3.0
+
 ### Active
 
-## Current Milestone: v3.0 Package Router & End-to-End Automation
-
-**Goal:** Build the n8n Package Router workflow that receives ingest webhooks, routes missions by package_type through all processing paths (A/B/C/D/V), automates Path C (MipMap launch → ortho copy → Supabase status), and connects folder watcher events to trigger downstream workflows including Path E.
-
-**Target features:**
-- n8n Package Router workflow (receives ingest webhook, routes by package_type)
-- Path C automation (MipMap engine launch, result copy to mapping/, status updates)
-- Path A automation (RE photo processing: color grade → delivery)
-- Path V automation (video pipeline: metadata → QA → proxy → color grade → export → delivery)
-- Path B/D automation (construction/ADIAT routing)
-- Folder watcher → Path E trigger (replace polling with event-driven ortho detection)
-- MipMap output harvester (copy GeoTIFF from D:/ workspace to mission mapping/ folder)
+(No active requirements — next milestone not yet defined)
 
 ### Out of Scope
 
@@ -65,8 +64,9 @@ Every script runs reliably, recovers from failures, and has tests proving it wor
 - **Processing rig**: Windows 11, RTX 5070 (CUDA sm_120), E:\ (incoming), F:\ (archive), Google Drive (warm)
 - **Orchestrator**: n8n self-hosted, webhook-triggered from folder watcher
 - **Supabase**: Project `qjpujskwqaehxnqypxzu`
-- **Scripts**: 18 total (14 v1.0 pipeline + 4 Path E vegetation)
-- **Test suite**: 402 tests (282 v1.0 + 120 v2.0 Path E), ~1s + 21s runtime
+- **Scripts**: 21+ total (14 v1.0 pipeline + 4 Path E vegetation + 3 v3.0: mipmap_launcher, ortho_harvester, payload_normalizer)
+- **Test suite**: 494 tests (282 v1.0 + 120 v2.0 + 92 v3.0), ~1s + 21s runtime
+- **n8n workflows**: 8 JSON files (package_router, path_a, path_c, path_v, manual_path, path_e, normalizer, patch)
 - **Python**: System 3.14 (v1.0 scripts) + .venv-path-e 3.12 (Path E — DeepForest requires <3.13)
 - **3-agent review (2026-02-22)**: 16 fixes applied, QCheck PASS
 - **Species accuracy**: 30-55% top-1 — methodology disclaimer in PDF is non-negotiable
@@ -96,6 +96,13 @@ Every script runs reliably, recovers from failures, and has tests proving it wor
 | n8n Webhook Wait for review gate | Workflow thread pauses; operator reviews PDF externally | ✓ Good — no custom UI needed yet |
 | Package router default vegetation_enabled | site_survey + environmental_survey auto-enable; others opt-in | ✓ Good — no manual config for common cases |
 | Module-level sys.modules stub injection | E1/E2 tests install stubs before source imports | ✓ Good — 113 tests run on system Python without GPU |
+| Native Windows n8n (not Docker) | Python/GPU access, Windows paths unchanged | ✓ Good — scripts run directly without container overhead |
+| Sub-workflow per path | Mirrors proven Path E pattern, independent scaling | ✓ Good — clean isolation, easy to test |
+| Fire-and-forget MipMap with polling | Avoid n8n stdout buffer overflow (50-200MB) | ✓ Good — PID file + polling is robust |
+| Single shared B/D manual sub-workflow | package_type as parameter distinguishes them | ✓ Good — no code duplication |
+| V5 Wait node (not Webhook) | Sub-workflow can't own webhooks; Wait resumes within execution | ✓ Good — operator POSTs to resume URL |
+| --step-name CLI override | video_color_grade.py serves both Path A and Path V | ✓ Good — context-aware step reporting |
+| Sequential GPU scheduling | Path E after MipMap, not concurrent | — Pending — file-based lock deferred to v3.1 |
 
 ---
-*Last updated: 2026-03-05 after v3.0 milestone start*
+*Last updated: 2026-03-05 after v3.0 milestone*

@@ -5,6 +5,10 @@ Pillow>=11.0.0           # EXIF extraction fallback (ingest.py, platform_detect.
 pyexiftool>=0.5.6        # XMP-drone-dji metadata, M4E/M3E disambiguation (platform_detect.py)
 requests>=2.32.0         # HTTP webhooks (ingest_sorter.py, folder_watcher.py) — pinned >=2.32 for upstream CVE patches
 
+# GUI
+customtkinter>=5.2.0     # Modern themed Tkinter widgets (launcher.py)
+tkinterdnd2>=0.3.0       # Native drag-and-drop support (launcher.py)
+
 # File watching
 watchdog>=4.0.0          # Filesystem monitoring (folder_watcher.py)
 

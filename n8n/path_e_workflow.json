@@ -1,4 +1,5 @@
 {
+  "id": "sentinel-path-e-vegetation",
   "name": "Sentinel Path E — Vegetation Analysis",
   "nodes": [
     {
@@ -865,7 +866,7 @@
     "timezone": "America/New_York"
   },
   "staticData": null,
-  "tags": ["sentinel", "vegetation", "path-e"],
+  "tags": [],
   "triggerCount": 0,
   "updatedAt": "2026-02-25T00:00:00.000Z",
   "versionId": "1",
