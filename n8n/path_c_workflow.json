@@ -1,0 +1,466 @@
+{
+  "id": "sentinel-path-c",
+  "name": "Sentinel Path C — MipMap Mapping",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-trigger",
+      "name": "Execute Sub Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Entry point. Called by Package Router. Receives: { mission_id, package_type, mission_number, folder_path, processing_job_id, source_platform, address, city }"
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\mipmap_launcher.py\" --mission-id {{ $json.mission_id }} --mission-path \"{{ $json.folder_path }}\" --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-c1-launch",
+      "name": "C1 -- Launch MipMap",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "notes": "Runs mipmap_launcher.py to launch MipMap in fire-and-forget mode. Returns JSON stdout with workspace_path, pid_file. Exit 0=launched, 1=fatal, 2=partial."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Execute Sub Workflow Trigger').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  launch_exit_code: exitCode,\n  launch_result: parsed,\n  workspace_path: parsed.workspace_path || '',\n  launch_failed: exitCode !== 0\n}}];"
+      },
+      "id": "node-c1-parse",
+      "name": "C1 -- Parse Launch Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "notes": "Parses mipmap_launcher.py stdout JSON. Extracts workspace_path. Checks exitCode. Passes through all trigger params."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-launch-failed",
+              "leftValue": "={{ $json.launch_failed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-c1-if-failed",
+      "name": "C1 -- Launch Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  failed_step: $json.launch_failed ? 'mipmap_launch' : ($json.harvest_failed ? 'ortho_harvest' : 'unknown'),\n  exit_code: $json.launch_exit_code || $json.harvest_exit_code || 1,\n  mission_id: $json.mission_id\n}}];"
+      },
+      "id": "node-stop-failure",
+      "name": "Stop on Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 100],
+      "notes": "Terminal node for any failure in Path C. Returns status, failed_step, exit_code, and mission_id."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('C1 -- Parse Launch Result').first().json;\nconst missionId = input.mission_id;\nconst orthoCheckDir = $env.MIPMAP_WORKSPACE + '\\\\' + missionId + '\\\\result';\n\n// Track poll_attempt via workflow static data\nconst staticData = $getWorkflowStaticData('global');\nstaticData.poll_attempt = (staticData.poll_attempt || 0) + 1;\n\nreturn [{\n  json: {\n    mission_id: missionId,\n    ortho_check_dir: orthoCheckDir,\n    mission_path: input.folder_path,\n    processing_job_id: input.processing_job_id,\n    poll_attempt: staticData.poll_attempt,\n    max_attempts: 120\n  }\n}];"
+      },
+      "id": "node-c2-build-path",
+      "name": "C2 -- Build Ortho Path",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "notes": "Constructs MipMap output check path: MIPMAP_WORKSPACE\\mission_id\\result. Tracks poll_attempt via workflow static data. Max 120 attempts = 2 hours at 60s intervals."
+    },
+    {
+      "parameters": {
+        "command": "=if exist \"{{ $json.ortho_check_dir }}\\*.tif\" (echo FOUND) else (echo MISSING)"
+      },
+      "id": "node-c2-check-exists",
+      "name": "C2 -- Check Ortho Exists",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1440, 300],
+      "notes": "Windows batch command to check if any .tif file exists in MipMap result directory."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-ortho-found",
+              "leftValue": "={{ $json.stdout.trim() }}",
+              "rightValue": "FOUND",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-c2-ortho-found",
+      "name": "C2 -- Ortho Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-max-attempts",
+              "leftValue": "={{ $('C2 -- Build Ortho Path').item.json.poll_attempt }}",
+              "rightValue": 120,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-c2-max-attempts",
+      "name": "C2 -- Max Attempts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1680, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'failed',\n  reason: 'mipmap_timeout',\n  poll_attempts: $('C2 -- Build Ortho Path').item.json.poll_attempt,\n  max_attempts: 120,\n  mission_id: $('C2 -- Build Ortho Path').item.json.mission_id,\n  message: 'MipMap did not produce output within 2 hours (120 attempts x 60s)'\n}}];"
+      },
+      "id": "node-c2-timeout",
+      "name": "C2 -- Set Failed (Timeout)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 600],
+      "notes": "MipMap did not produce output within 2 hours. Returns failure with poll attempt count."
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "node-c2-wait",
+      "name": "C2 -- Wait 60s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1920, 480],
+      "notes": "Poll every 60 seconds for MipMap GeoTIFF output. Loops back to C2 -- Build Ortho Path."
+    },
+    {
+      "parameters": {
+        "command": "=dir /b \"{{ $('C2 -- Build Ortho Path').item.json.ortho_check_dir }}\\*.tif\""
+      },
+      "id": "node-c3-find-ortho",
+      "name": "C3 -- Find Ortho File",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1920, 300],
+      "notes": "Lists .tif files in MipMap result directory to get the actual filename (could be orthomosaic.tif, dom.tif, etc)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const orthoCheckDir = $('C2 -- Build Ortho Path').item.json.ortho_check_dir;\nconst stdout = items[0].json.stdout || '';\n// Take the first .tif filename from dir output\nconst filename = stdout.trim().split('\\n')[0].trim();\nconst sourcePath = orthoCheckDir + '\\\\' + filename;\n\nreturn [{json: {\n  source_path: sourcePath,\n  ortho_filename: filename,\n  mission_path: $('C2 -- Build Ortho Path').item.json.mission_path,\n  mission_id: $('C2 -- Build Ortho Path').item.json.mission_id,\n  processing_job_id: $('C2 -- Build Ortho Path').item.json.processing_job_id\n}}];"
+      },
+      "id": "node-c3-build-harvest",
+      "name": "C3 -- Build Harvest Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 300],
+      "notes": "Constructs full source path by combining ortho_check_dir + filename from dir command. Passes through mission_path, mission_id, processing_job_id for ortho_harvester.py."
+    },
+    {
+      "parameters": {
+        "command": "=python \"{{ $env.SENTINEL_SCRIPTS }}\\ortho_harvester.py\" --source-path \"{{ $json.source_path }}\" --mission-path \"{{ $json.mission_path }}\" --mission-id {{ $json.mission_id }} --processing-job-id {{ $json.processing_job_id }}"
+      },
+      "id": "node-c3-harvest",
+      "name": "C3 -- Harvest Ortho",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2400, 300],
+      "notes": "Runs ortho_harvester.py to copy GeoTIFF from MipMap workspace to mission output folder. Exit 0=success, 1=fatal, 2=partial."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('C3 -- Build Harvest Command').first().json;\nconst execResult = items[0].json;\nconst exitCode = execResult.exitCode || 0;\nconst stdout = execResult.stdout || '';\n\nlet parsed = {};\ntry { parsed = JSON.parse(stdout); } catch(e) { parsed = { raw: stdout }; }\n\nreturn [{json: {\n  ...input,\n  harvest_exit_code: exitCode,\n  harvest_result: parsed,\n  destination_path: parsed.destination_path || '',\n  harvest_failed: exitCode !== 0\n}}];"
+      },
+      "id": "node-c3-parse-harvest",
+      "name": "C3 -- Parse Harvest Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 300],
+      "notes": "Parses ortho_harvester.py stdout JSON. Checks exitCode. Extracts destination_path."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-harvest-failed",
+              "leftValue": "={{ $json.harvest_failed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-c3-if-failed",
+      "name": "C3 -- Harvest Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2880, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/drone_jobs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,vegetation_analysis" },
+            { "name": "id", "value": "=eq.{{ $json.mission_id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-c4-check-veg",
+      "name": "C4 -- Check Vegetation Flag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3120, 300],
+      "notes": "Fetch vegetation_analysis flag from drone_jobs. If true, trigger Path E vegetation analysis."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-veg-enabled",
+              "leftValue": "={{ $json[0].vegetation_analysis }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-c4-if-veg",
+      "name": "C4 -- Vegetation Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3360, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'complete',\n  vegetation_triggered: false,\n  mission_id: $('C3 -- Parse Harvest Result').first().json.mission_id\n}}];"
+      },
+      "id": "node-c4-done-no-veg",
+      "name": "C4 -- Done (No Vegetation)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, 480],
+      "notes": "Path C complete without vegetation analysis. Mapping ortho harvested successfully."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_BASE_URL }}/webhook/sentinel-vegetation-trigger",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ mission_id: $('C3 -- Parse Harvest Result').first().json.mission_id }) }}",
+        "options": {}
+      },
+      "id": "node-c4-trigger-e",
+      "name": "C4 -- Trigger Path E",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3600, 300],
+      "notes": "POST to /sentinel-vegetation-trigger to kick off Path E vegetation analysis pipeline."
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {\n  status: 'complete',\n  vegetation_triggered: true,\n  mission_id: $('C3 -- Parse Harvest Result').first().json.mission_id\n}}];"
+      },
+      "id": "node-c4-complete",
+      "name": "C4 -- Path C Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3840, 300],
+      "notes": "Path C complete with vegetation analysis triggered. MipMap ortho harvested and Path E webhook fired."
+    }
+  ],
+  "connections": {
+    "Execute Sub Workflow Trigger": {
+      "main": [
+        [{ "node": "C1 -- Launch MipMap", "type": "main", "index": 0 }]
+      ]
+    },
+    "C1 -- Launch MipMap": {
+      "main": [
+        [{ "node": "C1 -- Parse Launch Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "C1 -- Parse Launch Result": {
+      "main": [
+        [{ "node": "C1 -- Launch Failed?", "type": "main", "index": 0 }]
+      ]
+    },
+    "C1 -- Launch Failed?": {
+      "main": [
+        [{ "node": "Stop on Failure", "type": "main", "index": 0 }],
+        [{ "node": "C2 -- Build Ortho Path", "type": "main", "index": 0 }]
+      ]
+    },
+    "C2 -- Build Ortho Path": {
+      "main": [
+        [{ "node": "C2 -- Check Ortho Exists", "type": "main", "index": 0 }]
+      ]
+    },
+    "C2 -- Check Ortho Exists": {
+      "main": [
+        [{ "node": "C2 -- Ortho Found?", "type": "main", "index": 0 }]
+      ]
+    },
+    "C2 -- Ortho Found?": {
+      "main": [
+        [{ "node": "C3 -- Find Ortho File", "type": "main", "index": 0 }],
+        [{ "node": "C2 -- Max Attempts?", "type": "main", "index": 0 }]
+      ]
+    },
+    "C2 -- Max Attempts?": {
+      "main": [
+        [{ "node": "C2 -- Set Failed (Timeout)", "type": "main", "index": 0 }],
+        [{ "node": "C2 -- Wait 60s", "type": "main", "index": 0 }]
+      ]
+    },
+    "C2 -- Wait 60s": {
+      "main": [
+        [{ "node": "C2 -- Build Ortho Path", "type": "main", "index": 0 }]
+      ]
+    },
+    "C3 -- Find Ortho File": {
+      "main": [
+        [{ "node": "C3 -- Build Harvest Command", "type": "main", "index": 0 }]
+      ]
+    },
+    "C3 -- Build Harvest Command": {
+      "main": [
+        [{ "node": "C3 -- Harvest Ortho", "type": "main", "index": 0 }]
+      ]
+    },
+    "C3 -- Harvest Ortho": {
+      "main": [
+        [{ "node": "C3 -- Parse Harvest Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "C3 -- Parse Harvest Result": {
+      "main": [
+        [{ "node": "C3 -- Harvest Failed?", "type": "main", "index": 0 }]
+      ]
+    },
+    "C3 -- Harvest Failed?": {
+      "main": [
+        [{ "node": "Stop on Failure", "type": "main", "index": 0 }],
+        [{ "node": "C4 -- Check Vegetation Flag", "type": "main", "index": 0 }]
+      ]
+    },
+    "C4 -- Check Vegetation Flag": {
+      "main": [
+        [{ "node": "C4 -- Vegetation Enabled?", "type": "main", "index": 0 }]
+      ]
+    },
+    "C4 -- Vegetation Enabled?": {
+      "main": [
+        [{ "node": "C4 -- Trigger Path E", "type": "main", "index": 0 }],
+        [{ "node": "C4 -- Done (No Vegetation)", "type": "main", "index": 0 }]
+      ]
+    },
+    "C4 -- Trigger Path E": {
+      "main": [
+        [{ "node": "C4 -- Path C Complete", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-05T00:00:00.000Z",
+  "versionId": "1",
+  "_meta": {
+    "description": "Path C sub-workflow for mapping mission processing. Launches MipMap, polls for GeoTIFF output (120 attempts x 60s = 2 hours), harvests the orthomosaic via ortho_harvester.py, and optionally triggers Path E vegetation analysis. Called by Package Router Execute Sub Workflow node.",
+    "n8n_version_required": "2.x",
+    "env_vars_required": ["SENTINEL_SCRIPTS", "MIPMAP_WORKSPACE", "N8N_BASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
+    "parameters_expected": {
+      "mission_id": "UUID from processing_jobs table",
+      "package_type": "mapping | site_survey | environmental_survey",
+      "mission_number": "Integer mission number",
+      "folder_path": "Full path to mission folder on disk",
+      "processing_job_id": "UUID of the processing_jobs row for status reporting",
+      "source_platform": "Drone platform (mini4pro, m4e, m3e)",
+      "address": "Property street address",
+      "city": "City name"
+    },
+    "node_sequence": "Trigger -> C1 (Launch MipMap) -> C2 (Poll for GeoTIFF, 120x60s loop) -> C3 (Find + Harvest Ortho) -> C4 (Check Vegetation Flag -> Trigger Path E or Done)"
+  }
+}
