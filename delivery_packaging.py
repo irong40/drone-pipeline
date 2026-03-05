@@ -32,6 +32,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from pipeline_status import PipelineStatusReporter, add_pipeline_args
 from pipeline_utils import setup_logging
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -327,9 +328,16 @@ Examples:
     parser.add_argument("--include-vegetation", action="store_true",
                         help="Include vegetation analysis outputs (PDF, maps, GeoJSON) when pipeline is complete")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be packaged without creating ZIP")
+    add_pipeline_args(parser)
     args = parser.parse_args()
 
     log = setup_logging("delivery_packaging")
+
+    # Pipeline status reporter (no-op when processing_job_id is None)
+    reporter = PipelineStatusReporter(
+        processing_job_id=getattr(args, "processing_job_id", None),
+        step_name="delivery_packaging",
+    )
 
     mission_path = os.path.abspath(args.mission_path)
     if not os.path.isdir(mission_path):
@@ -338,6 +346,26 @@ Examples:
     if args.photos_only and args.video_addendum:
         sys.exit("Cannot use --photos-only and --video-addendum together")
 
+    # Dry-run mode skips status reporting entirely
+    if args.dry_run:
+        _run_packaging(args, mission_path, log, dry_run=True)
+        return
+
+    reporter.start()
+
+    try:
+        result_data = _run_packaging(args, mission_path, log, dry_run=False)
+        reporter.complete(output=result_data)
+    except SystemExit:
+        raise
+    except Exception as e:
+        reporter.fail(error=str(e))
+        log.error(f"Delivery packaging failed: {e}")
+        sys.exit(1)
+
+
+def _run_packaging(args, mission_path, log, dry_run=False):
+    """Core packaging logic. Returns result dict on success, or calls sys.exit on failure."""
     # Build naming
     prefix = build_prefix(args.address, args.city)
     date_str = args.date or extract_date_from_folder(mission_path)
@@ -355,7 +383,7 @@ Examples:
         log.info(f"Mode:     Video addendum")
         videos = collect_video_exports(mission_path)
         if not videos:
-            sys.exit("No video exports found in video/exports/. Run video_format_export.py first.")
+            raise RuntimeError("No video exports found in video/exports/. Run video_format_export.py first.")
         for vpath in videos:
             archive_name = f"video/{rename_video_export(vpath, prefix)}"
             manifest.append((vpath, archive_name))
@@ -365,7 +393,7 @@ Examples:
         log.info(f"Mode:     Photos only")
         photos = collect_photos(mission_path)
         if not photos:
-            sys.exit("No JPEG photos found in photos/jpeg/.")
+            raise RuntimeError("No JPEG photos found in photos/jpeg/.")
         for i, ppath in enumerate(photos, 1):
             archive_name = f"photos/{rename_photo(ppath, prefix, i)}"
             manifest.append((ppath, archive_name))
@@ -416,7 +444,7 @@ Examples:
                     log.info(f"Vegetation: pipeline status='{veg_status}' — skipping (not complete)")
 
     if not manifest:
-        sys.exit("No files to package. Check mission folder contents.")
+        raise RuntimeError("No files to package. Check mission folder contents.")
 
     # Summary
     photo_count = sum(1 for _, n in manifest if n.startswith("photos/"))
@@ -445,18 +473,17 @@ Examples:
     log.info(f"\nOutput: {zip_path}")
 
     # Create ZIP
-    result = create_delivery_zip(zip_path, manifest, dry_run=args.dry_run)
+    result = create_delivery_zip(zip_path, manifest, dry_run=dry_run)
 
-    if args.dry_run:
+    if dry_run:
         log.info("\n[DRY RUN] No ZIP created.")
-        return
+        return None
 
     if result:
         zip_size = os.path.getsize(result) / (1024 * 1024)
         log.info(f"\nDelivery ZIP created: {result} ({zip_size:.1f} MB)")
 
-        # Output JSON for n8n consumption
-        print(json.dumps({
+        result_data = {
             "zip_path": result,
             "zip_name": zip_name,
             "zip_size_mb": round(zip_size, 1),
@@ -470,10 +497,13 @@ Examples:
             "report_count": report_count,
             "vegetation_count": vegetation_count,
             "mode": "video_addendum" if args.video_addendum else "photos_only" if args.photos_only else "full",
-        }))
+        }
+
+        # Output JSON for n8n consumption
+        print(json.dumps(result_data))
+        return result_data
     else:
-        log.error("ZIP creation failed")
-        sys.exit(1)
+        raise RuntimeError("ZIP creation failed")
 
 
 if __name__ == "__main__":
