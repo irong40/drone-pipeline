@@ -34,6 +34,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except ImportError:
+    pass
+
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
 from pipeline_utils import LOG_DIR, PHOTO_EXTS, VIDEO_EXTS, PPK_EXTS, setup_logging, extract_sequence_number
 from platform_detect import detect_from_filename
@@ -289,6 +295,101 @@ def count_inventory(mission_path):
     }
 
 
+# ─── SUPABASE REGISTRATION ──────────────────────────────────────────────────
+
+MAPPING_PACKAGES = {"construction_progress", "commercial_basic", "commercial_premium", "insurance_claim"}
+
+
+def register_in_supabase(mission_config, mission_path, inventory, source_platform):
+    """Create drone_assets records and set photogrammetry_status on the job.
+
+    Uses local file paths so the processing server reads from disk.
+    """
+    log = logging.getLogger(__name__)
+    try:
+        from pipeline_utils import get_supabase_client
+        sb = get_supabase_client()
+    except (ValueError, SystemExit) as e:
+        log.warning(f"Supabase registration skipped: {e}")
+        return False
+
+    job_id = mission_config["mission_id"]
+    package_type = mission_config["package_type"]
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    # Create or update drone_jobs row
+    job_data = {
+        "id": job_id,
+        "job_number": f"DJ-{mission_config['date'][:4]}-{mission_config['mission_number']:04d}",
+        "status": "uploaded",
+        "ingested_at": now,
+        "photo_count": inventory["photo_count"],
+        "has_ppk_data": inventory.get("has_ppk_data", False),
+        "scheduled_date": f"{mission_config['date'][:4]}-{mission_config['date'][4:6]}-{mission_config['date'][6:8]}",
+        "mission_number": mission_config["mission_number"],
+    }
+
+    # Set photogrammetry_status for mapping packages
+    if package_type in MAPPING_PACKAGES:
+        job_data["photogrammetry_status"] = "pending"
+
+    try:
+        sb.table("drone_jobs").upsert(job_data).execute()
+        log.info(f"  Registered drone_jobs: {job_id}")
+    except Exception as e:
+        log.error(f"  drone_jobs upsert failed: {e}")
+        return False
+
+    # Create drone_assets records for photos
+    photo_dir = os.path.join(mission_path, "photos", "jpeg")
+    assets = []
+    sort_order = 0
+
+    if os.path.isdir(photo_dir):
+        for fname in sorted(os.listdir(photo_dir)):
+            fpath = os.path.join(photo_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            sort_order += 1
+            assets.append({
+                "job_id": job_id,
+                "file_name": fname,
+                "file_path": os.path.abspath(fpath).replace("\\", "/"),
+                "file_type": "photo",
+                "processing_status": "raw",
+                "qa_status": "pending",
+                "sort_order": sort_order,
+            })
+
+    # Also register RAW files
+    raw_dir = os.path.join(mission_path, "photos", "raw")
+    if os.path.isdir(raw_dir):
+        for fname in sorted(os.listdir(raw_dir)):
+            fpath = os.path.join(raw_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            sort_order += 1
+            assets.append({
+                "job_id": job_id,
+                "file_name": fname,
+                "file_path": os.path.abspath(fpath).replace("\\", "/"),
+                "file_type": "raw",
+                "processing_status": "raw",
+                "qa_status": "pending",
+                "sort_order": sort_order,
+            })
+
+    if assets:
+        try:
+            sb.table("drone_assets").insert(assets).execute()
+            log.info(f"  Registered {len(assets)} drone_assets")
+        except Exception as e:
+            log.error(f"  drone_assets insert failed: {e}")
+            return False
+
+    return True
+
+
 # ─── WEBHOOK ─────────────────────────────────────────────────────────────────
 
 def fire_webhook(mission_config, inventory, source_platform, webhook_url=N8N_WEBHOOK_URL):
@@ -469,6 +570,9 @@ Examples:
         # Count inventory
         inventory = count_inventory(mission_path)
         log.info(f"  Photos: {inventory['photo_count']}, Videos: {inventory['video_count']}, PPK: {inventory['has_ppk_data']}")
+
+        # Register in Supabase (creates drone_jobs + drone_assets with local paths)
+        register_in_supabase(mission, mission_path, inventory, source_platform)
 
         # Fire webhook (skip if any copies failed to prevent false success signal)
         if args.webhook:
