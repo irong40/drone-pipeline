@@ -1,0 +1,362 @@
+{
+  "name": "Sentinel Package Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ingest",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-trigger",
+      "name": "Ingest Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "notes": "Receives POST from ingest_sorter.py --webhook or folder_watcher.py.\nPayload: { mission_id, mission_number, package_type, photo_count, video_count, has_ppk_data, source_platform, mission_folder_path, ingested_at }"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_templates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,preset_name,path_code,default_steps,vegetation_enabled,vegetation_config" },
+            { "name": "preset_name", "value": "=eq.{{ $json.body.package_type }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-lookup-template",
+      "name": "Lookup Processing Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "notes": "Fetch processing template by package_type to determine which paths to run and vegetation config."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build routing decision from ingest payload + template\nconst body = $('Ingest Webhook').item.json.body;\nconst template = $input.item.json[0] || {};\n\nconst missionId = body.mission_id;\nconst packageType = body.package_type;\nconst photoCount = body.photo_count || 0;\nconst videoCount = body.video_count || 0;\nconst hasPpk = body.has_ppk_data || false;\nconst platform = body.source_platform || 'unknown';\nconst missionFolderPath = body.mission_folder_path || '';\nconst pathCode = template.path_code || '';\n\n// Determine which paths to run\nconst hasPhotos = photoCount > 0;\nconst hasVideo = videoCount > 0;\n\n// Path C (mapping/photogrammetry) — packages that produce orthomosaics\nconst mappingPackages = ['construction_progress', 'commercial_basic', 'commercial_premium', 'insurance_claim', 'site_survey', 'environmental_survey'];\nconst runPathC = hasPhotos && mappingPackages.includes(packageType);\n\n// Path E (vegetation) — from template or explicit flag\nconst vegetationEnabled = template.vegetation_enabled || false;\nconst vegetationConfig = template.vegetation_config || {};\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      mission_folder_path: missionFolderPath,\n      package_type: packageType,\n      photo_count: photoCount,\n      video_count: videoCount,\n      has_ppk_data: hasPpk,\n      source_platform: platform,\n      path_code: pathCode,\n      template_id: template.id || null,\n      run_video: hasVideo,\n      run_photos: hasPhotos,\n      run_mapping: runPathC,\n      run_vegetation: vegetationEnabled && runPathC,\n      vegetation_config: vegetationConfig\n    }\n  }\n];"
+      },
+      "id": "node-build-routing",
+      "name": "Build Routing Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "notes": "Determines which processing paths to run based on package type, file counts, and template config."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/drone_jobs",
+        "requestMethod": "PATCH",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $json.mission_id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ status: 'processing', processing_template_id: $json.template_id, vegetation_analysis: $json.run_vegetation, output_path: 'E:\\\\output\\\\' + $json.mission_id }) }}",
+        "options": {}
+      },
+      "id": "node-update-job-status",
+      "name": "Update Job — Processing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "notes": "Mark job as processing, assign template, set vegetation flag, and set output_path."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-has-video",
+              "leftValue": "={{ $('Build Routing Decision').item.json.run_video }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-check-video",
+      "name": "Has Video?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 180],
+      "notes": "Route to video processing chain (V1-V6) if mission has video files."
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\video_color_grade.py \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\" --platform {{ $('Build Routing Decision').item.json.source_platform }} --mission-id {{ $('Build Routing Decision').item.json.mission_id }} --upload"
+      },
+      "id": "node-v1-color-grade",
+      "name": "V1 — Color Grade",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1340, 120],
+      "notes": "Applies Sentinel LUT via FFmpeg. First step of the video processing chain."
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\video_metadata.py \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\" --mission-id {{ $('Build Routing Decision').item.json.mission_id }} --platform {{ $('Build Routing Decision').item.json.source_platform }} --upload"
+      },
+      "id": "node-v1b-metadata",
+      "name": "V1.5 — Metadata",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1560, 120],
+      "notes": "Extracts video metadata via ffprobe and upserts into video_assets."
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\srt_telemetry_parser.py \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\" --mission-id {{ $('Build Routing Decision').item.json.mission_id }} --upload"
+      },
+      "id": "node-v2-srt-parse",
+      "name": "V2 — SRT Parse",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1780, 120],
+      "notes": "Parses DJI SRT telemetry (GPS, altitude, ISO, etc.) into video_assets."
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\video_qa.py --mission-id {{ $('Build Routing Decision').item.json.mission_id }} --mission-path \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\""
+      },
+      "id": "node-v3-qa",
+      "name": "V3 — QA",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2000, 120],
+      "notes": "Runs automated video QA checks. Updates qa_status in video_assets."
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\video_proxy_gen.py \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\""
+      },
+      "id": "node-v4-proxy",
+      "name": "V4 — Proxy Gen",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2220, 120],
+      "notes": "Generates 1080p proxy files for DaVinci Resolve editing."
+    },
+    {
+      "parameters": {
+        "content": "V5 — Manual Edit\n\nOperator opens DaVinci Resolve with proxy files.\nThis step is manual. The V6 export runs after editing is complete.\n\nTrigger V6 via: POST /webhook/video-export-ready { mission_id }",
+        "height": 120,
+        "width": 360
+      },
+      "id": "node-v5-manual-note",
+      "name": "V5 — Manual Edit (Note)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2440, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-run-mapping",
+              "leftValue": "={{ $('Build Routing Decision').item.json.run_mapping }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-check-mapping",
+      "name": "Run Mapping?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 420],
+      "notes": "Route to Path C (photogrammetry via NodeODM) if this is a mapping package with photos."
+    },
+    {
+      "parameters": {
+        "content": "Path C — Photogrammetry (NodeODM)\n\nNot yet implemented. Will POST photos to NodeODM (localhost:3000/task/new),\npoll for completion, and drop orthomosaic.tif into E:\\output\\{mission_id}\\mapping\\.\n\nOnce Path C is built, connect it here and wire its completion to the\n'Route to Path E?' node.",
+        "height": 140,
+        "width": 400
+      },
+      "id": "node-path-c-placeholder",
+      "name": "Path C — TODO",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1340, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-veg-enabled",
+              "leftValue": "={{ $('Build Routing Decision').item.json.run_vegetation }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-check-vegetation",
+      "name": "Route to Path E?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 600],
+      "notes": "If vegetation_analysis is enabled AND mapping is running, fire Path E webhook.\nPath E workflow will poll for the ortho to appear before starting E1."
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:5678/webhook/sentinel-vegetation-trigger",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ mission_id: $('Build Routing Decision').item.json.mission_id }) }}",
+        "options": {}
+      },
+      "id": "node-fire-path-e",
+      "name": "Fire Path E Trigger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 560],
+      "notes": "POST to Path E webhook. Path E workflow will poll for Path C ortho before proceeding with E1-E4."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build summary response\nconst routing = $('Build Routing Decision').item.json;\n\nreturn [\n  {\n    json: {\n      status: 'routed',\n      mission_id: routing.mission_id,\n      package_type: routing.package_type,\n      paths_triggered: {\n        video: routing.run_video,\n        mapping: routing.run_mapping,\n        vegetation: routing.run_vegetation\n      },\n      photo_count: routing.photo_count,\n      video_count: routing.video_count\n    }\n  }\n];"
+      },
+      "id": "node-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "notes": "Returns routing summary as webhook response to ingest_sorter.py."
+    }
+  ],
+  "connections": {
+    "Ingest Webhook": {
+      "main": [
+        [{ "node": "Lookup Processing Template", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup Processing Template": {
+      "main": [
+        [{ "node": "Build Routing Decision", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Routing Decision": {
+      "main": [
+        [
+          { "node": "Update Job — Processing", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Job — Processing": {
+      "main": [
+        [
+          { "node": "Has Video?", "type": "main", "index": 0 },
+          { "node": "Run Mapping?", "type": "main", "index": 0 },
+          { "node": "Route to Path E?", "type": "main", "index": 0 },
+          { "node": "Build Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Has Video?": {
+      "main": [
+        [{ "node": "V1 — Color Grade", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "V1 — Color Grade": {
+      "main": [
+        [{ "node": "V1.5 — Metadata", "type": "main", "index": 0 }]
+      ]
+    },
+    "V1.5 — Metadata": {
+      "main": [
+        [{ "node": "V2 — SRT Parse", "type": "main", "index": 0 }]
+      ]
+    },
+    "V2 — SRT Parse": {
+      "main": [
+        [{ "node": "V3 — QA", "type": "main", "index": 0 }]
+      ]
+    },
+    "V3 — QA": {
+      "main": [
+        [{ "node": "V4 — Proxy Gen", "type": "main", "index": 0 }]
+      ]
+    },
+    "Run Mapping?": {
+      "main": [
+        [],
+        []
+      ]
+    },
+    "Route to Path E?": {
+      "main": [
+        [{ "node": "Fire Path E Trigger", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "tags": ["sentinel", "routing", "package-router"],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-14T00:00:00.000Z",
+  "versionId": "1",
+  "_meta": {
+    "description": "Central routing brain for Sentinel pipeline. Receives ingest webhook, looks up processing template, routes to video chain (V1-V4), mapping (Path C), and vegetation analysis (Path E).",
+    "n8n_version_required": "1.x",
+    "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
+    "webhook_paths": ["ingest"],
+    "routing_logic": {
+      "video_chain": "V1 (color grade) → V1.5 (metadata) → V2 (SRT parse) → V3 (QA) → V4 (proxy gen) → V5 (manual edit) → V6 (format export)",
+      "mapping": "Path C (NodeODM photogrammetry) — placeholder, not yet implemented",
+      "vegetation": "Path E (fires webhook to separate Path E workflow) — requires mapping to also be running"
+    },
+    "ingest_payload_schema": {
+      "mission_id": "string (UUID)",
+      "mission_number": "number",
+      "package_type": "string (re_standard, commercial_basic, site_survey, etc.)",
+      "photo_count": "number",
+      "video_count": "number",
+      "has_ppk_data": "boolean",
+      "source_platform": "string (mini4pro, m4e, m3e)",
+      "mission_folder_path": "string (absolute path to ingested mission folder)",
+      "ingested_at": "string (ISO 8601)"
+    }
+  }
+}

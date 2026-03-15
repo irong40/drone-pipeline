@@ -392,7 +392,7 @@ def register_in_supabase(mission_config, mission_path, inventory, source_platfor
 
 # ─── WEBHOOK ─────────────────────────────────────────────────────────────────
 
-def fire_webhook(mission_config, inventory, source_platform, webhook_url=N8N_WEBHOOK_URL):
+def fire_webhook(mission_config, inventory, source_platform, mission_path=None, webhook_url=N8N_WEBHOOK_URL):
     """POST mission completion data to n8n webhook."""
     from pipeline_utils import validate_webhook_url
     try:
@@ -408,6 +408,7 @@ def fire_webhook(mission_config, inventory, source_platform, webhook_url=N8N_WEB
         "video_count": inventory["video_count"],
         "has_ppk_data": inventory["has_ppk_data"],
         "source_platform": source_platform,
+        "mission_folder_path": mission_path,
         "ingested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     try:
@@ -580,7 +581,7 @@ Examples:
                 log.warning(f"  Webhook skipped — incomplete ingest ({failed} failed copies)")
             else:
                 url = args.webhook_url or N8N_WEBHOOK_URL
-                ok = fire_webhook(mission, inventory, source_platform, webhook_url=url)
+                ok = fire_webhook(mission, inventory, source_platform, mission_path=mission_path, webhook_url=url)
                 log.info(f"  Webhook: {'OK' if ok else 'FAILED'}")
 
     log.info("Ingest complete.")
