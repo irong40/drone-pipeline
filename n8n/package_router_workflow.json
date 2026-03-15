@@ -198,15 +198,14 @@
     },
     {
       "parameters": {
-        "content": "Path C — Photogrammetry (NodeODM)\n\nNot yet implemented. Will POST photos to NodeODM (localhost:3000/task/new),\npoll for completion, and drop orthomosaic.tif into E:\\output\\{mission_id}\\mapping\\.\n\nOnce Path C is built, connect it here and wire its completion to the\n'Route to Path E?' node.",
-        "height": 140,
-        "width": 400
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\photogrammetry_submit.py --mission-id {{ $('Build Routing Decision').item.json.mission_id }} --photos-dir \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\\photos\\jpeg\" --output-dir \"E:\\output\\{{ $('Build Routing Decision').item.json.mission_id }}\\mapping\""
       },
-      "id": "node-path-c-placeholder",
-      "name": "Path C — TODO",
-      "type": "n8n-nodes-base.stickyNote",
+      "id": "node-path-c-submit",
+      "name": "Path C — Photogrammetry",
+      "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [1340, 380]
+      "position": [1340, 380],
+      "notes": "Submits photos to NodeODM (localhost:3000), polls for completion, downloads orthomosaic to E:\\output\\{mission_id}\\mapping\\. Long-running — can take 30min to hours depending on photo count."
     },
     {
       "parameters": {
@@ -403,7 +402,7 @@
     },
     "Run Mapping?": {
       "main": [
-        [],
+        [{ "node": "Path C — Photogrammetry", "type": "main", "index": 0 }],
         []
       ]
     },
@@ -458,7 +457,7 @@
     "webhook_paths": ["ingest", "delivery-ready"],
     "routing_logic": {
       "video_chain": "V1 (color grade) → V1.5 (metadata) → V2 (SRT parse) → V3 (QA) → V4 (proxy gen) → V5 (manual edit) → V6 (format export)",
-      "mapping": "Path C (NodeODM photogrammetry) — placeholder, not yet implemented",
+      "mapping": "Path C (NodeODM photogrammetry) — submits photos, polls completion, downloads orthomosaic",
       "vegetation": "Path E (fires webhook to separate Path E workflow) — requires mapping to also be running"
     },
     "ingest_payload_schema": {
