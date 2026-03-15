@@ -256,6 +256,95 @@
       "typeVersion": 2,
       "position": [1560, 300],
       "notes": "Returns routing summary as webhook response to ingest_sorter.py."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "delivery-ready",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-delivery-trigger",
+      "name": "Delivery Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 800],
+      "notes": "Separate trigger for delivery packaging. Called after manual edit (V5) is done or when operator is ready to deliver.\nPayload: { mission_id, mission_folder_path, include_vegetation: bool, include_mapping: bool }"
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\delivery_packaging.py \"{{ $json.body.mission_folder_path }}\" --mission-id {{ $json.body.mission_id }}{{ $json.body.include_vegetation ? ' --include-vegetation' : '' }}{{ $json.body.include_mapping ? ' --include-mapping' : '' }} --include-reports"
+      },
+      "id": "node-delivery-package",
+      "name": "Delivery — Package ZIP",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 800],
+      "notes": "Runs delivery_packaging.py with --mission-id to auto-fetch address/city from Supabase. Outputs JSON with zip_path."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse delivery output\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('delivery_packaging.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nif ($input.item.json.exitCode !== 0) {\n  throw new Error('delivery_packaging.py failed with exit code ' + $input.item.json.exitCode);\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "node-delivery-parse",
+      "name": "Delivery — Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 800],
+      "notes": "Parse delivery_packaging.py JSON output (zip_path, zip_name, counts, etc.)."
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\gdrive_upload.py \"{{ $json.zip_path }}\""
+      },
+      "id": "node-gdrive-upload",
+      "name": "Delivery — Upload to Drive",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [900, 800],
+      "notes": "Uploads delivery ZIP to Google Drive Sentinel_Deliveries/Active/ folder."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/drone_jobs",
+        "requestMethod": "PATCH",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $('Delivery Webhook').item.json.body.mission_id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\"status\": \"delivered\"}",
+        "options": {}
+      },
+      "id": "node-set-delivered",
+      "name": "Set Status — Delivered",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 800],
+      "notes": "Mark mission as delivered in Supabase after successful upload."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Return delivery confirmation\nreturn [{\n  json: {\n    status: 'delivered',\n    mission_id: $('Delivery Webhook').item.json.body.mission_id,\n    zip_name: $('Delivery — Parse Result').item.json.zip_name,\n    zip_size_mb: $('Delivery — Parse Result').item.json.zip_size_mb\n  }\n}];"
+      },
+      "id": "node-delivery-response",
+      "name": "Delivery Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 800],
+      "notes": "Returns delivery confirmation as webhook response."
     }
   ],
   "connections": {
@@ -323,6 +412,31 @@
         [{ "node": "Fire Path E Trigger", "type": "main", "index": 0 }],
         []
       ]
+    },
+    "Delivery Webhook": {
+      "main": [
+        [{ "node": "Delivery — Package ZIP", "type": "main", "index": 0 }]
+      ]
+    },
+    "Delivery — Package ZIP": {
+      "main": [
+        [{ "node": "Delivery — Parse Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Delivery — Parse Result": {
+      "main": [
+        [{ "node": "Delivery — Upload to Drive", "type": "main", "index": 0 }]
+      ]
+    },
+    "Delivery — Upload to Drive": {
+      "main": [
+        [{ "node": "Set Status — Delivered", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Status — Delivered": {
+      "main": [
+        [{ "node": "Delivery Response", "type": "main", "index": 0 }]
+      ]
     }
   },
   "settings": {
@@ -341,7 +455,7 @@
     "description": "Central routing brain for Sentinel pipeline. Receives ingest webhook, looks up processing template, routes to video chain (V1-V4), mapping (Path C), and vegetation analysis (Path E).",
     "n8n_version_required": "1.x",
     "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
-    "webhook_paths": ["ingest"],
+    "webhook_paths": ["ingest", "delivery-ready"],
     "routing_logic": {
       "video_chain": "V1 (color grade) → V1.5 (metadata) → V2 (SRT parse) → V3 (QA) → V4 (proxy gen) → V5 (manual edit) → V6 (format export)",
       "mapping": "Path C (NodeODM photogrammetry) — placeholder, not yet implemented",

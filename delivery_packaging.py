@@ -36,7 +36,7 @@ from pipeline_utils import setup_logging
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-OUTPUT_ROOT = r"E:\Sentinel\Output"
+OUTPUT_ROOT = r"E:\output"
 
 # Video export format name → client-facing label
 FORMAT_LABELS = {
@@ -312,8 +312,9 @@ Examples:
         """,
     )
     parser.add_argument("mission_path", help="Path to mission folder")
-    parser.add_argument("--address", required=True, help="Property street address (e.g., '123 Main St')")
-    parser.add_argument("--city", required=True, help="City name (e.g., 'Virginia Beach')")
+    parser.add_argument("--address", help="Property street address (e.g., '123 Main St'). Auto-fetched from Supabase if --mission-id provided.")
+    parser.add_argument("--city", help="City name (e.g., 'Virginia Beach'). Auto-fetched from Supabase if --mission-id provided.")
+    parser.add_argument("--mission-id", help="Supabase mission UUID — fetches address/city from drone_jobs if --address/--city omitted")
     parser.add_argument("--date", help="Override date (YYYYMMDD). Auto-detected from folder name if omitted.")
     parser.add_argument("--output-dir", default=OUTPUT_ROOT, help=f"Output directory for ZIP (default: {OUTPUT_ROOT})")
     parser.add_argument("--photos-only", action="store_true",
@@ -338,12 +339,34 @@ Examples:
     if args.photos_only and args.video_addendum:
         sys.exit("Cannot use --photos-only and --video-addendum together")
 
+    # Fetch address/city from Supabase if not provided
+    address = args.address
+    city = args.city
+    if not address or not city:
+        if not args.mission_id:
+            sys.exit("Either --address and --city, or --mission-id is required")
+        try:
+            from pipeline_utils import get_supabase_client
+            sb = get_supabase_client()
+            result = sb.table("drone_jobs").select("property_address,property_city").eq("id", args.mission_id).execute()
+            if result.data and result.data[0]:
+                row = result.data[0]
+                address = address or row.get("property_address")
+                city = city or row.get("property_city")
+                if not address or not city:
+                    sys.exit(f"drone_jobs row {args.mission_id} missing property_address or property_city")
+                log.info(f"Fetched from Supabase: {address}, {city}")
+            else:
+                sys.exit(f"Mission {args.mission_id} not found in drone_jobs")
+        except (ValueError, SystemExit) as e:
+            sys.exit(f"Cannot fetch address from Supabase: {e}")
+
     # Build naming
-    prefix = build_prefix(args.address, args.city)
+    prefix = build_prefix(address, city)
     date_str = args.date or extract_date_from_folder(mission_path)
 
     log.info(f"Mission:  {mission_path}")
-    log.info(f"Address:  {args.address}, {args.city}")
+    log.info(f"Address:  {address}, {city}")
     log.info(f"Prefix:   {prefix}")
     log.info(f"Date:     {date_str}")
 
@@ -461,8 +484,8 @@ Examples:
             "zip_name": zip_name,
             "zip_size_mb": round(zip_size, 1),
             "prefix": prefix,
-            "address": args.address,
-            "city": args.city,
+            "address": address,
+            "city": city,
             "date": date_str,
             "photo_count": photo_count,
             "video_count": video_count,
