@@ -36,7 +36,7 @@ class SentinelFolderWatcherService(win32serviceutil.ServiceFramework):
     _svc_name_ = "SentinelFolderWatcher"
     _svc_display_name_ = "Sentinel Folder Watcher"
     _svc_description_ = (
-        "Monitors E:\\Sentinel\\Incoming for new mission folders and fires "
+        "Monitors E:\\incoming for new mission folders and fires "
         "n8n webhooks after file writes settle."
     )
 

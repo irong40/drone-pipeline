@@ -23,7 +23,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 INGEST_SCRIPT = SCRIPT_DIR / "ingest_sorter.py"
-INCOMING_ROOT = r"E:\Sentinel\Incoming"
+INCOMING_ROOT = r"E:\incoming"
 PYTHON_EXE = sys.executable
 
 PACKAGE_TYPES = [

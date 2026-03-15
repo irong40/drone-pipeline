@@ -10,7 +10,7 @@ Updates existing video_assets records by matching on mission_id + filename,
 or inserts new records if run before V2.
 
 Usage:
-    python video_metadata.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218 --mission-id UUID --upload
+    python video_metadata.py E:\\incoming\\SAI_M0047_RE_Standard_20260218 --mission-id UUID --upload
     python video_metadata.py path/to/mission --platform mini4pro --dump-json
     python video_metadata.py path/to/mission --mission-id UUID --upload --dry-run
 """
@@ -395,7 +395,7 @@ codec, file_size_bytes, color_profile, has_lrf_proxy, and graded_path.
 Run after color grading (V1), before or after SRT parsing (V2).
 
 Examples:
-  python video_metadata.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218 --platform mini4pro
+  python video_metadata.py E:\\incoming\\SAI_M0047_RE_Standard_20260218 --platform mini4pro
   python video_metadata.py path/to/mission --mission-id UUID --upload
   python video_metadata.py path/to/mission --dump-json
   python video_metadata.py path/to/mission --mission-id UUID --upload --dry-run

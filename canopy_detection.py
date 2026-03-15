@@ -6,7 +6,7 @@ Tiles image into configurable chunks, runs CUDA-accelerated inference,
 applies cross-tile NMS, and exports polygons with geographic coordinates.
 
 Usage:
-    python canopy_detection.py --mission-id {uuid} --ortho-path E:\\Sentinel\\Output\\{id}\\mapping\\orthomosaic.tif
+    python canopy_detection.py --mission-id {uuid} --ortho-path E:\\output\\{id}\\mapping\\orthomosaic.tif
     python canopy_detection.py --mission-id {uuid} --ortho-path path.tif --tile-size 512 --score-threshold 0.4
 """
 
@@ -615,7 +615,7 @@ Exit codes:
   2 — Partial success: some tiles failed, output produced from successful tiles
 
 Examples:
-  python canopy_detection.py --mission-id abc-123 --ortho-path E:\\Sentinel\\Output\\abc-123\\mapping\\orthomosaic.tif
+  python canopy_detection.py --mission-id abc-123 --ortho-path E:\\output\\abc-123\\mapping\\orthomosaic.tif
   python canopy_detection.py --mission-id abc-123 --ortho-path ortho.tif --tile-size 512 --score-threshold 0.4
   python canopy_detection.py --mission-id abc-123 --ortho-path ortho.tif --force
         """,

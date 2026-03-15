@@ -5,7 +5,7 @@ Computes per-canopy vegetation health scores using RGB-derived indices (VARI, Ex
 and optional OpenAI Vision API qualitative assessment for the lowest-scoring canopies.
 
 Usage:
-    python health_assessment.py --mission-id {uuid} --ortho-path E:\\Sentinel\\Output\\{id}\\mapping\\orthomosaic.tif
+    python health_assessment.py --mission-id {uuid} --ortho-path E:\\output\\{id}\\mapping\\orthomosaic.tif
     python health_assessment.py --mission-id {uuid} --ortho-path path.tif --skip-vision
     python health_assessment.py --mission-id {uuid} --ortho-path path.tif --vision-sample-pct 0.5
 """

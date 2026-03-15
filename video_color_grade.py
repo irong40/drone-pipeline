@@ -5,9 +5,9 @@ Applies Sentinel branded LUTs to raw drone video via FFmpeg.
 Selects LUT based on source platform: DLogM for M4E/M3E, DCinelike for Mini 4 Pro.
 
 Usage:
-    python video_color_grade.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
-    python video_color_grade.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218 --platform mini4pro
-    python video_color_grade.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218 --lut custom.cube
+    python video_color_grade.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
+    python video_color_grade.py E:\\incoming\\SAI_M0047_RE_Standard_20260218 --platform mini4pro
+    python video_color_grade.py E:\\incoming\\SAI_M0047_RE_Standard_20260218 --lut custom.cube
 """
 
 import os
@@ -143,7 +143,7 @@ def main():
 Applies Sentinel branded LUTs to drone video clips using FFmpeg lut3d filter.
 
 Examples:
-  python video_color_grade.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+  python video_color_grade.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
   python video_color_grade.py path/to/mission --platform m4e
   python video_color_grade.py path/to/mission --lut MyCustom.cube
         """,

@@ -47,7 +47,7 @@ from platform_detect import detect_from_filename
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 SCRIPT_NAME = "ingest_sorter"
-INCOMING_ROOT = r"E:\Sentinel\Incoming"
+INCOMING_ROOT = r"E:\incoming"
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/ingest")
 MISSION_GAP_MINUTES = 30
 

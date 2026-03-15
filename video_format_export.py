@@ -8,7 +8,7 @@ Handles resolution scaling, codec selection, and max_duration_sec truncation
 for platform-specific formats (Instagram Reels 90s, TikTok 180s).
 
 Usage:
-    python video_format_export.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+    python video_format_export.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
     python video_format_export.py path/to/mission --mission-id UUID
     python video_format_export.py path/to/mission --formats '[{"name":"youtube","resolution":"3840x2160","fps":30,"codec":"libx265"}]'
 """
@@ -183,7 +183,7 @@ def main():
 Batch encodes master video edit into all configured delivery formats.
 
 Examples:
-  python video_format_export.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+  python video_format_export.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
   python video_format_export.py path/to/mission --mission-id UUID
   python video_format_export.py path/to/mission --formats '[{"name":"youtube","resolution":"3840x2160","fps":30,"codec":"libx265"}]'
         """,

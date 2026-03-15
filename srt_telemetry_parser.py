@@ -8,7 +8,7 @@ DJI SRT files contain per-frame data at ~30fps including GPS coordinates,
 altitude, ISO, shutter speed, aperture, and color temperature.
 
 Usage:
-    python srt_telemetry_parser.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+    python srt_telemetry_parser.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
     python srt_telemetry_parser.py path/to/mission --mission-id UUID --upload
     python srt_telemetry_parser.py path/to/mission --dump-json
 """

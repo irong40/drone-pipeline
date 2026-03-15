@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 # ─── CONSTANTS ──────────────────────────────────────────────────────────────
 
-LOG_DIR = r"E:\Sentinel\logs"
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 
 # Glob-style patterns for finding video files (used with glob.glob)
 VIDEO_EXTENSIONS = {"*.mp4", "*.MP4", "*.mov", "*.MOV"}
@@ -44,7 +44,7 @@ def setup_logging(script_name, log_dir=LOG_DIR):
 
     Args:
         script_name: Used for log filename (e.g. "video_color_grade" -> video_color_grade.log)
-        log_dir: Directory for log files (default: E:\\Sentinel\\logs)
+        log_dir: Directory for log files (default: {repo}/logs)
     """
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"{script_name}.log")

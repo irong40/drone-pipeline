@@ -13,11 +13,11 @@ Detection priority:
 Usage as module:
     from platform_detect import detect_platform_from_folder
 
-    platform = detect_platform_from_folder("E:\\Sentinel\\Incoming\\SAI_M0047...")
+    platform = detect_platform_from_folder("E:\\incoming\\SAI_M0047...")
     # Returns: "mini4pro", "m4e", or "m3e"
 
 Usage as CLI:
-    python platform_detect.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+    python platform_detect.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
     python platform_detect.py E:/DCIM/DJI_001
     python platform_detect.py path/to/single_photo.JPG
 """
@@ -371,7 +371,7 @@ def main():
 Identifies DJI drone platform from media files using EXIF and ffprobe.
 
 Examples:
-  python platform_detect.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+  python platform_detect.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
   python platform_detect.py E:/DCIM/DJI_001
   python platform_detect.py path/to/DJI_0015.JPG
   python platform_detect.py path/to/DJI_0015.MP4

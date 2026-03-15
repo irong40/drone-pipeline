@@ -9,7 +9,7 @@ Reads from video/graded/ (or video/full/ if no graded clips exist).
 Writes to video/proxy/, replacing camera-generated LRF proxy files.
 
 Usage:
-    python video_proxy_gen.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+    python video_proxy_gen.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
     python video_proxy_gen.py path/to/mission --resolution 1920x1080
     python video_proxy_gen.py path/to/mission --dry-run
 """
@@ -108,7 +108,7 @@ Generates 1080p proxy files for efficient editing in DaVinci Resolve.
 Reads from video/graded/ (preferred) or video/full/ (fallback).
 
 Examples:
-  python video_proxy_gen.py E:\\Sentinel\\Incoming\\SAI_M0047_RE_Standard_20260218
+  python video_proxy_gen.py E:\\incoming\\SAI_M0047_RE_Standard_20260218
   python video_proxy_gen.py path/to/mission --resolution 1920x1080
   python video_proxy_gen.py path/to/mission --crf 20 --preset medium
   python video_proxy_gen.py path/to/mission --dry-run

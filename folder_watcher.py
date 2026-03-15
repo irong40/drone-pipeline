@@ -1,12 +1,12 @@
 """
 Sentinel Aerial Inspections — Folder Watcher Service
 
-Monitors E:\\Sentinel\\Incoming\\ for new mission folders.
+Monitors E:\\incoming\\ for new mission folders.
 Waits 60 seconds after last file write, then fires POST to n8n webhook.
 
 Usage:
     python folder_watcher.py
-    python folder_watcher.py --watch-dir E:\\Sentinel\\Incoming --debounce 60
+    python folder_watcher.py --watch-dir E:\\incoming --debounce 60
     python folder_watcher.py --install-service
 """
 
@@ -33,7 +33,7 @@ except ImportError:
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 SCRIPT_NAME = "folder_watcher"
-WATCH_DIR = r"E:\Sentinel\Incoming"
+WATCH_DIR = r"E:\incoming"
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/folder-watcher")
 DEBOUNCE_SECONDS = 60  # Wait this long after last file write before triggering
 
@@ -209,7 +209,7 @@ Waits for file writes to stop, then fires a webhook to n8n.
 
 Examples:
   python folder_watcher.py
-  python folder_watcher.py --watch-dir E:\\Sentinel\\Incoming --debounce 60
+  python folder_watcher.py --watch-dir E:\\incoming --debounce 60
   python folder_watcher.py --webhook-url http://localhost:5678/webhook/ingest
         """,
     )

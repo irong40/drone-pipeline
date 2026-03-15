@@ -267,7 +267,7 @@
     },
     {
       "parameters": {
-        "command": "=E:\\Sentinel\\.venv-path-e\\Scripts\\python.exe E:\\Sentinel\\Scripts\\canopy_detection.py --mission-id {{ $('Trigger — Mission Webhook').item.json.body.mission_id }} --ortho-path \"{{ $('E0 — Build Ortho Path').item.json.ortho_path }}\" --processing-job-id {{ $('E0 — Check Mission').item.json[0].processing_job_id }}"
+        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\canopy_detection.py --mission-id {{ $('Trigger — Mission Webhook').item.json.body.mission_id }} --ortho-path \"{{ $('E0 — Build Ortho Path').item.json.ortho_path }}\" --processing-job-id {{ $('E0 — Check Mission').item.json[0].processing_job_id }}"
       },
       "id": "node-e1-canopy-detection",
       "name": "E1 — Canopy Detection",
@@ -278,7 +278,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse E1 stdout JSON and check for zero canopies\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E1 canopy_detection.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst missionId = $('Trigger — Mission Webhook').item.json.body.mission_id;\nconst exitCode = $input.item.json.exitCode || 0;\n\nif (exitCode === 1) {\n  throw new Error('E1 canopy_detection.py exited with fatal error. Check logs at E:\\\\Sentinel\\\\logs\\\\canopy_detection.log');\n}\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      ortho_path: $('E0 — Build Ortho Path').item.json.ortho_path,\n      processing_job_id: $('E0 — Check Mission').item.json[0].processing_job_id,\n      canopy_count: result.canopy_count || 0,\n      geopackage_path: result.geopackage_path || '',\n      geojson_path: result.geojson_path || '',\n      partial_failure: exitCode === 2,\n      e1_result: result\n    }\n  }\n];"
+        "jsCode": "// Parse E1 stdout JSON and check for zero canopies\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E1 canopy_detection.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst missionId = $('Trigger — Mission Webhook').item.json.body.mission_id;\nconst exitCode = $input.item.json.exitCode || 0;\n\nif (exitCode === 1) {\n  throw new Error('E1 canopy_detection.py exited with fatal error. Check logs at C:\\\\Users\\\\redle.SOULAAN\\\\Documents\\\\drone-pipeline\\\\logs\\\\canopy_detection.log');\n}\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      ortho_path: $('E0 — Build Ortho Path').item.json.ortho_path,\n      processing_job_id: $('E0 — Check Mission').item.json[0].processing_job_id,\n      canopy_count: result.canopy_count || 0,\n      geopackage_path: result.geopackage_path || '',\n      geojson_path: result.geojson_path || '',\n      partial_failure: exitCode === 2,\n      e1_result: result\n    }\n  }\n];"
       },
       "id": "node-e1-parse-result",
       "name": "E1 — Parse Result",
@@ -342,7 +342,7 @@
     },
     {
       "parameters": {
-        "command": "=E:\\Sentinel\\.venv-path-e\\Scripts\\python.exe E:\\Sentinel\\Scripts\\species_classification.py --mission-id {{ $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E1 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E1 — Parse Result').item.json.processing_job_id }} --max-canopies 200"
+        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\species_classification.py --mission-id {{ $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E1 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E1 — Parse Result').item.json.processing_job_id }} --max-canopies 200"
       },
       "id": "node-e2-species-classification",
       "name": "E2 — Species Classification",
@@ -353,7 +353,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse E2 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E2 species_classification.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E2 species_classification.py exited with fatal error. Check logs at E:\\\\Sentinel\\\\logs\\\\species_classification.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E1 — Parse Result').item.json),\n      e2_result: result,\n      e2_partial: exitCode === 2\n    }\n  }\n];"
+        "jsCode": "// Parse E2 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E2 species_classification.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E2 species_classification.py exited with fatal error. Check logs at C:\\\\Users\\\\redle.SOULAAN\\\\Documents\\\\drone-pipeline\\\\logs\\\\species_classification.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E1 — Parse Result').item.json),\n      e2_result: result,\n      e2_partial: exitCode === 2\n    }\n  }\n];"
       },
       "id": "node-e2-parse-result",
       "name": "E2 — Parse Result",
@@ -394,7 +394,7 @@
     },
     {
       "parameters": {
-        "command": "=E:\\Sentinel\\.venv-path-e\\Scripts\\python.exe E:\\Sentinel\\Scripts\\health_assessment.py --mission-id {{ $('E2 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E2 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E2 — Parse Result').item.json.processing_job_id }} --vision-sample-pct 0.3"
+        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\health_assessment.py --mission-id {{ $('E2 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E2 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E2 — Parse Result').item.json.processing_job_id }} --vision-sample-pct 0.3"
       },
       "id": "node-e3-health-assessment",
       "name": "E3 — Health Assessment",
@@ -405,7 +405,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse E3 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E3 health_assessment.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E3 health_assessment.py exited with fatal error. Check logs at E:\\\\Sentinel\\\\logs\\\\health_assessment.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E2 — Parse Result').item.json),\n      e3_result: result,\n      e3_partial: exitCode === 2\n    }\n  }\n];"
+        "jsCode": "// Parse E3 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E3 health_assessment.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E3 health_assessment.py exited with fatal error. Check logs at C:\\\\Users\\\\redle.SOULAAN\\\\Documents\\\\drone-pipeline\\\\logs\\\\health_assessment.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E2 — Parse Result').item.json),\n      e3_result: result,\n      e3_partial: exitCode === 2\n    }\n  }\n];"
       },
       "id": "node-e3-parse-result",
       "name": "E3 — Parse Result",
@@ -446,7 +446,7 @@
     },
     {
       "parameters": {
-        "command": "=E:\\Sentinel\\.venv-path-e\\Scripts\\python.exe E:\\Sentinel\\Scripts\\vegetation_report.py --mission-id {{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E3 — Parse Result').item.json.ortho_path || $('E1 — Parse Result').item.json.ortho_path }}\" --tier standard --output-dir \"E:\\Sentinel\\Output\\{{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('E3 — Parse Result').item.json.processing_job_id || $('E1 — Parse Result').item.json.processing_job_id }}"
+        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\vegetation_report.py --mission-id {{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E3 — Parse Result').item.json.ortho_path || $('E1 — Parse Result').item.json.ortho_path }}\" --tier standard --output-dir \"E:\\output\\{{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('E3 — Parse Result').item.json.processing_job_id || $('E1 — Parse Result').item.json.processing_job_id }}"
       },
       "id": "node-e4-report-generation",
       "name": "E4 — Report Generation",
@@ -457,7 +457,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse E4 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E4 vegetation_report.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E4 vegetation_report.py exited with fatal error. Check logs at E:\\\\Sentinel\\\\logs\\\\vegetation_report.log');\n}\n\n// Try to get mission_id from multiple upstream nodes (zero-canopy vs normal path)\nconst missionId = result.mission_id\n  || ($('E3 — Parse Result').first()?.json?.mission_id)\n  || ($('E1 — Parse Result').first()?.json?.mission_id)\n  || '';\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      pdf_path: result.pdf_report_path || '',\n      species_map_path: result.species_map_path || '',\n      health_map_path: result.health_map_path || '',\n      geojson_path: result.geojson_path || '',\n      interactive_map_path: result.interactive_map_path || '',\n      e4_result: result,\n      e4_partial: exitCode === 2\n    }\n  }\n];"
+        "jsCode": "// Parse E4 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E4 vegetation_report.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E4 vegetation_report.py exited with fatal error. Check logs at C:\\\\Users\\\\redle.SOULAAN\\\\Documents\\\\drone-pipeline\\\\logs\\\\vegetation_report.log');\n}\n\n// Try to get mission_id from multiple upstream nodes (zero-canopy vs normal path)\nconst missionId = result.mission_id\n  || ($('E3 — Parse Result').first()?.json?.mission_id)\n  || ($('E1 — Parse Result').first()?.json?.mission_id)\n  || '';\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      pdf_path: result.pdf_report_path || '',\n      species_map_path: result.species_map_path || '',\n      health_map_path: result.health_map_path || '',\n      geojson_path: result.geojson_path || '',\n      interactive_map_path: result.interactive_map_path || '',\n      e4_result: result,\n      e4_partial: exitCode === 2\n    }\n  }\n];"
       },
       "id": "node-e4-parse-result",
       "name": "E4 — Parse Result",
@@ -610,7 +610,7 @@
     },
     {
       "parameters": {
-        "command": "=E:\\Sentinel\\.venv-path-e\\Scripts\\python.exe E:\\Sentinel\\Scripts\\vegetation_report.py --mission-id {{ $('Process Decisions').item.json.mission_id }} --ortho-path \"{{ $('Process Decisions').item.json.ortho_path }}\" --tier standard --output-dir \"E:\\Sentinel\\Output\\{{ $('Process Decisions').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('Process Decisions').item.json.processing_job_id }}"
+        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\vegetation_report.py --mission-id {{ $('Process Decisions').item.json.mission_id }} --ortho-path \"{{ $('Process Decisions').item.json.ortho_path }}\" --tier standard --output-dir \"E:\\output\\{{ $('Process Decisions').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('Process Decisions').item.json.processing_job_id }}"
       },
       "id": "node-e4-regenerate",
       "name": "E4 — Regenerate Report",
