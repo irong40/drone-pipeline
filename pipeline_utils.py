@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import logging
+import shutil
 from urllib.parse import urlparse
 
 
@@ -172,6 +173,80 @@ def traverse_drive_folder(service, folder_path, parent_id=None, create_missing=F
             return None
 
     return current_parent
+
+
+# ─── PREFLIGHT CHECK ────────────────────────────────────────────────────
+
+def preflight_check(require_n8n=True, require_ffmpeg=False, require_nodeodm=False):
+    """Verify pipeline dependencies are running before ingest.
+
+    Checks Docker containers (n8n, NodeODM), FFmpeg, and directories.
+    Logs warnings for missing services but only exits on fatal issues.
+
+    Returns dict of {service: bool} statuses.
+    """
+    log = logging.getLogger(__name__)
+    log.info("Preflight check...")
+
+    status = {}
+
+    # Check n8n is reachable
+    try:
+        import requests
+        resp = requests.get("http://localhost:5678/healthz", timeout=3)
+        status["n8n"] = resp.status_code == 200
+    except Exception:
+        status["n8n"] = False
+
+    if not status["n8n"]:
+        msg = "n8n is not running — webhook routing will fail"
+        if require_n8n:
+            log.error(f"  FAIL: {msg}")
+        else:
+            log.warning(f"  WARN: {msg}")
+
+    # Check FFmpeg
+    status["ffmpeg"] = shutil.which("ffmpeg") is not None
+    if not status["ffmpeg"]:
+        msg = "FFmpeg not found in PATH — video processing will fail"
+        if require_ffmpeg:
+            log.error(f"  FAIL: {msg}")
+        else:
+            log.warning(f"  WARN: {msg}")
+
+    # Check NodeODM (Docker)
+    try:
+        import requests
+        resp = requests.get("http://localhost:3000/info", timeout=3)
+        status["nodeodm"] = resp.status_code == 200
+    except Exception:
+        status["nodeodm"] = False
+
+    if not status["nodeodm"]:
+        msg = "NodeODM not reachable — photogrammetry (Path C) will fail"
+        if require_nodeodm:
+            log.error(f"  FAIL: {msg}")
+        else:
+            log.warning(f"  WARN: {msg}")
+
+    # Check directories
+    for d in [r"E:\incoming", r"E:\output"]:
+        if not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+            log.info(f"  Created: {d}")
+
+    # Check Supabase
+    status["supabase"] = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
+    if not status["supabase"]:
+        log.warning("  WARN: Supabase credentials not set")
+
+    ok = [k for k, v in status.items() if v]
+    fail = [k for k, v in status.items() if not v]
+    log.info(f"  OK: {', '.join(ok) if ok else 'none'}")
+    if fail:
+        log.info(f"  Missing: {', '.join(fail)}")
+
+    return status
 
 
 # ─── VALIDATION ─────────────────────────────────────────────────────────────

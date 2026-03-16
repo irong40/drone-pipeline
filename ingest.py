@@ -25,6 +25,11 @@ try:
 except ImportError:
     sys.exit("pip install Pillow")
 
+try:
+    from pipeline_utils import preflight_check
+except ImportError:
+    preflight_check = None
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 MIPMAP_ENGINE = r"C:\Program Files\MipMap\MipMapDesktop\resources\resources\catch3d\reconstruct_full_engine.exe"
@@ -460,7 +465,12 @@ def main():
                         help="Resolution level: 1=Ultra, 2=High (default), 3=Medium")
     parser.add_argument("--workspace", default=WORKSPACE, help=f"Workspace root (default: {WORKSPACE})")
     parser.add_argument("--list", action="store_true", help="List missions found, don't process")
+    parser.add_argument("--skip-preflight", action="store_true", help="Skip preflight service checks")
     args = parser.parse_args()
+
+    # Preflight — verify pipeline services are running
+    if not args.skip_preflight and preflight_check:
+        preflight_check(require_n8n=False, require_nodeodm=args.run)
 
     source = os.path.abspath(args.source)
     if not os.path.isdir(source):

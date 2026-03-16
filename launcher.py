@@ -107,9 +107,9 @@ class LauncherApp:
         opts_frame = ttk.LabelFrame(self.root, text="Options", padding=10)
         opts_frame.pack(fill="x", padx=10, pady=5)
 
-        self.webhook_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(opts_frame, text="Fire n8n webhook after ingest",
-                        variable=self.webhook_var).pack(anchor="w")
+        self.no_webhook_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts_frame, text="Skip n8n webhook after ingest",
+                        variable=self.no_webhook_var).pack(anchor="w")
 
         self.dry_run_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts_frame, text="Dry run (preview only, no file copying)",
@@ -230,8 +230,8 @@ class LauncherApp:
         cmd = [PYTHON_EXE, str(INGEST_SCRIPT), self.source_var.get().strip(),
                "--missions", str(temp_json)]
 
-        if self.webhook_var.get():
-            cmd.append("--webhook")
+        if self.no_webhook_var.get():
+            cmd.append("--no-webhook")
         if self.dry_run_var.get():
             cmd.append("--dry-run")
 

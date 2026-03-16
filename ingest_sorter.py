@@ -7,7 +7,7 @@ Extends ingest.py with sequence-range sorting, multi-file-type handling, and n8n
 Usage:
     python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json
     python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json --dry-run
-    python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json --webhook
+    python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json --no-webhook
 
 missions.json format:
     [
@@ -41,7 +41,7 @@ except ImportError:
     pass
 
 from checkpoint import load_checkpoint, save_checkpoint, clear_checkpoint
-from pipeline_utils import LOG_DIR, PHOTO_EXTS, VIDEO_EXTS, PPK_EXTS, setup_logging, extract_sequence_number
+from pipeline_utils import LOG_DIR, PHOTO_EXTS, VIDEO_EXTS, PPK_EXTS, setup_logging, extract_sequence_number, preflight_check
 from platform_detect import detect_from_filename
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -430,14 +430,15 @@ def main():
 Examples:
   python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json
   python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json --dry-run
-  python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json --webhook
+  python ingest_sorter.py E:/DCIM/DJI_001 --missions missions.json --no-webhook
         """,
     )
     parser.add_argument("source", help="Path to SD card DCIM folder")
     parser.add_argument("--missions", required=True, help="Path to missions config JSON file")
     parser.add_argument("--incoming", default=INCOMING_ROOT, help=f"Incoming folder root (default: {INCOMING_ROOT})")
-    parser.add_argument("--webhook", action="store_true", help="Fire n8n webhook after each mission")
+    parser.add_argument("--no-webhook", action="store_true", help="Skip n8n webhook after each mission")
     parser.add_argument("--webhook-url", default=N8N_WEBHOOK_URL, help="Override webhook URL")
+    parser.add_argument("--skip-preflight", action="store_true", help="Skip preflight service checks")
     parser.add_argument("--dry-run", action="store_true", help="Show what would happen without copying")
     parser.add_argument("--list", action="store_true", help="List files found and exit")
     parser.add_argument("--force", action="store_true",
@@ -445,6 +446,10 @@ Examples:
     args = parser.parse_args()
 
     log = setup_logging(SCRIPT_NAME)
+
+    # Preflight — verify pipeline services are running
+    if not args.skip_preflight:
+        preflight_check(require_n8n=not args.no_webhook)
 
     # Validate source
     source = os.path.abspath(args.source)
@@ -576,7 +581,7 @@ Examples:
         register_in_supabase(mission, mission_path, inventory, source_platform)
 
         # Fire webhook (skip if any copies failed to prevent false success signal)
-        if args.webhook:
+        if not args.no_webhook:
             if failed > 0:
                 log.warning(f"  Webhook skipped — incomplete ingest ({failed} failed copies)")
             else:
