@@ -131,10 +131,21 @@ def load_deepforest_model(log: logging.Logger) -> deepforest_main.deepforest:
     """
     log.info("Loading DeepForest model (downloading weights if first run)...")
     model = deepforest_main.deepforest()
-    model.use_release()
-    model.model.to("cuda")
-    model.model.eval()
-    log.info("DeepForest model loaded on CUDA")
+    # DeepForest v2.x loads pretrained weights from HuggingFace automatically
+    # and manages device placement via config. Do NOT manually .to("cuda") —
+    # that breaks predict_image() which expects to handle device internally.
+    if hasattr(model, "use_release"):
+        # v1.x compat
+        model.use_release()
+        model.model.to("cuda")
+        model.model.eval()
+    else:
+        # v2.x: configure GPU via model config
+        if torch.cuda.is_available():
+            model.config["accelerator"] = "gpu"
+            model.config["devices"] = 1
+    log.info("DeepForest model loaded" +
+             (" on CUDA" if torch.cuda.is_available() else " on CPU"))
     return model
 
 
@@ -154,17 +165,6 @@ def run_inference_on_tile(
         DataFrame with columns [xmin, ymin, xmax, ymax, confidence, label]
         or None if no detections above threshold.
     """
-    # DeepForest v2 predict_image() expects RGB uint8 numpy array (H, W, 3)
-    # Convert to uint8 if needed (rasterio reads as uint8 for 8-bit imagery)
-    if tile_array.dtype != np.uint8:
-        # Normalize float tiles to uint8
-        tile_min = tile_array.min()
-        tile_max = tile_array.max()
-        if tile_max > tile_min:
-            tile_array = ((tile_array - tile_min) / (tile_max - tile_min) * 255).astype(np.uint8)
-        else:
-            tile_array = np.zeros_like(tile_array, dtype=np.uint8)
-
     # Ensure 3-band (RGB) — drop alpha or extra bands
     if tile_array.ndim == 3 and tile_array.shape[2] > 3:
         tile_array = tile_array[:, :, :3]
@@ -172,8 +172,21 @@ def run_inference_on_tile(
         # Grayscale or 2-band — replicate to RGB
         tile_array = np.stack([tile_array[:, :, 0]] * 3, axis=2)
 
+    # DeepForest v2 predict_image() expects float32 array normalized to 0-1.
+    # Passing uint8 triggers a warning and internal conversion, but manually
+    # converting avoids the device mismatch bug in some v2 releases.
+    if tile_array.dtype == np.uint8:
+        tile_array = tile_array.astype(np.float32) / 255.0
+    elif tile_array.dtype != np.float32:
+        tile_min = tile_array.min()
+        tile_max = tile_array.max()
+        if tile_max > tile_min:
+            tile_array = ((tile_array - tile_min) / (tile_max - tile_min)).astype(np.float32)
+        else:
+            tile_array = np.zeros_like(tile_array, dtype=np.float32)
+
     try:
-        results = model.predict_image(image=tile_array, return_plot=False)
+        results = model.predict_image(image=tile_array)
     except Exception as exc:
         raise RuntimeError(f"DeepForest inference failed: {exc}") from exc
 
