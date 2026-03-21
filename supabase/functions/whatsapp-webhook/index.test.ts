@@ -59,18 +59,46 @@ Deno.test("verifyHmacSignature returns false for wrong secret", async () => {
 
 // ── Webhook handler tests ──────────────────────────────────────────
 
-// Mock Supabase client for testing
-const mockClients: Record<string, { id: string; phone: string; name: string | null }> = {};
-let activityLogs: Array<{ event_type: string; payload: unknown }> = [];
-
-// We'll test the handler via the exported handler function
 import { handleRequest } from "./index.ts";
+import type { HandlerDeps } from "./index.ts";
 
 // Set env vars for tests
 Deno.env.set("WHATSAPP_VERIFY_TOKEN", "test_verify_token");
 Deno.env.set("WHATSAPP_APP_SECRET", TEST_SECRET);
 Deno.env.set("SUPABASE_URL", "http://localhost:54321");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key");
+
+// ── Mock dependencies ──────────────────────────────────────────────
+
+const mockClientStore: Record<
+  string,
+  { id: string; phone: string; name: string | null }
+> = {};
+const activityLogs: Array<{ event_type: string; payload: unknown }> = [];
+
+function createMockDeps(): HandlerDeps {
+  return {
+    clientLookup: async (phone: string, displayName?: string) => {
+      if (mockClientStore[phone]) {
+        return mockClientStore[phone];
+      }
+      const newClient = {
+        id: crypto.randomUUID(),
+        phone,
+        name: displayName ?? null,
+      };
+      mockClientStore[phone] = newClient;
+      return newClient;
+    },
+    logActivity: async (eventType: string, payload: Record<string, unknown>) => {
+      activityLogs.push({ event_type: eventType, payload });
+    },
+  };
+}
+
+const mockDeps = createMockDeps();
+
+// ── GET verification tests ─────────────────────────────────────────
 
 Deno.test("GET with correct verify_token returns hub.challenge", async () => {
   const url = new URL(
@@ -92,6 +120,8 @@ Deno.test("GET with wrong verify_token returns 403", async () => {
   assertEquals(res.status, 403);
 });
 
+// ── POST signature tests ───────────────────────────────────────────
+
 Deno.test("POST with invalid X-Hub-Signature-256 returns 401", async () => {
   const body = '{"object":"whatsapp_business_account","entry":[]}';
   const req = new Request("http://localhost/whatsapp-webhook", {
@@ -102,11 +132,13 @@ Deno.test("POST with invalid X-Hub-Signature-256 returns 401", async () => {
     },
     body,
   });
-  const res = await handleRequest(req);
+  const res = await handleRequest(req, mockDeps);
   assertEquals(res.status, 401);
   const json = await res.json();
   assertEquals(json.error, "Invalid signature");
 });
+
+// ── Payload builder ────────────────────────────────────────────────
 
 function buildWebhookPayload(
   phone: string,
@@ -145,6 +177,8 @@ function buildWebhookPayload(
   });
 }
 
+// ── POST with valid signature tests ────────────────────────────────
+
 Deno.test("POST with valid signature and new phone returns 200 with clientId", async () => {
   const body = buildWebhookPayload("15559990001", "New User", "Hello");
   const signature = await computeHmac(body, TEST_SECRET);
@@ -156,7 +190,7 @@ Deno.test("POST with valid signature and new phone returns 200 with clientId", a
     },
     body,
   });
-  const res = await handleRequest(req);
+  const res = await handleRequest(req, mockDeps);
   assertEquals(res.status, 200);
   const json = await res.json();
   assertEquals(json.status, "received");
@@ -175,7 +209,7 @@ Deno.test("POST with valid signature and known phone returns existing client", a
     },
     body,
   });
-  const res = await handleRequest(req);
+  const res = await handleRequest(req, mockDeps);
   assertEquals(res.status, 200);
   const json = await res.json();
   assertEquals(json.status, "received");
@@ -197,11 +231,10 @@ Deno.test("POST with valid signature extracts WhatsAppMessage correctly", async 
     },
     body,
   });
-  const res = await handleRequest(req);
+  const res = await handleRequest(req, mockDeps);
   assertEquals(res.status, 200);
   const json = await res.json();
   assertEquals(json.status, "received");
-  // The message was extracted and processed (client created/found)
   assertExists(json.clientId);
   // Verify message details are in response
   assertExists(json.messages);
@@ -244,7 +277,7 @@ Deno.test("POST with valid signature but no messages returns 200", async () => {
     },
     body,
   });
-  const res = await handleRequest(req);
+  const res = await handleRequest(req, mockDeps);
   assertEquals(res.status, 200);
   const json = await res.json();
   assertEquals(json.status, "no_messages");
