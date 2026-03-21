@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Every script runs reliably, recovers from failures, and has tests proving it works
-**Current focus:** v2.0 shipped — planning next milestone
+**Current focus:** v3.0 WhatsApp Client Messaging — Phase 3 in progress
 
 ## Current Position
 
-Phase: All complete (13/13)
-Status: v2.0 Vegetation Analysis Pipeline shipped 2026-02-25
-Last activity: 2026-02-25 — milestone archived, PROJECT.md evolved, ROADMAP.md reorganized
+Phase: 03-input-routing (Plan 1/3)
+Status: Plan 01 complete — webhook endpoint, HMAC verification, client identification
+Last activity: 2026-03-21 — 03-01-PLAN executed (webhook + HMAC + client lookup)
 
-Progress: [████████████████████] 100%
+Progress: [██████░░░░░░░░░░░░░░] 33% (1/3 plans)
 
 ## Performance Metrics
 
@@ -27,11 +27,20 @@ Progress: [████████████████████] 100%
 - Total execution time: ~154 min
 - Timeline: 2026-02-24 → 2026-02-25
 
+**Velocity (v3.0):**
+- Plans completed: 1
+- Total execution time: ~4 min
+- Timeline: 2026-03-21 →
+
 ## Accumulated Context
 
 ### Decisions
 
 See PROJECT.md Key Decisions table for full history.
+
+- (03-01) Web Crypto API for HMAC instead of Node.js crypto — Deno Edge Function compatible
+- (03-01) Lazy Proxy pattern for Supabase client — testability without eager init
+- (03-01) Dependency injection on handleRequest — fully mockable tests without DB
 
 ### Pending Todos
 
@@ -43,6 +52,6 @@ See PROJECT.md Key Decisions table for full history.
 
 ## Session Continuity
 
-Last session: 2026-02-25
-Stopped at: v2.0 milestone complete and archived
+Last session: 2026-03-21
+Stopped at: Completed 03-01-PLAN.md (webhook, HMAC, client lookup)
 Resume file: None

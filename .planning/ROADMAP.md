@@ -42,7 +42,7 @@
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Webhook endpoint, HMAC verification, and client identification
+- [x] 03-01-PLAN.md — Webhook endpoint, HMAC verification, and client identification
 - [ ] 03-02-PLAN.md — Priority routing chain (opt-out, manual mode, after-hours, media/text)
 - [ ] 03-03-PLAN.md — Rate limiting per phone number
 
@@ -63,4 +63,4 @@ Plans:
 | 11. Report Generation (E4) | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 12. Integration and Delivery | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 13. Test Suite and Acceptance | v2.0 | 3/3 | Complete | 2026-02-25 |
-| 3. Input & Routing | v3.0 | 0/3 | Planning | — |
+| 3. Input & Routing | v3.0 | 1/3 | In Progress | — |
