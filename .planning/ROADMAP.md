@@ -4,6 +4,7 @@
 
 - [x] **v1.0 Hardening and Testing** — Phases 1-6 (shipped 2026-02-24)
 - [x] **v2.0 Vegetation Analysis Pipeline** — Phases 7-13 (shipped 2026-02-25)
+- [ ] **v3.0 WhatsApp Client Messaging** — Phase 3 (Input & Routing)
 
 ## Phases
 
@@ -32,6 +33,19 @@
 
 </details>
 
+### Phase 3: Input & Routing
+
+**Goal:** Client messages arrive via WhatsApp, the sender is identified, and every message is routed through the correct priority chain before any AI processing
+
+**Requirements:** [INPT-01, INPT-02, INPT-03, INPT-04, INPT-05, INPT-06, INPT-07, INPT-08]
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Webhook endpoint, HMAC verification, and client identification
+- [ ] 03-02-PLAN.md — Priority routing chain (opt-out, manual mode, after-hours, media/text)
+- [ ] 03-03-PLAN.md — Rate limiting per phone number
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -49,3 +63,4 @@
 | 11. Report Generation (E4) | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 12. Integration and Delivery | v2.0 | 2/2 | Complete | 2026-02-25 |
 | 13. Test Suite and Acceptance | v2.0 | 3/3 | Complete | 2026-02-25 |
+| 3. Input & Routing | v3.0 | 0/3 | Planning | — |
