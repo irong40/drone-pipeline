@@ -56,6 +56,7 @@ logger = logging.getLogger(SCRIPT_NAME)
 
 DEFAULT_ALT_FT = 25.0
 DEFAULT_ORBIT_RADIUS_FT = 25.0
+DEFAULT_OUTPUT_DIR = Path(r"E:\Sentinel\Missions")
 DEFAULT_NADIR_PITCH = -90
 DEFAULT_OBLIQUE_PITCH = -45
 DEFAULT_GLOBAL_SPEED_MS = 2.0
@@ -370,7 +371,7 @@ def generate(
         output_path = Path(output)
     else:
         date_str = datetime.now().strftime("%Y%m%d")
-        output_path = Path(__file__).resolve().parent / "kml" / f"Bees360_{slug}_{date_str}.kmz"
+        output_path = DEFAULT_OUTPUT_DIR / f"Bees360_{slug}_{date_str}.kmz"
     return write_kmz(template_kml, waylines_wpml, output_path)
 
 
