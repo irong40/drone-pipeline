@@ -96,13 +96,22 @@ def destination_point(lat: float, lon: float, bearing_deg: float, distance_m: fl
 
 
 def bearing_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Initial bearing from p1 to p2, deg from N (0..360)."""
+    """Initial bearing from p1 to p2, deg from N, normalized to (-180, 180].
+
+    DJI WPML waypointHeadingAngle uses the [-180, 180] convention, not 0-360.
+    An east-pointing heading is +90, west is -90 (not 270).
+    """
     p1 = math.radians(lat1)
     p2 = math.radians(lat2)
     dl = math.radians(lon2 - lon1)
     y = math.sin(dl) * math.cos(p2)
     x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
-    return (math.degrees(math.atan2(y, x)) + 360) % 360
+    deg = math.degrees(math.atan2(y, x))
+    if deg > 180:
+        deg -= 360
+    elif deg <= -180:
+        deg += 360
+    return deg
 
 
 def build_waypoints(
@@ -235,8 +244,10 @@ def build_waylines_wpml(
         ET.SubElement(hp, _wpml("waypointHeadingPathMode")).text = "followBadArc"
 
         # Stop at every waypoint so the drone is stationary when takePhoto fires.
+        # Discontinuity curvature = fly straight, stop, sharp turn, fly straight.
+        # Continuity curvature requires smooth arcs, which conflicts with stopping at every point.
         tp = ET.SubElement(pm, _wpml("waypointTurnParam"))
-        ET.SubElement(tp, _wpml("waypointTurnMode")).text = "toPointAndStopWithContinuityCurvature"
+        ET.SubElement(tp, _wpml("waypointTurnMode")).text = "toPointAndStopWithDiscontinuityCurvature"
         ET.SubElement(tp, _wpml("waypointTurnDampingDist")).text = "0"
 
         ET.SubElement(pm, _wpml("useStraightLine")).text = "0"
