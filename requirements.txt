@@ -15,6 +15,10 @@ supabase>=2.0.0          # Database client (srt_telemetry_parser.py, video_qa.py
 google-api-python-client>=2.100.0  # Drive API (gdrive_upload.py, archive_sync.py)
 google-auth>=2.23.0                # Service account auth (gdrive_upload.py, archive_sync.py)
 
+# Folium interactive maps (mission_preview.py) + DuckDB Overture Maps building lookup
+folium>=0.15.0            # mission_preview.py HTML renderer
+duckdb>=1.0.0             # building_footprints.py — queries local Overture parquet; import pulls from S3 once
+
 # Windows service (folder_watcher.py --install-service)
 pywin32>=306              # Windows service management (folder_watcher_service.py)
 

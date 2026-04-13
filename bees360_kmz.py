@@ -51,6 +51,15 @@ from xml.dom import minidom
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import parcel_lookup  # noqa: E402
 
+# Soft dependency: the local Overture parquet gives ~95% residential coverage
+# vs OSM Overpass' spotty coverage. If the module or its duckdb dep is missing,
+# we fall back to OSM-based detection in parcel_lookup.
+try:
+    import building_footprints  # noqa: E402
+    _BUILDING_FOOTPRINTS_AVAILABLE = True
+except ImportError:
+    _BUILDING_FOOTPRINTS_AVAILABLE = False
+
 SCRIPT_NAME = "bees360_kmz"
 logger = logging.getLogger(SCRIPT_NAME)
 
@@ -378,16 +387,50 @@ def generate(
         if not address:
             raise ValueError("Must provide either address or --lat/--lon")
         coords = parcel_lookup.geocode(address)
-        try:
-            feature = parcel_lookup.find_parcel(coords[0], coords[1], address)
-            polygon_coords = feature["geometry"]["coordinates"][0]
+        geo_lat, geo_lon = coords
 
-            # Prefer building centroid over parcel centroid when OSM has the building.
-            # Pass geocoded point so OSM picker can rank buildings by proximity to
-            # the address rather than by raw area (which can surface a neighbor's
-            # larger house when the parcel polygon is fuzzy at edges).
+        centroid_lat = centroid_lon = None
+
+        # 1) Always try to resolve the parcel polygon first — it defeats
+        #    geocoder inaccuracy (VGIN/Census can be 40+ ft off), letting us
+        #    filter building candidates to the specific lot rather than just
+        #    "nearest to the geocoded point."
+        parcel_ring = None
+        try:
+            feature = parcel_lookup.find_parcel(geo_lat, geo_lon, address)
+            parcel_ring = feature["geometry"]["coordinates"][0]
+        except Exception as e:
+            logger.warning("Parcel lookup failed (%s)", e)
+
+        # 2) Preferred: Overture Maps filtered by parcel polygon (CONTAINS-parcel
+        #    ranking, then largest residential). Covers ~95% of US residential
+        #    with building height metadata.
+        if _BUILDING_FOOTPRINTS_AVAILABLE and building_footprints.is_available():
+            try:
+                if parcel_ring:
+                    b = building_footprints.find_building_in_parcel(
+                        parcel_ring, geocode_lat=geo_lat, geocode_lon=geo_lon
+                    )
+                else:
+                    b = building_footprints.find_building_at_point(geo_lat, geo_lon)
+            except Exception as e:
+                logger.warning("Overture lookup failed (%s), falling back", e)
+                b = None
+            if b:
+                centroid_lat = b["centroid_lat"]
+                centroid_lon = b["centroid_lon"]
+                how = ("contains geocode" if b["contains_geocode"]
+                       else ("largest in parcel" if b.get("_source") == "overture_local_parcel"
+                             else f"nearest {b['dist_ft']:.0f} ft"))
+                height_info = f", roof ~{b['height_ft']:.0f} ft" if b.get("height_ft") else ""
+                centroid_source = f"Overture ({b.get('class', 'unknown')}, {how}{height_info})"
+                logger.info("Building centroid from Overture: (%.6f, %.6f) [%s]",
+                            centroid_lat, centroid_lon, centroid_source)
+
+        # 3) Fallback: OSM Overpass (legacy path, sparse US residential coverage).
+        if centroid_lat is None and parcel_ring is not None:
             building = parcel_lookup.find_building_in_parcel(
-                feature, geocode_lat=coords[0], geocode_lon=coords[1]
+                feature, geocode_lat=geo_lat, geocode_lon=geo_lon
             )
             if building:
                 centroid_lat = building["properties"]["centroid_lat"]
@@ -396,15 +439,18 @@ def generate(
                 centroid_source = f"OSM building ({selection})"
                 logger.info("Building centroid from OSM: (%.6f, %.6f) [%s]",
                             centroid_lat, centroid_lon, selection)
-            else:
-                centroid_lat, centroid_lon = polygon_centroid(polygon_coords)
-                centroid_source = "parcel centroid (OSM had no building)"
-                logger.info("Parcel centroid: (%.6f, %.6f)  [OSM building lookup returned no result]",
-                            centroid_lat, centroid_lon)
-        except Exception as e:
-            logger.warning("Parcel lookup failed (%s) — falling back to geocoded point", e)
-            centroid_lat, centroid_lon = coords
-            centroid_source = "geocoded point (parcel lookup failed)"
+
+        # 4) Fallback: parcel polygon centroid.
+        if centroid_lat is None and parcel_ring is not None:
+            centroid_lat, centroid_lon = polygon_centroid(parcel_ring)
+            centroid_source = "parcel centroid (no building matched)"
+            logger.info("Parcel centroid: (%.6f, %.6f)  [no building data matched]",
+                        centroid_lat, centroid_lon)
+
+        # 5) Last resort: the raw geocoded point.
+        if centroid_lat is None:
+            centroid_lat, centroid_lon = geo_lat, geo_lon
+            centroid_source = "geocoded point (no parcel or building data)"
         display_label = label or short_address(address)
         slug = slugify_address(address)
 
