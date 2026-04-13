@@ -124,14 +124,18 @@ def _ring_area(ring: list) -> float:
 
 # ─── OSM BUILDING LOOKUP ─────────────────────────────────────────────────────
 
-def find_building_in_parcel(parcel_feature: dict) -> dict | None:
+def find_building_in_parcel(parcel_feature: dict,
+                            geocode_lat: float | None = None,
+                            geocode_lon: float | None = None) -> dict | None:
     """Query OSM Overpass for buildings inside the parcel polygon.
 
-    Returns a GeoJSON-like Feature for the largest building whose centroid
-    falls inside the parcel outer ring, or None if OSM has no buildings there.
+    Selection priority (when OSM has multiple buildings in the parcel):
+        1. Building whose polygon CONTAINS the geocoded address point
+        2. Building with centroid CLOSEST to the geocoded point
+        3. Largest building (legacy fallback — only used when no geocode provided)
 
-    The returned feature's `properties` includes:
-        centroid_lat, centroid_lon, osm_tags, building_count_in_parcel
+    Returns a GeoJSON-like Feature with centroid lat/lon in properties,
+    or None if OSM has no buildings in the parcel.
     """
     outer_ring = parcel_feature["geometry"]["coordinates"][0]
     lons = [p[0] for p in outer_ring]
@@ -165,24 +169,51 @@ def find_building_in_parcel(parcel_feature: dict) -> dict | None:
         if not _ring_point_in_polygon(cx, cy, outer_ring):
             continue
         area = _ring_area(bldg_ring)
-        candidates.append((area, cx, cy, bldg_ring, element.get("tags", {})))
+        contains_geocode = False
+        dist_to_geocode = float("inf")
+        if geocode_lat is not None and geocode_lon is not None:
+            contains_geocode = _ring_point_in_polygon(geocode_lon, geocode_lat, bldg_ring)
+            # Squared-distance in degrees — fine for ranking within a parcel.
+            dlat = cy - geocode_lat
+            dlon = cx - geocode_lon
+            dist_to_geocode = dlat * dlat + dlon * dlon
+        candidates.append({
+            "area": area,
+            "cx": cx, "cy": cy,
+            "ring": bldg_ring,
+            "tags": element.get("tags", {}),
+            "contains_geocode": contains_geocode,
+            "dist_to_geocode": dist_to_geocode,
+        })
 
     if not candidates:
         logger.info("OSM: no buildings found in parcel bbox (OSM residential coverage is spotty)")
         return None
 
-    candidates.sort(reverse=True, key=lambda x: x[0])
-    area, cx, cy, bldg_ring, tags = candidates[0]
-    logger.info("OSM: found %d building(s) inside parcel, using largest (rel area %.2e)",
-                len(candidates), area)
+    # Ranking: contains-geocode beats everything, then nearest centroid, then area.
+    if geocode_lat is not None and geocode_lon is not None:
+        containers = [c for c in candidates if c["contains_geocode"]]
+        if containers:
+            chosen = max(containers, key=lambda c: c["area"])
+            how = "contains geocoded point"
+        else:
+            chosen = min(candidates, key=lambda c: c["dist_to_geocode"])
+            how = "nearest centroid to geocoded point"
+    else:
+        chosen = max(candidates, key=lambda c: c["area"])
+        how = "largest (no geocode provided)"
+
+    logger.info("OSM: found %d building(s) in parcel, selected via %s",
+                len(candidates), how)
     return {
         "type": "Feature",
-        "geometry": {"type": "Polygon", "coordinates": [bldg_ring]},
+        "geometry": {"type": "Polygon", "coordinates": [chosen["ring"]]},
         "properties": {
-            "centroid_lat": cy,
-            "centroid_lon": cx,
-            "osm_tags": tags,
+            "centroid_lat": chosen["cy"],
+            "centroid_lon": chosen["cx"],
+            "osm_tags": chosen["tags"],
             "building_count_in_parcel": len(candidates),
+            "selection_method": how,
             "_source": "osm_overpass",
         },
     }

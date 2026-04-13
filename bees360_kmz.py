@@ -383,12 +383,19 @@ def generate(
             polygon_coords = feature["geometry"]["coordinates"][0]
 
             # Prefer building centroid over parcel centroid when OSM has the building.
-            building = parcel_lookup.find_building_in_parcel(feature)
+            # Pass geocoded point so OSM picker can rank buildings by proximity to
+            # the address rather than by raw area (which can surface a neighbor's
+            # larger house when the parcel polygon is fuzzy at edges).
+            building = parcel_lookup.find_building_in_parcel(
+                feature, geocode_lat=coords[0], geocode_lon=coords[1]
+            )
             if building:
                 centroid_lat = building["properties"]["centroid_lat"]
                 centroid_lon = building["properties"]["centroid_lon"]
-                centroid_source = "OSM building"
-                logger.info("Building centroid from OSM: (%.6f, %.6f)", centroid_lat, centroid_lon)
+                selection = building["properties"].get("selection_method", "OSM")
+                centroid_source = f"OSM building ({selection})"
+                logger.info("Building centroid from OSM: (%.6f, %.6f) [%s]",
+                            centroid_lat, centroid_lon, selection)
             else:
                 centroid_lat, centroid_lon = polygon_centroid(polygon_coords)
                 centroid_source = "parcel centroid (OSM had no building)"
