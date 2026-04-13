@@ -57,6 +57,18 @@ logger = logging.getLogger(SCRIPT_NAME)
 DEFAULT_ALT_FT = 25.0
 DEFAULT_ORBIT_RADIUS_FT = 25.0
 DEFAULT_OUTPUT_DIR = Path(r"E:\Sentinel\Missions")
+
+# Typical building heights (ft above grade) for US residential/commercial.
+# Mission altitude is computed as height + BEES360_CLEARANCE_FT so the drone
+# clears the roof peak with enough margin for clean Bees360-spec shots.
+PROPERTY_PRESETS = {
+    "ranch": 12,             # 1-story ranch, bungalow
+    "2story": 25,            # Standard 2-story residential
+    "3story": 35,            # 3-story residential / townhouse
+    "commercial_small": 30,  # Strip mall, 2-story commercial
+    "commercial_large": 45,  # 3+ story commercial
+}
+BEES360_CLEARANCE_FT = 30.0  # Required alt above subject per Bees360 spec
 DEFAULT_NADIR_PITCH = -90
 DEFAULT_OBLIQUE_PITCH = -45
 DEFAULT_GLOBAL_SPEED_MS = 2.0
@@ -395,10 +407,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lon", type=float, help="Override longitude (skip geocoding)")
     parser.add_argument("--label", help="Display label when using --lat/--lon (or override address-derived name)")
     parser.add_argument("--output", help="Output KMZ path (default: drone-pipeline/kml/Bees360_{slug}_{date}.kmz)")
-    parser.add_argument("--alt-ft", type=float, default=DEFAULT_ALT_FT,
-                        help=f"Flight altitude AGL in feet (default {DEFAULT_ALT_FT})")
-    parser.add_argument("--orbit-radius-ft", type=float, default=DEFAULT_ORBIT_RADIUS_FT,
-                        help=f"Birdseye orbit radius from centroid in feet (default {DEFAULT_ORBIT_RADIUS_FT})")
+    parser.add_argument("--property-type", choices=list(PROPERTY_PRESETS),
+                        help="Property type preset — auto-sets altitude to "
+                             f"building_height + {BEES360_CLEARANCE_FT:.0f} ft clearance, "
+                             "and orbit radius = altitude (keeps camera framing on centroid at -45° pitch).")
+    parser.add_argument("--alt-ft", type=float, default=None,
+                        help=f"Flight altitude above takeoff in feet (default {DEFAULT_ALT_FT}, "
+                             "or computed from --property-type). Explicit value wins.")
+    parser.add_argument("--orbit-radius-ft", type=float, default=None,
+                        help=f"Birdseye orbit radius from centroid in feet (default {DEFAULT_ORBIT_RADIUS_FT}, "
+                             "or matches altitude when --property-type is set). Explicit value wins.")
     parser.add_argument("--front-bearing", type=float,
                         help="Property's front compass bearing (deg from N). Aligns orbit so first birdseye = front.")
     parser.add_argument("--speed-ms", type=float, default=DEFAULT_GLOBAL_SPEED_MS,
@@ -414,6 +432,24 @@ def main(argv: list[str] | None = None) -> int:
     if not args.address and (args.lat is None or args.lon is None):
         parser.error("Provide either an address or both --lat and --lon")
 
+    # Resolve altitude and orbit radius from --property-type preset when not
+    # explicitly set. Explicit --alt-ft / --orbit-radius-ft always wins.
+    alt_ft = args.alt_ft
+    orbit_radius_ft = args.orbit_radius_ft
+    if args.property_type:
+        preset_alt = PROPERTY_PRESETS[args.property_type] + BEES360_CLEARANCE_FT
+        if alt_ft is None:
+            alt_ft = preset_alt
+        if orbit_radius_ft is None:
+            orbit_radius_ft = alt_ft
+        logger.info("Property preset %r: building %d ft -> alt %.0f ft, radius %.0f ft",
+                    args.property_type, PROPERTY_PRESETS[args.property_type],
+                    alt_ft, orbit_radius_ft)
+    if alt_ft is None:
+        alt_ft = DEFAULT_ALT_FT
+    if orbit_radius_ft is None:
+        orbit_radius_ft = DEFAULT_ORBIT_RADIUS_FT
+
     try:
         path = generate(
             address=args.address,
@@ -421,8 +457,8 @@ def main(argv: list[str] | None = None) -> int:
             lon=args.lon,
             label=args.label,
             output=args.output,
-            alt_ft=args.alt_ft,
-            orbit_radius_ft=args.orbit_radius_ft,
+            alt_ft=alt_ft,
+            orbit_radius_ft=orbit_radius_ft,
             front_bearing=args.front_bearing,
             speed_ms=args.speed_ms,
         )
