@@ -82,6 +82,111 @@ COUNTY_ENDPOINTS = {
 
 REQUEST_TIMEOUT = 15
 
+# OSM Overpass API — queries building footprints within a parcel bbox.
+# Free, no API key required, ~0.5-2 sec typical response.
+OSM_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+
+
+# ─── POLYGON GEOMETRY (no shapely dep) ───────────────────────────────────────
+
+def _ring_point_in_polygon(lon: float, lat: float, ring: list) -> bool:
+    """Ray-casting point-in-polygon test. ring = list of [lon, lat]."""
+    n = len(ring)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if ((yi > lat) != (yj > lat)) and (lon < (xj - xi) * (lat - yi) / (yj - yi + 1e-12) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _ring_centroid(ring: list) -> tuple[float, float]:
+    """Average of unique vertices. ring = list of [lon, lat]. Returns (lon, lat)."""
+    pts = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring
+    return sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+
+
+def _ring_area(ring: list) -> float:
+    """Signed area via shoelace. Units: sq degrees (ok for relative comparison)."""
+    n = len(ring)
+    if n < 3:
+        return 0.0
+    s = 0.0
+    for i in range(n):
+        x1, y1 = ring[i][0], ring[i][1]
+        x2, y2 = ring[(i + 1) % n][0], ring[(i + 1) % n][1]
+        s += x1 * y2 - x2 * y1
+    return abs(s) / 2.0
+
+
+# ─── OSM BUILDING LOOKUP ─────────────────────────────────────────────────────
+
+def find_building_in_parcel(parcel_feature: dict) -> dict | None:
+    """Query OSM Overpass for buildings inside the parcel polygon.
+
+    Returns a GeoJSON-like Feature for the largest building whose centroid
+    falls inside the parcel outer ring, or None if OSM has no buildings there.
+
+    The returned feature's `properties` includes:
+        centroid_lat, centroid_lon, osm_tags, building_count_in_parcel
+    """
+    outer_ring = parcel_feature["geometry"]["coordinates"][0]
+    lons = [p[0] for p in outer_ring]
+    lats = [p[1] for p in outer_ring]
+    south, north = min(lats), max(lats)
+    west, east = min(lons), max(lons)
+
+    query = (
+        f"[out:json][timeout:15];"
+        f'(way["building"]({south},{west},{north},{east}););'
+        f"out geom;"
+    )
+
+    try:
+        resp = requests.post(OSM_OVERPASS_URL, data={"data": query}, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning("OSM Overpass query failed: %s", e)
+        return None
+
+    candidates = []
+    for element in data.get("elements", []):
+        if element.get("type") != "way":
+            continue
+        geom = element.get("geometry", [])
+        if len(geom) < 3:
+            continue
+        bldg_ring = [[node["lon"], node["lat"]] for node in geom]
+        cx, cy = _ring_centroid(bldg_ring)
+        if not _ring_point_in_polygon(cx, cy, outer_ring):
+            continue
+        area = _ring_area(bldg_ring)
+        candidates.append((area, cx, cy, bldg_ring, element.get("tags", {})))
+
+    if not candidates:
+        logger.info("OSM: no buildings found in parcel bbox (OSM residential coverage is spotty)")
+        return None
+
+    candidates.sort(reverse=True, key=lambda x: x[0])
+    area, cx, cy, bldg_ring, tags = candidates[0]
+    logger.info("OSM: found %d building(s) inside parcel, using largest (rel area %.2e)",
+                len(candidates), area)
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Polygon", "coordinates": [bldg_ring]},
+        "properties": {
+            "centroid_lat": cy,
+            "centroid_lon": cx,
+            "osm_tags": tags,
+            "building_count_in_parcel": len(candidates),
+            "_source": "osm_overpass",
+        },
+    }
+
 
 # ─── GEOCODING ───────────────────────────────────────────────────────────────
 

@@ -352,12 +352,27 @@ def generate(
     orbit_radius_ft: float,
     front_bearing: float | None,
     speed_ms: float,
+    offset_north_ft: float = 0.0,
+    offset_east_ft: float = 0.0,
 ) -> Path:
-    """End-to-end: resolve coords → build waypoints → write KMZ. Returns output path."""
+    """End-to-end: resolve coords → build waypoints → write KMZ. Returns output path.
+
+    Centroid resolution priority:
+        1. Explicit --lat/--lon override (raw point, no OSM lookup)
+        2. Address → parcel polygon → OSM building centroid inside parcel
+        3. Address → parcel polygon centroid (when OSM has no building)
+        4. Address → geocoded point (when parcel lookup fails)
+
+    offset_north_ft / offset_east_ft shift the final centroid before waypoint
+    generation. Use to nudge the mission center onto the house when the
+    auto-detected position is off.
+    """
+    centroid_source = "unknown"
     if lat is not None and lon is not None:
         centroid_lat, centroid_lon = lat, lon
         display_label = label or f"{lat:.5f},{lon:.5f}"
         slug = slugify_address(label) if label else f"{lat:.5f}_{lon:.5f}".replace(".", "p").replace("-", "n")
+        centroid_source = "manual override"
         logger.info("Using override coords (%.6f, %.6f), label=%r", lat, lon, display_label)
     else:
         if not address:
@@ -366,13 +381,38 @@ def generate(
         try:
             feature = parcel_lookup.find_parcel(coords[0], coords[1], address)
             polygon_coords = feature["geometry"]["coordinates"][0]
-            centroid_lat, centroid_lon = polygon_centroid(polygon_coords)
-            logger.info("Parcel centroid: (%.6f, %.6f)", centroid_lat, centroid_lon)
+
+            # Prefer building centroid over parcel centroid when OSM has the building.
+            building = parcel_lookup.find_building_in_parcel(feature)
+            if building:
+                centroid_lat = building["properties"]["centroid_lat"]
+                centroid_lon = building["properties"]["centroid_lon"]
+                centroid_source = "OSM building"
+                logger.info("Building centroid from OSM: (%.6f, %.6f)", centroid_lat, centroid_lon)
+            else:
+                centroid_lat, centroid_lon = polygon_centroid(polygon_coords)
+                centroid_source = "parcel centroid (OSM had no building)"
+                logger.info("Parcel centroid: (%.6f, %.6f)  [OSM building lookup returned no result]",
+                            centroid_lat, centroid_lon)
         except Exception as e:
             logger.warning("Parcel lookup failed (%s) — falling back to geocoded point", e)
             centroid_lat, centroid_lon = coords
+            centroid_source = "geocoded point (parcel lookup failed)"
         display_label = label or short_address(address)
         slug = slugify_address(address)
+
+    # Apply manual offsets to nudge mission center (e.g., when OSM misses
+    # the building and user can see the drift on the satellite preview).
+    if offset_north_ft or offset_east_ft:
+        offset_n_m = offset_north_ft * FT_TO_M
+        offset_e_m = offset_east_ft * FT_TO_M
+        dlat = offset_n_m / 111_000.0
+        dlon = offset_e_m / (111_000.0 * math.cos(math.radians(centroid_lat)))
+        centroid_lat += dlat
+        centroid_lon += dlon
+        logger.info("Applied offset N%+.1fft E%+.1fft -> final center (%.6f, %.6f)",
+                    offset_north_ft, offset_east_ft, centroid_lat, centroid_lon)
+    logger.info("Centroid source: %s", centroid_source)
 
     today_display = datetime.now().strftime("%m/%d")
     mission_name = f"Bees360 - {display_label} - {today_display}"
@@ -419,6 +459,10 @@ def main(argv: list[str] | None = None) -> int:
                              "or matches altitude when --property-type is set). Explicit value wins.")
     parser.add_argument("--front-bearing", type=float,
                         help="Property's front compass bearing (deg from N). Aligns orbit so first birdseye = front.")
+    parser.add_argument("--offset-north-ft", type=float, default=0.0,
+                        help="Shift mission center north (negative = south) in feet. Fine-tune when the auto-detected centroid is not on the house.")
+    parser.add_argument("--offset-east-ft", type=float, default=0.0,
+                        help="Shift mission center east (negative = west) in feet.")
     parser.add_argument("--speed-ms", type=float, default=DEFAULT_GLOBAL_SPEED_MS,
                         help=f"Flight speed between waypoints in m/s (default {DEFAULT_GLOBAL_SPEED_MS})")
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -461,6 +505,8 @@ def main(argv: list[str] | None = None) -> int:
             orbit_radius_ft=orbit_radius_ft,
             front_bearing=args.front_bearing,
             speed_ms=args.speed_ms,
+            offset_north_ft=args.offset_north_ft,
+            offset_east_ft=args.offset_east_ft,
         )
         print(json.dumps({"status": "ok", "output": str(path), "size_bytes": path.stat().st_size}))
         return 0
