@@ -52,6 +52,11 @@ COST_PER_OPENAI_CALL = 0.02  # ~$0.02 per crop at typical drone resolution
 
 SUPABASE_BATCH_SIZE = 50  # Rows per upsert request
 
+# Vision backend: "ollama" (local, free) or "openai" (cloud, ~$0.02/image)
+# Ollama is default; falls back to OpenAI if Ollama is unavailable or fails.
+VISION_BACKEND = os.environ.get("VISION_BACKEND", "ollama").lower()
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+
 # Hampton Roads species list — 20 common species in the region
 HAMPTON_ROADS_SPECIES = [
     "Loblolly Pine",
@@ -284,6 +289,34 @@ def update_classification_batch(
     return success
 
 
+# ─── OLLAMA VISION CLASSIFICATION ────────────────────────────────────────────
+
+def classify_ollama(image: Any) -> Optional[Dict[str, Any]]:
+    """Classify tree species using local Ollama LLaVA model.
+
+    Encodes PIL Image as PNG bytes and delegates to ollama_vision.classify_species().
+    Returns None on failure so the caller can fall back to OpenAI.
+
+    Args:
+        image: PIL.Image of the canopy crop.
+
+    Returns:
+        Dict with species_common, species_scientific, vegetation_type,
+        confidence, reasoning, secondary_candidates.
+        Returns None on any failure.
+    """
+    try:
+        from ollama_vision import classify_species
+
+        buf = BytesIO()
+        image.save(buf, format="PNG")
+        image_bytes = buf.getvalue()
+
+        return classify_species(image_bytes, HAMPTON_ROADS_SPECIES)
+    except Exception:
+        return None
+
+
 # ─── OPENAI VISION CLASSIFICATION ────────────────────────────────────────────
 
 def classify_openai(image: Any, api_key: str) -> Dict[str, Any]:
@@ -388,6 +421,48 @@ def classify_openai(image: Any, api_key: str) -> Dict[str, Any]:
 
     except Exception:
         return fallback
+
+
+# ─── VISION BACKEND ROUTER ───────────────────────────────────────────────────
+
+def classify_vision(image: Any, log: logging.Logger) -> Dict[str, Any]:
+    """Route vision classification to Ollama or OpenAI based on VISION_BACKEND.
+
+    When backend is "ollama" (default), tries Ollama first and falls back to
+    OpenAI on failure. When backend is "openai", goes directly to OpenAI.
+
+    Args:
+        image: PIL.Image of the canopy crop.
+        log: Logger instance.
+
+    Returns:
+        Dict with species_common, species_scientific, vegetation_type,
+        confidence, reasoning, secondary_candidates.
+        Returns "unidentified" fallback on total failure.
+    """
+    openai_fallback = {
+        "species_common": "unidentified",
+        "species_scientific": "Unknown species",
+        "vegetation_type": "unknown",
+        "confidence": 0.0,
+        "reasoning": "All vision backends failed or unavailable",
+        "secondary_candidates": [],
+    }
+
+    if VISION_BACKEND == "ollama":
+        result = classify_ollama(image)
+        if result is not None:
+            log.info(f"  Ollama: {result['species_common']} ({result['confidence']:.2f} confidence)")
+            return result
+        # Ollama failed — fall back to OpenAI
+        log.warning("Ollama classification failed — falling back to OpenAI")
+
+    # OpenAI path (primary when VISION_BACKEND=="openai", fallback when Ollama fails)
+    if not OPENAI_API_KEY:
+        log.warning("OPENAI_API_KEY not set — cannot fall back to OpenAI")
+        return openai_fallback
+
+    return classify_openai(image, OPENAI_API_KEY)
 
 
 # ─── PLANTNET CLASSIFICATION ──────────────────────────────────────────────────
@@ -575,6 +650,9 @@ def reconcile(
 def estimate_api_cost(canopy_count: int, skip_plantnet: bool) -> float:
     """Estimate total API cost for classifying N canopies.
 
+    When VISION_BACKEND is "ollama", vision cost is $0 (local inference).
+    PlantNet is free tier — not counted in cost estimate.
+
     Args:
         canopy_count: Number of canopies to classify.
         skip_plantnet: If True, only OpenAI calls counted.
@@ -582,6 +660,9 @@ def estimate_api_cost(canopy_count: int, skip_plantnet: bool) -> float:
     Returns:
         Estimated cost in USD.
     """
+    if VISION_BACKEND == "ollama":
+        # Ollama is local/free — cost is $0 unless fallback triggers OpenAI
+        return 0.0
     cost = canopy_count * COST_PER_OPENAI_CALL
     # PlantNet is free tier — not counted in cost estimate
     return round(cost, 4)
@@ -724,24 +805,9 @@ def run_classification(
                 skipped_count += 1
                 continue
 
-            # OpenAI Vision classification (primary)
-            if not OPENAI_API_KEY:
-                log.warning("OPENAI_API_KEY not set — skipping OpenAI classification")
-                openai_result = {
-                    "species_common": "unidentified",
-                    "species_scientific": "Unknown species",
-                    "vegetation_type": "unknown",
-                    "confidence": 0.0,
-                    "reasoning": "OPENAI_API_KEY not configured",
-                    "secondary_candidates": [],
-                }
-            else:
-                openai_result = classify_openai(crop, OPENAI_API_KEY)
-                openai_call_count += 1
-                log.info(
-                    f"  OpenAI: {openai_result['species_common']} "
-                    f"({openai_result['confidence']:.2f} confidence)"
-                )
+            # Vision classification (Ollama primary → OpenAI fallback)
+            openai_result = classify_vision(crop, log)
+            openai_call_count += 1
 
             # PlantNet cross-validation (optional)
             # Skip if: explicitly disabled, no key, or quota exhausted this run
@@ -899,10 +965,25 @@ Examples:
     # ── Startup log ──────────────────────────────────────────────────────────
     log.info(f"Species Classification (E2) starting — mission {args.mission_id}")
     log.info(f"Ortho:          {args.ortho_path}")
+    log.info(f"Vision backend: {VISION_BACKEND} (OLLAMA_URL={OLLAMA_URL})")
     log.info(f"Max canopies:   {args.max_canopies}")
     log.info(f"Skip PlantNet:  {args.skip_plantnet}")
     log.info(f"Cost threshold: ${args.cost_threshold:.2f}")
     log.info(f"Force:          {args.force}")
+
+    # Pre-flight check: verify Ollama availability if selected as backend
+    if VISION_BACKEND == "ollama":
+        try:
+            from ollama_vision import check_ollama
+            if check_ollama():
+                log.info("Ollama pre-flight: llava:13b available")
+            else:
+                log.warning(
+                    "Ollama pre-flight: llava:13b NOT available — "
+                    "will fall back to OpenAI for each image"
+                )
+        except Exception as exc:
+            log.warning(f"Ollama pre-flight check failed: {exc}")
 
     # ── Input validation ─────────────────────────────────────────────────────
     if not os.path.isfile(args.ortho_path):

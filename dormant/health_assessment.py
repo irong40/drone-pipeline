@@ -48,6 +48,11 @@ VISION_MODEL = "gpt-4o"
 # Estimated cost per vision call (gpt-4o input image token est.)
 COST_PER_VISION_CALL = 0.02  # ~$0.02 per crop at typical drone resolution
 
+# Vision backend: "ollama" (local, free) or "openai" (cloud, ~$0.02/image)
+# Ollama is default; falls back to OpenAI if Ollama is unavailable or fails.
+VISION_BACKEND = os.environ.get("VISION_BACKEND", "ollama").lower()
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+
 SUPABASE_BATCH_SIZE = 50
 
 
@@ -252,6 +257,26 @@ def crop_canopy_image(
         return None
 
 
+# ─── OLLAMA VISION ───────────────────────────────────────────────────────────
+
+def assess_via_ollama(image_bytes: bytes, log: logging.Logger) -> Optional[Dict[str, Any]]:
+    """Send a canopy crop to local Ollama LLaVA for health assessment.
+
+    Args:
+        image_bytes: JPEG bytes of the canopy crop.
+        log: Logger instance.
+
+    Returns:
+        Dict with health_score and other fields, or None on failure.
+    """
+    try:
+        from ollama_vision import assess_health
+        return assess_health(image_bytes)
+    except Exception as exc:
+        log.warning(f"Ollama health assessment failed: {exc}")
+        return None
+
+
 # ─── OPENAI VISION ───────────────────────────────────────────────────────────
 
 HEALTH_VISION_PROMPT = (
@@ -324,8 +349,36 @@ def assess_via_vision(image_bytes: bytes, log: logging.Logger) -> Optional[Dict[
         return None
 
 
+def assess_via_vision_router(image_bytes: bytes, log: logging.Logger) -> Optional[Dict[str, Any]]:
+    """Route health assessment to Ollama or OpenAI based on VISION_BACKEND.
+
+    When backend is "ollama" (default), tries Ollama first and falls back to
+    OpenAI on failure. When backend is "openai", goes directly to OpenAI.
+
+    Args:
+        image_bytes: JPEG bytes of the canopy crop.
+        log: Logger instance.
+
+    Returns:
+        Dict with health_score and other fields, or None on failure.
+    """
+    if VISION_BACKEND == "ollama":
+        result = assess_via_ollama(image_bytes, log)
+        if result is not None:
+            return result
+        log.warning("Ollama health assessment failed — falling back to OpenAI")
+
+    # OpenAI path (primary when VISION_BACKEND=="openai", fallback when Ollama fails)
+    return assess_via_vision(image_bytes, log)
+
+
 def estimate_vision_cost(sample_count: int) -> float:
-    """Estimate OpenAI API cost for vision sample calls."""
+    """Estimate API cost for vision sample calls.
+
+    When VISION_BACKEND is "ollama", cost is $0 (local inference).
+    """
+    if VISION_BACKEND == "ollama":
+        return 0.0
     return round(sample_count * COST_PER_VISION_CALL, 4)
 
 
@@ -557,7 +610,8 @@ def run_health_assessment(
     vision_samples = 0
     api_cost_estimate = 0.0
 
-    if not skip_vision and OPENAI_API_KEY:
+    vision_available = VISION_BACKEND == "ollama" or bool(OPENAI_API_KEY)
+    if not skip_vision and vision_available:
         # Sort ascending by index_score — lowest-scoring = most stressed = need vision most
         canopy_results.sort(key=lambda c: c["index_score"])
 
@@ -587,7 +641,7 @@ def run_health_assessment(
                         log.warning(f"  Could not crop canopy {det_idx} — skipping vision")
                         continue
 
-                    vision_result = assess_via_vision(image_bytes, log)
+                    vision_result = assess_via_vision_router(image_bytes, log)
                     if vision_result is not None:
                         canopy["vision_score"] = vision_result.get("health_score")
                         canopy["vision_result"] = vision_result
@@ -603,7 +657,8 @@ def run_health_assessment(
         if skip_vision:
             log.info("Phase 2: Vision sampling skipped (--skip-vision)")
         else:
-            log.info("Phase 2: Vision sampling skipped (OPENAI_API_KEY not set)")
+            log.info("Phase 2: Vision sampling skipped (no vision backend available — "
+                     "set VISION_BACKEND=ollama or OPENAI_API_KEY)")
 
     # ── Phase 3: Compute final health scores and build Supabase update rows ──
     log.info("Phase 3: Computing final health scores...")
@@ -718,9 +773,24 @@ Examples:
     # ── Startup log ─────────────────────────────────────────────────────────
     log.info(f"Health Assessment (E3) starting — mission {args.mission_id}")
     log.info(f"Ortho:            {args.ortho_path}")
+    log.info(f"Vision backend:   {VISION_BACKEND} (OLLAMA_URL={OLLAMA_URL})")
     log.info(f"Vision sample:    {args.vision_sample_pct * 100:.0f}%")
     log.info(f"Skip vision:      {args.skip_vision}")
     log.info(f"Cost threshold:   ${args.cost_threshold:.2f}")
+
+    # Pre-flight check: verify Ollama availability if selected as backend
+    if VISION_BACKEND == "ollama" and not args.skip_vision:
+        try:
+            from ollama_vision import check_ollama
+            if check_ollama():
+                log.info("Ollama pre-flight: llava:13b available")
+            else:
+                log.warning(
+                    "Ollama pre-flight: llava:13b NOT available — "
+                    "will fall back to OpenAI for each image"
+                )
+        except Exception as exc:
+            log.warning(f"Ollama pre-flight check failed: {exc}")
 
     # ── Input validation ─────────────────────────────────────────────────────
     if not os.path.isfile(args.ortho_path):
