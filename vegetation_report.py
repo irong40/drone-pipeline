@@ -148,11 +148,13 @@ def fetch_detections(
         result = (
             client.table("vegetation_detections")
             .select(
+                # NOTE: recommended_action is not a column on vegetation_detections;
+                # it lives inside health_details.vision and is resolved by
+                # _recommended_action_from_det().
                 "id, detection_index, geometry_wkt, centroid_lat, centroid_lon, "
                 "canopy_area_sqm, canopy_width_m, canopy_height_m, detection_confidence, "
                 "species_tag, species_confidence, vegetation_type, "
-                "health_score, health_status, health_details, "
-                "recommended_action"
+                "health_score, health_status, health_details"
             )
             .eq("mission_id", mission_id)
             .order("detection_index")
@@ -178,12 +180,19 @@ def fetch_mission_info(
     try:
         result = (
             client.table("drone_jobs")
-            .select("id, job_name, created_at, location")
+            .select("id, job_number, created_at, property_address, site_address")
             .eq("id", mission_id)
             .single()
             .execute()
         )
-        return result.data or {}
+        row = result.data or {}
+        # Normalize to the keys the report code expects. drone_jobs has no
+        # job_name/location columns — job_number and the address fields are
+        # the real identifiers.
+        if row:
+            row["job_name"] = row.get("job_number") or ""
+            row["location"] = row.get("site_address") or row.get("property_address") or ""
+        return row
     except Exception as exc:
         log.warning(f"Mission info fetch failed: {exc}")
         return {}
