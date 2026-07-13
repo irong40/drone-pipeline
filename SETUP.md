@@ -14,7 +14,7 @@ machine on **2026-07-09**.
 
 | Thing | State |
 |-------|-------|
-| QGIS | **3.44.12 LTR** (+3.44.11) at `C:\Program Files\QGIS 3.44.12`; `qgis_process-qgis-ltr.bat` runs (GDAL 3.13.1, Py 3.12.13) |
+| QGIS | **3.44.12 LTR** (sole install — 3.44.11 removed 2026-07-12) at `C:\Program Files\QGIS 3.44.12`; `qgis_process-qgis-ltr.bat` runs (GDAL 3.13.1, Py 3.12.13) |
 | UV | **0.10.8** at `...\Python312\Scripts\uv.exe` |
 | Python (host) | 3.12.10 |
 | WSL2 | Ubuntu running |
