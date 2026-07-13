@@ -43,7 +43,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build routing decision from ingest payload + template\nconst body = $('Ingest Webhook').item.json.body;\nconst template = $input.item.json[0] || {};\n\nconst missionId = body.mission_id;\nconst packageType = body.package_type;\nconst photoCount = body.photo_count || 0;\nconst videoCount = body.video_count || 0;\nconst hasPpk = body.has_ppk_data || false;\nconst platform = body.source_platform || 'unknown';\nconst missionFolderPath = body.mission_folder_path || '';\nconst pathCode = template.path_code || '';\n\n// Determine which paths to run\nconst hasPhotos = photoCount > 0;\nconst hasVideo = videoCount > 0;\n\n// Path C (mapping/photogrammetry) — packages that produce orthomosaics\nconst mappingPackages = ['construction_progress', 'commercial_basic', 'commercial_premium', 'insurance_claim', 'site_survey', 'environmental_survey'];\nconst runPathC = hasPhotos && mappingPackages.includes(packageType);\n\n// Path E (vegetation) — from template or explicit flag\nconst vegetationEnabled = template.vegetation_enabled || false;\nconst vegetationConfig = template.vegetation_config || {};\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      mission_folder_path: missionFolderPath,\n      package_type: packageType,\n      photo_count: photoCount,\n      video_count: videoCount,\n      has_ppk_data: hasPpk,\n      source_platform: platform,\n      path_code: pathCode,\n      template_id: template.id || null,\n      run_video: hasVideo,\n      run_photos: hasPhotos,\n      run_mapping: runPathC,\n      run_vegetation: vegetationEnabled && runPathC,\n      vegetation_config: vegetationConfig\n    }\n  }\n];"
+        "jsCode": "// Build routing decision from ingest payload + template\nconst body = $('Ingest Webhook').item.json.body;\nconst template = $input.item.json[0] || {};\n\nconst missionId = body.mission_id;\nconst packageType = body.package_type;\nconst photoCount = body.photo_count || 0;\nconst videoCount = body.video_count || 0;\nconst hasPpk = body.has_ppk_data || false;\nconst platform = body.source_platform || 'unknown';\nconst missionFolderPath = body.mission_folder_path || '';\nconst pathCode = template.path_code || '';\n\n// Determine which paths to run\nconst hasPhotos = photoCount > 0;\nconst hasVideo = videoCount > 0;\n\n// Path A (photo editing via Lightroom) — real estate + any photo-only package\nconst photoEditPackages = ['re_basic', 're_standard', 're_premium', 'commercial_basic', 'commercial_premium', 'construction_progress', 'insurance_claim', 'site_survey', 'environmental_survey'];\nconst runPhotoEdit = hasPhotos && photoEditPackages.includes(packageType);\n\n// Path C (mapping/photogrammetry) — packages that produce orthomosaics\nconst mappingPackages = ['construction_progress', 'commercial_basic', 'commercial_premium', 'insurance_claim', 'site_survey', 'environmental_survey'];\nconst runPathC = hasPhotos && mappingPackages.includes(packageType);\n\n// Path E (vegetation) — from template or explicit flag\nconst vegetationEnabled = template.vegetation_enabled || false;\nconst vegetationConfig = template.vegetation_config || {};\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      mission_folder_path: missionFolderPath,\n      package_type: packageType,\n      photo_count: photoCount,\n      video_count: videoCount,\n      has_ppk_data: hasPpk,\n      source_platform: platform,\n      path_code: pathCode,\n      template_id: template.id || null,\n      run_video: hasVideo,\n      run_photos: hasPhotos,\n      run_photo_edit: runPhotoEdit,\n      run_mapping: runPathC,\n      run_vegetation: vegetationEnabled && runPathC,\n      vegetation_config: vegetationConfig\n    }\n  }\n];"
       },
       "id": "node-build-routing",
       "name": "Build Routing Decision",
@@ -198,6 +198,40 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-run-photo-edit",
+              "leftValue": "={{ $('Build Routing Decision').item.json.run_photo_edit }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-check-photo-edit",
+      "name": "Run Photo Edit?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, -40],
+      "notes": "Route to Path A (Lightroom photo editing) if this package type has photos and a matching SAI preset."
+    },
+    {
+      "parameters": {
+        "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\photo_edit.py --mission-id {{ $('Build Routing Decision').item.json.mission_id }} --mission-path \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\" --package-type {{ $('Build Routing Decision').item.json.package_type }}"
+      },
+      "id": "node-path-a-photo-edit",
+      "name": "Path A — Photo Edit",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1340, -80],
+      "notes": "Stages photos with XMP sidecars to LR_AutoImport, waits for Lightroom Classic to process and export, then collects edited photos to E:\\output\\{mission_id}\\photos\\edited\\."
+    },
+    {
+      "parameters": {
         "command": "=C:\\Users\\redle.SOULAAN\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\photogrammetry_submit.py --mission-id {{ $('Build Routing Decision').item.json.mission_id }} --photos-dir \"{{ $('Build Routing Decision').item.json.mission_folder_path }}\\photos\\jpeg\" --output-dir \"E:\\output\\{{ $('Build Routing Decision').item.json.mission_id }}\\mapping\""
       },
       "id": "node-path-c-submit",
@@ -247,7 +281,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build summary response\nconst routing = $('Build Routing Decision').item.json;\n\nreturn [\n  {\n    json: {\n      status: 'routed',\n      mission_id: routing.mission_id,\n      package_type: routing.package_type,\n      paths_triggered: {\n        video: routing.run_video,\n        mapping: routing.run_mapping,\n        vegetation: routing.run_vegetation\n      },\n      photo_count: routing.photo_count,\n      video_count: routing.video_count\n    }\n  }\n];"
+        "jsCode": "// Build summary response\nconst routing = $('Build Routing Decision').item.json;\n\nreturn [\n  {\n    json: {\n      status: 'routed',\n      mission_id: routing.mission_id,\n      package_type: routing.package_type,\n      paths_triggered: {\n        photo_edit: routing.run_photo_edit,\n        video: routing.run_video,\n        mapping: routing.run_mapping,\n        vegetation: routing.run_vegetation\n      },\n      photo_count: routing.photo_count,\n      video_count: routing.video_count\n    }\n  }\n];"
       },
       "id": "node-response",
       "name": "Build Response",
@@ -367,6 +401,7 @@
     "Update Job — Processing": {
       "main": [
         [
+          { "node": "Run Photo Edit?", "type": "main", "index": 0 },
           { "node": "Has Video?", "type": "main", "index": 0 },
           { "node": "Run Mapping?", "type": "main", "index": 0 },
           { "node": "Route to Path E?", "type": "main", "index": 0 },
@@ -398,6 +433,12 @@
     "V3 — QA": {
       "main": [
         [{ "node": "V4 — Proxy Gen", "type": "main", "index": 0 }]
+      ]
+    },
+    "Run Photo Edit?": {
+      "main": [
+        [{ "node": "Path A — Photo Edit", "type": "main", "index": 0 }],
+        []
       ]
     },
     "Run Mapping?": {
@@ -456,6 +497,7 @@
     "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
     "webhook_paths": ["ingest", "delivery-ready"],
     "routing_logic": {
+      "photo_edit": "Path A (Lightroom Classic) — stages photos with XMP sidecars, LR auto-imports + applies presets, plugin auto-exports to LR_Export/{mission_id}/",
       "video_chain": "V1 (color grade) → V1.5 (metadata) → V2 (SRT parse) → V3 (QA) → V4 (proxy gen) → V5 (manual edit) → V6 (format export)",
       "mapping": "Path C (NodeODM photogrammetry) — submits photos, polls completion, downloads orthomosaic",
       "vegetation": "Path E (fires webhook to separate Path E workflow) — requires mapping to also be running"

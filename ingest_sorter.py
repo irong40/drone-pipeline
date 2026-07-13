@@ -410,6 +410,9 @@ def fire_webhook(mission_config, inventory, source_platform, mission_path=None, 
         "source_platform": source_platform,
         "mission_folder_path": mission_path,
         "ingested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "canopy_height_ft": mission_config.get("canopy_height_ft", 0),
+        "required_acl_ft": mission_config.get("required_acl_ft", 0),
+        "recommended_alt_ft": mission_config.get("recommended_alt_ft", 0),
     }
     try:
         resp = requests.post(webhook_url, json=payload, timeout=10)

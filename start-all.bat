@@ -73,7 +73,7 @@ if errorlevel 1 (
 )
 
 REM ── Check directories
-echo [4/6] Directories...
+echo [4/7] Directories...
 if not exist "%INCOMING%" (
     mkdir "%INCOMING%"
     echo   Created: %INCOMING%
@@ -93,8 +93,38 @@ if not exist "%REPO_DIR%logs" (
     echo   OK: %REPO_DIR%logs
 )
 
+REM ── Check Path A (Lightroom) directories
+set "LR_IMPORT=C:\Users\redle.SOULAAN\Pictures\LR_AutoImport"
+set "LR_EXPORT=C:\Users\redle.SOULAAN\Pictures\LR_Export"
+if not exist "%LR_IMPORT%" (
+    mkdir "%LR_IMPORT%"
+    echo   Created: %LR_IMPORT%
+) else (
+    echo   OK: %LR_IMPORT% (Path A auto-import)
+)
+if not exist "%LR_EXPORT%" (
+    mkdir "%LR_EXPORT%"
+    echo   Created: %LR_EXPORT%
+) else (
+    echo   OK: %LR_EXPORT% (Path A export)
+)
+
+REM ── Check Lightroom Classic
+echo [5/7] Lightroom Classic...
+if exist "C:\Program Files\Adobe\Adobe Lightroom Classic\Lightroom.exe" (
+    echo   OK: Lightroom Classic installed
+    REM Check if SAI presets exist
+    if exist "C:\Users\redle.SOULAAN\AppData\Roaming\Adobe\CameraRaw\Settings\SAI-ListingPro.xmp" (
+        echo   OK: SAI presets found
+    ) else (
+        echo   WARN: SAI presets not found in CameraRaw\Settings — Path A will fail
+    )
+) else (
+    echo   WARN: Lightroom Classic not found — Path A photo editing unavailable
+)
+
 REM ── Check Supabase env vars
-echo [5/6] Supabase...
+echo [6/7] Supabase...
 if "%SUPABASE_URL%"=="" (
     REM Try loading from .env
     if exist "%REPO_DIR%.env" (
@@ -111,7 +141,7 @@ if "%SUPABASE_URL%"=="" (
 )
 
 REM ── Check-only mode
-echo [6/6] Services...
+echo [7/7] Services...
 if "%1"=="--check" (
     echo   Health check complete — no services started.
     echo.
@@ -132,6 +162,7 @@ echo   Output:    %OUTPUT%
 echo   Logs:      %REPO_DIR%logs\
 echo   n8n:       http://localhost:5678
 echo   NodeODM:   http://localhost:3000
+echo   Path A:    LR Auto-Import ^> %LR_IMPORT%
 echo  ============================================
 echo.
 

@@ -27,13 +27,31 @@ INCOMING_ROOT = r"E:\incoming"
 PYTHON_EXE = sys.executable
 
 PACKAGE_TYPES = [
+    "re_basic",
     "re_standard",
     "re_premium",
     "commercial_basic",
     "commercial_premium",
     "insurance_claim",
     "construction_progress",
+    "site_survey",
+    "environmental_survey",
+    "census_thermal",
 ]
+
+# Default ACL (Above Canopy Level) requirements per mission type (feet)
+DEFAULT_ACL = {
+    "re_basic": 150,
+    "re_standard": 150,
+    "re_premium": 200,
+    "commercial_basic": 200,
+    "commercial_premium": 250,
+    "insurance_claim": 100,
+    "construction_progress": 200,
+    "site_survey": 250,
+    "environmental_survey": 300,
+    "census_thermal": 300,
+}
 
 # ─── LAUNCHER GUI ────────────────────────────────────────────────────────────
 
@@ -103,6 +121,57 @@ class LauncherApp:
         ttk.Button(btn_row, text="+ Add Mission", command=self._add_mission_row).pack(side="left")
         ttk.Button(btn_row, text="- Remove Last", command=self._remove_mission_row).pack(side="left", padx=5)
 
+        # ── ACL Calibration
+        acl_frame = ttk.LabelFrame(self.root, text="ACL Calibration (Above Canopy Level)", padding=10)
+        acl_frame.pack(fill="x", padx=10, pady=5)
+
+        acl_row1 = ttk.Frame(acl_frame)
+        acl_row1.pack(fill="x")
+        ttk.Label(acl_row1, text="Canopy height (ft):", width=20).pack(side="left")
+        self.canopy_height_var = tk.StringVar(value="0")
+        ttk.Entry(acl_row1, textvariable=self.canopy_height_var, width=10).pack(side="left", padx=2)
+        ttk.Label(acl_row1, text="From rangefinder or thermal photo",
+                  font=("Segoe UI", 8)).pack(side="left", padx=(10, 0))
+
+        acl_row2 = ttk.Frame(acl_frame)
+        acl_row2.pack(fill="x", pady=(3, 0))
+        ttk.Label(acl_row2, text="Required ACL (ft):", width=20).pack(side="left")
+        self.required_acl_var = tk.StringVar(value="200")
+        ttk.Entry(acl_row2, textvariable=self.required_acl_var, width=10).pack(side="left", padx=2)
+
+        acl_row3 = ttk.Frame(acl_frame)
+        acl_row3.pack(fill="x", pady=(3, 0))
+        ttk.Label(acl_row3, text="Recommended altitude:", width=20).pack(side="left")
+        self.rec_alt_var = tk.StringVar(value="—")
+        ttk.Label(acl_row3, textvariable=self.rec_alt_var,
+                  font=("Segoe UI", 10, "bold")).pack(side="left")
+
+        ttk.Button(acl_frame, text="Calculate", command=self._calc_acl).pack(anchor="w", pady=(5, 0))
+        ttk.Button(acl_frame, text="Read from thermal photo...",
+                   command=self._read_canopy_from_photo).pack(anchor="w", pady=(3, 0))
+
+        # ── Parcel Boundary Lookup
+        parcel_frame = ttk.LabelFrame(self.root, text="Parcel Boundary (KML for WaypointMap)", padding=10)
+        parcel_frame.pack(fill="x", padx=10, pady=5)
+
+        parcel_row = ttk.Frame(parcel_frame)
+        parcel_row.pack(fill="x")
+        ttk.Label(parcel_row, text="Property address:", width=18).pack(side="left")
+        self.parcel_address_var = tk.StringVar()
+        ttk.Entry(parcel_row, textvariable=self.parcel_address_var, width=45).pack(side="left", padx=2, fill="x", expand=True)
+
+        parcel_row2 = ttk.Frame(parcel_frame)
+        parcel_row2.pack(fill="x", pady=(3, 0))
+        ttk.Label(parcel_row2, text="Buffer (ft):", width=18).pack(side="left")
+        self.parcel_buffer_var = tk.StringVar(value="0")
+        ttk.Entry(parcel_row2, textvariable=self.parcel_buffer_var, width=10).pack(side="left", padx=2)
+        ttk.Button(parcel_row2, text="Lookup & Export KML",
+                   command=self._lookup_parcel).pack(side="left", padx=(10, 0))
+
+        self.parcel_result_var = tk.StringVar(value="")
+        ttk.Label(parcel_frame, textvariable=self.parcel_result_var,
+                  font=("Segoe UI", 8), wraplength=500).pack(anchor="w", pady=(3, 0))
+
         # ── Options
         opts_frame = ttk.LabelFrame(self.root, text="Options", padding=10)
         opts_frame.pack(fill="x", padx=10, pady=5)
@@ -145,6 +214,7 @@ class LauncherApp:
         combo = ttk.Combobox(row_frame, textvariable=package_type, values=PACKAGE_TYPES,
                              width=20, state="readonly")
         combo.pack(side="left", padx=2)
+        combo.bind("<<ComboboxSelected>>", lambda e: self._on_package_change(package_type.get()))
         ttk.Entry(row_frame, textvariable=date_var, width=12).pack(side="left", padx=2)
         ttk.Entry(row_frame, textvariable=seq_start, width=10).pack(side="left", padx=2)
         ttk.Entry(row_frame, textvariable=seq_end, width=10).pack(side="left", padx=2)
@@ -168,6 +238,112 @@ class LauncherApp:
         folder = filedialog.askdirectory(title="Select SD card folder (e.g. E:/DCIM/DJI_001)")
         if folder:
             self.source_var.set(folder)
+
+    def _on_package_change(self, package_type):
+        """Update default ACL when package type changes."""
+        default = DEFAULT_ACL.get(package_type, 200)
+        self.required_acl_var.set(str(default))
+        self._calc_acl()
+
+    def _calc_acl(self):
+        """Calculate recommended flight altitude from canopy height + required ACL."""
+        try:
+            canopy = float(self.canopy_height_var.get() or 0)
+            acl = float(self.required_acl_var.get() or 200)
+            rec = canopy + acl
+            self.rec_alt_var.set(f"{rec:.0f} ft AGL")
+        except ValueError:
+            self.rec_alt_var.set("Invalid input")
+
+    def _read_canopy_from_photo(self):
+        """Read canopy height from a thermal photo's ObjectDistance EXIF field."""
+        filepath = filedialog.askopenfilename(
+            title="Select thermal calibration photo",
+            filetypes=[
+                ("Thermal photos", "*.jpg *.jpeg *.rjpeg *.tif *.tiff"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not filepath:
+            return
+
+        try:
+            from sentinel_core.metadata import extract_thermal_metadata
+            thermal = extract_thermal_metadata(filepath)
+
+            if not thermal:
+                messagebox.showwarning("No Data", "No thermal metadata found in this photo.")
+                return
+
+            if "canopy_height" in thermal:
+                height_m = thermal["canopy_height"]
+                height_ft = height_m * 3.28084
+                self.canopy_height_var.set(f"{height_ft:.0f}")
+                self._calc_acl()
+                messagebox.showinfo(
+                    "ACL Calibration",
+                    f"Rangefinder distance: {thermal.get('object_distance', '?')} m\n"
+                    f"Drone AGL: {thermal.get('relative_altitude', '?')} m\n"
+                    f"Canopy height: {height_m:.1f} m ({height_ft:.0f} ft)\n\n"
+                    f"Recommended altitude updated.",
+                )
+            elif "object_distance" in thermal:
+                dist = thermal["object_distance"]
+                agl = thermal.get("relative_altitude", 0)
+                messagebox.showinfo(
+                    "Partial Data",
+                    f"ObjectDistance: {dist} m\n"
+                    f"Drone AGL: {agl} m\n\n"
+                    f"Gimbal pitch was {thermal.get('gimbal_pitch', '?')}° — "
+                    f"for accurate canopy height, point camera straight down (-90°).",
+                )
+            else:
+                messagebox.showwarning(
+                    "No Rangefinder Data",
+                    "This photo has no ObjectDistance field.\n"
+                    "Enable the rangefinder before taking the calibration photo.",
+                )
+        except ImportError:
+            messagebox.showerror("Error", "sentinel_core not installed. Run: pip install -e D:\\Projects\\sentinel-core")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read thermal metadata: {e}")
+
+    def _lookup_parcel(self):
+        """Look up parcel boundary and export KML."""
+        address = self.parcel_address_var.get().strip()
+        if not address:
+            messagebox.showwarning("Missing Address", "Enter a property address first.")
+            return
+
+        buffer_ft = float(self.parcel_buffer_var.get() or 0)
+        self.parcel_result_var.set("Looking up parcel...")
+        self.root.update()
+
+        try:
+            from parcel_lookup import run as parcel_run
+            result = parcel_run(address=address, buffer_ft=buffer_ft)
+
+            self.parcel_result_var.set(
+                f"Found: {result['parcel_id']} | {result['acres']} acres | "
+                f"Owner: {result.get('owner', 'N/A')}"
+            )
+
+            kml_path = result["kml_path"]
+            msg = (
+                f"Parcel ID: {result['parcel_id']}\n"
+                f"Area: {result['acres']} acres\n"
+                f"Owner: {result.get('owner', 'N/A')}\n"
+                f"Vertices: {result['vertex_count']}\n\n"
+                f"KML saved to:\n{kml_path}\n\n"
+                f"Load this into WaypointMap to define your survey area."
+            )
+
+            if messagebox.askyesno("Parcel Found", msg + "\n\nOpen KML file location?"):
+                os.startfile(str(Path(kml_path).parent))
+
+        except Exception as e:
+            self.parcel_result_var.set(f"Error: {e}")
+            messagebox.showerror("Parcel Lookup Failed", str(e))
 
     def _validate(self):
         """Validate all inputs. Returns (missions_config, error_msg)."""
@@ -211,6 +387,9 @@ class LauncherApp:
                 "date": date_str,
                 "sequence_start": seq_start,
                 "sequence_end": seq_end,
+                "canopy_height_ft": float(self.canopy_height_var.get() or 0),
+                "required_acl_ft": float(self.required_acl_var.get() or 200),
+                "recommended_alt_ft": float(self.canopy_height_var.get() or 0) + float(self.required_acl_var.get() or 200),
             })
 
         return missions_config, None
