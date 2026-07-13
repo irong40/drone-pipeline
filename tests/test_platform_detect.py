@@ -124,7 +124,7 @@ def test_exiftool_empty_metadata_list_returns_none_none(mocker):
 def test_exif_returns_platform_when_exiftool_succeeds(mocker):
     """detect_from_exif returns platform directly when detect_from_exiftool succeeds."""
     mocker.patch(
-        "platform_detect.detect_from_exiftool",
+        "sentinel_core.platform.detect_from_exiftool",
         return_value=("mini4pro", {"XMP:Model": "FC8282"}),
     )
     mock_pil_open = mocker.patch("PIL.Image.open")
@@ -137,7 +137,7 @@ def test_exif_returns_platform_when_exiftool_succeeds(mocker):
 
 def test_exif_pil_fallback_mini4pro(mocker):
     """PIL fallback correctly identifies Mini 4 Pro via tag 272 = FC8282."""
-    mocker.patch("platform_detect.detect_from_exiftool", return_value=(None, None))
+    mocker.patch("sentinel_core.platform.detect_from_exiftool", return_value=(None, None))
     mock_img = MagicMock()
     mock_img.getexif.return_value = {272: "FC8282", 271: "DJI"}
     mocker.patch("PIL.Image.open", return_value=mock_img)
@@ -149,7 +149,7 @@ def test_exif_pil_fallback_mini4pro(mocker):
 
 def test_exif_pil_fallback_m3e_via_pattern(mocker):
     """PIL fallback identifies M3E via substring pattern on model string."""
-    mocker.patch("platform_detect.detect_from_exiftool", return_value=(None, None))
+    mocker.patch("sentinel_core.platform.detect_from_exiftool", return_value=(None, None))
     mock_img = MagicMock()
     mock_img.getexif.return_value = {272: "DJI Mavic 3E", 271: "DJI"}
     mocker.patch("PIL.Image.open", return_value=mock_img)
@@ -161,7 +161,7 @@ def test_exif_pil_fallback_m3e_via_pattern(mocker):
 
 def test_exif_no_exif_data_returns_none(mocker):
     """PIL fallback returns None when getexif() returns None."""
-    mocker.patch("platform_detect.detect_from_exiftool", return_value=(None, None))
+    mocker.patch("sentinel_core.platform.detect_from_exiftool", return_value=(None, None))
     mock_img = MagicMock()
     mock_img.getexif.return_value = None
     mocker.patch("PIL.Image.open", return_value=mock_img)
@@ -302,7 +302,7 @@ def test_detect_platform_from_folder_photo_exif_path(tmp_path, mocker):
 
     # Patch detect_from_exiftool to return M4E identification
     mocker.patch(
-        "platform_detect.detect_from_exiftool",
+        "sentinel_core.platform.detect_from_exiftool",
         return_value=("m4e", {"XMP:Model": "FC9100"}),
     )
 

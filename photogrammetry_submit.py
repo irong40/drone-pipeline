@@ -14,14 +14,19 @@ Usage:
 import os
 import sys
 import json
-import time
 import argparse
 import logging
-import requests
 from pathlib import Path
 from datetime import datetime, timezone
 
 from pipeline_utils import setup_logging
+from sentinel_core.nodeodm import (
+    check_nodeodm,
+    submit_task,
+    poll_task,
+    download_outputs,
+)
+from sentinel_core.constants import PHOTO_EXTENSIONS
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
@@ -30,7 +35,6 @@ NODEODM_URL = os.environ.get("NODEODM_URL", "http://localhost:3000")
 OUTPUT_ROOT = r"E:\output"
 POLL_INTERVAL_SECONDS = 30
 MAX_POLL_HOURS = 6
-PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".dng", ".tif", ".tiff", ".png"}
 
 # Default ODM processing options for aerial survey orthomosaics
 DEFAULT_ODM_OPTIONS = [
@@ -41,19 +45,14 @@ DEFAULT_ODM_OPTIONS = [
     {"name": "auto-boundary", "value": True},
     {"name": "pc-quality", "value": "medium"},
     {"name": "feature-quality", "value": "high"},
+    {"name": "split", "value": 4},              # split into 4 submodels to limit RAM
+    {"name": "split-overlap", "value": 150},     # 150m overlap between submodels
 ]
 
 
-# ─── NODEODM API ─────────────────────────────────────────────────────────────
+# ─── LOCAL HELPERS ───────────────────────────────────────────────────────────
 
-def check_nodeodm(base_url):
-    """Verify NodeODM is reachable and return server info."""
-    try:
-        resp = requests.get(f"{base_url}/info", timeout=10)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as e:
-        return None
+_SUBMIT_EXTENSIONS = PHOTO_EXTENSIONS | {".png"}
 
 
 def find_photos(photos_dir):
@@ -61,148 +60,9 @@ def find_photos(photos_dir):
     photos = []
     for fname in sorted(os.listdir(photos_dir)):
         ext = os.path.splitext(fname)[1].lower()
-        if ext in PHOTO_EXTENSIONS:
+        if ext in _SUBMIT_EXTENSIONS:
             photos.append(os.path.join(photos_dir, fname))
     return photos
-
-
-def submit_task(base_url, photo_paths, options=None, name="sentinel-mission"):
-    """Submit photos to NodeODM for processing.
-
-    Returns task UUID on success, None on failure.
-    """
-    log = logging.getLogger(__name__)
-
-    files = []
-    for photo_path in photo_paths:
-        fname = os.path.basename(photo_path)
-        files.append(("images", (fname, open(photo_path, "rb"), "image/jpeg")))
-
-    data = {"name": name}
-    if options:
-        data["options"] = json.dumps(options)
-
-    try:
-        log.info(f"Submitting {len(photo_paths)} photos to NodeODM...")
-        resp = requests.post(
-            f"{base_url}/task/new",
-            files=files,
-            data=data,
-            timeout=300,  # 5 min upload timeout
-        )
-        resp.raise_for_status()
-        result = resp.json()
-        task_uuid = result.get("uuid")
-        log.info(f"Task created: {task_uuid}")
-        return task_uuid
-    except requests.RequestException as e:
-        log.error(f"Task submission failed: {e}")
-        return None
-    finally:
-        # Close all file handles
-        for _, file_tuple in files:
-            file_tuple[1].close()
-
-
-def poll_task(base_url, task_uuid, poll_interval=POLL_INTERVAL_SECONDS, max_hours=MAX_POLL_HOURS):
-    """Poll NodeODM task status until completion or failure.
-
-    Returns final task info dict, or None on timeout.
-    """
-    log = logging.getLogger(__name__)
-    max_attempts = int((max_hours * 3600) / poll_interval)
-    start_time = time.time()
-
-    for attempt in range(1, max_attempts + 1):
-        try:
-            resp = requests.get(f"{base_url}/task/{task_uuid}/info", timeout=10)
-            resp.raise_for_status()
-            info = resp.json()
-        except requests.RequestException as e:
-            log.warning(f"Poll attempt {attempt} failed: {e}")
-            time.sleep(poll_interval)
-            continue
-
-        status_code = info.get("status", {}).get("code", -1)
-        progress = info.get("progress", 0)
-
-        # NodeODM status codes: 10=queued, 20=running, 30=failed, 40=completed, 50=canceled
-        if status_code == 40:
-            elapsed = time.time() - start_time
-            log.info(f"Task completed in {elapsed / 60:.1f} minutes")
-            return info
-
-        if status_code == 30:
-            error = info.get("status", {}).get("errorMessage", "unknown error")
-            log.error(f"Task failed: {error}")
-            return info
-
-        if status_code == 50:
-            log.error("Task was canceled")
-            return info
-
-        status_label = {10: "queued", 20: "running"}.get(status_code, f"status={status_code}")
-        elapsed = time.time() - start_time
-        log.info(f"  [{status_label}] {progress:.0f}% complete ({elapsed / 60:.1f}m elapsed)")
-
-        time.sleep(poll_interval)
-
-    log.error(f"Task timed out after {max_hours} hours")
-    return None
-
-
-def download_outputs(base_url, task_uuid, output_dir):
-    """Download orthomosaic and other outputs from completed task.
-
-    Downloads:
-    - orthomosaic.tif (all.zip/odm_orthophoto/odm_orthophoto.tif)
-    - dsm.tif (if available)
-    - dtm.tif (if available)
-
-    Returns dict of downloaded file paths.
-    """
-    log = logging.getLogger(__name__)
-    os.makedirs(output_dir, exist_ok=True)
-    downloaded = {}
-
-    # Download individual assets
-    assets = {
-        "orthophoto.tif": "orthophoto.tif",
-        "dsm.tif": "dsm.tif",
-        "dtm.tif": "dtm.tif",
-    }
-
-    for asset_name, local_name in assets.items():
-        url = f"{base_url}/task/{task_uuid}/download/{asset_name}"
-        local_path = os.path.join(output_dir, local_name)
-
-        try:
-            resp = requests.get(url, stream=True, timeout=30)
-            if resp.status_code == 200:
-                with open(local_path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                size_mb = os.path.getsize(local_path) / (1024 * 1024)
-                log.info(f"  Downloaded: {local_name} ({size_mb:.1f} MB)")
-                downloaded[asset_name] = local_path
-            elif resp.status_code == 404:
-                log.info(f"  Not available: {asset_name}")
-            else:
-                log.warning(f"  Download failed for {asset_name}: HTTP {resp.status_code}")
-        except requests.RequestException as e:
-            log.warning(f"  Download failed for {asset_name}: {e}")
-
-    # Also copy orthophoto as orthomosaic.tif (the name Path E expects)
-    ortho_src = downloaded.get("orthophoto.tif")
-    if ortho_src:
-        ortho_dest = os.path.join(output_dir, "orthomosaic.tif")
-        if ortho_src != ortho_dest:
-            import shutil
-            shutil.copy2(ortho_src, ortho_dest)
-            downloaded["orthomosaic.tif"] = ortho_dest
-            log.info(f"  Copied: orthophoto.tif → orthomosaic.tif (Path E compatible)")
-
-    return downloaded
 
 
 def update_supabase_status(mission_id, status, output_path=None):
@@ -331,6 +191,16 @@ Exit codes:
 
     # Download outputs
     downloaded = download_outputs(args.nodeodm_url, task_uuid, output_dir)
+
+    # Copy orthophoto as orthomosaic.tif (the name Path E expects)
+    ortho_src = downloaded.get("orthophoto.tif")
+    if ortho_src:
+        import shutil
+        ortho_dest = os.path.join(output_dir, "orthomosaic.tif")
+        if ortho_src != ortho_dest:
+            shutil.copy2(ortho_src, ortho_dest)
+            downloaded["orthomosaic.tif"] = ortho_dest
+            log.info("  Copied: orthophoto.tif -> orthomosaic.tif (Path E compatible)")
 
     if "orthomosaic.tif" not in downloaded and "orthophoto.tif" not in downloaded:
         log.error("No orthomosaic produced — check NodeODM logs")

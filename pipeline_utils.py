@@ -77,24 +77,21 @@ def get_supabase_client():
 
 
 # ─── DJI FILENAME PARSING ──────────────────────────────────────────────────
+# Moved to sentinel_core.filename — wrapped for backwards compatibility
+
+from sentinel_core.filename import extract_sequence_number as _core_extract_sequence_number
+
 
 def extract_sequence_number(filename):
     """Extract the sequence number from a DJI filename.
 
     Mini 4 Pro: DJI_0015.JPG -> 15
     M4E/M3E:   DJI_20260218101500_0015_D.JPG -> 15
+
+    sentinel_core returns None for non-DJI filenames; this legacy
+    interface returns 0.
     """
-    # Timestamp format: DJI_YYYYMMDDHHMMSS_NNNN_X.EXT
-    m = re.match(r"DJI_\d{14}_(\d{4})_", filename, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-
-    # Sequential format: DJI_NNNN.EXT
-    m = re.match(r"DJI_(\d{4})\.", filename, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-
-    return 0
+    return _core_extract_sequence_number(filename) or 0
 
 
 # ─── GOOGLE DRIVE ───────────────────────────────────────────────────────────

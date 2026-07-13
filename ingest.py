@@ -9,21 +9,12 @@ Usage:
 
 import os
 import sys
-import re
 import json
-import math
 import uuid
-import shutil
 import argparse
 from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
-
-try:
-    from PIL import Image
-    from PIL.ExifTags import TAGS
-except ImportError:
-    sys.exit("pip install Pillow")
 
 try:
     from pipeline_utils import preflight_check
@@ -42,7 +33,7 @@ WORKSPACE = "D:/"
 LICENSE_ID = 9000
 MISSION_GAP_MINUTES = 30  # minutes between shots to split missions
 
-# Camera defaults for DJI Mini 4 Pro (FC8482)
+# Fallback camera defaults (used only when EXIF/XMP unavailable)
 CAMERA_DEFAULTS = {
     "width": 8064,
     "height": 4536,
@@ -94,139 +85,66 @@ PROCESSING_DEFAULTS = {
 }
 
 
-# ─── EXIF / XMP EXTRACTION ──────────────────────────────────────────────────
+# ─── SENTINEL-CORE IMPORTS ──────────────────────────────────────────────────
 
-def extract_gps_from_exif(filepath):
-    """Extract GPS coords from EXIF as [longitude, latitude, altitude]."""
-    try:
-        img = Image.open(filepath)
-        exif = img.getexif()
-        if not exif:
-            return None
-        gps_info = exif.get_ifd(0x8825)  # GPSInfo IFD tag
-        if not gps_info:
-            return None
-
-        def dms_to_decimal(dms, ref):
-            d, m, s = float(dms[0]), float(dms[1]), float(dms[2])
-            dec = d + m / 60 + s / 3600
-            if ref in ("S", "W"):
-                dec = -dec
-            return dec
-
-        lat = dms_to_decimal(gps_info[2], gps_info[1])
-        lon = dms_to_decimal(gps_info[4], gps_info[3])
-        alt = float(gps_info.get(6, 0))
-        return [lon, lat, alt]
-    except Exception:
-        return None
-
-
-def extract_xmp_gimbal(filepath):
-    """Extract DJI gimbal angles and metadata from XMP."""
-    try:
-        with open(filepath, "rb") as f:
-            data = f.read(500000)
-        start = data.find(b"<x:xmpmeta")
-        if start < 0:
-            return None
-        end = data.find(b"</x:xmpmeta>", start) + len(b"</x:xmpmeta>")
-        xmp = data[start:end].decode("utf-8", errors="ignore")
-        fields = dict(re.findall(r'drone-dji:(\w+)="([^"]+)"', xmp))
-        return {
-            "pitch": float(fields.get("GimbalPitchDegree", 0)),
-            "roll": float(fields.get("GimbalRollDegree", 0)),
-            "yaw": float(fields.get("GimbalYawDegree", 0)),
-            "relative_altitude": float(fields.get("RelativeAltitude", 0)),
-            "absolute_altitude": float(fields.get("AbsoluteAltitude", 0)),
-        }
-    except Exception:
-        return None
-
-
-def gimbal_to_orientation(pitch_deg, roll_deg, yaw_deg):
-    """Convert DJI gimbal angles to MipMap's 9-element orientation matrix.
-
-    MipMap convention (verified against live task.json):
-        Row 0: [cos(y)*cos(r) - sin(y)*sin(p)*sin(r),
-                -sin(y)*cos(r) - cos(y)*sin(p)*sin(r),
-                cos(p)*sin(r)]
-        Row 1: [sin(y)*sin(p), cos(y)*sin(p), -cos(p)]
-        Row 2: [sin(y)*cos(p), cos(y)*cos(p),  sin(p)]
-
-    When roll=0 (typical for DJI):
-        Row 0: [cos(y), -sin(y), 0]
-        Row 1: [sin(y)*sin(p), cos(y)*sin(p), -cos(p)]
-        Row 2: [sin(y)*cos(p), cos(y)*cos(p),  sin(p)]
-    """
-    p = math.radians(pitch_deg)
-    r = math.radians(roll_deg)
-    y = math.radians(yaw_deg)
-    cp, sp = math.cos(p), math.sin(p)
-    cr, sr = math.cos(r), math.sin(r)
-    cy, sy = math.cos(y), math.sin(y)
-
-    # Rz(yaw) @ Rx_cam(pitch) @ Ry_cam(roll)
-    R = [
-        cy * cr - sy * sp * sr, -sy * cr - cy * sp * sr,  cp * sr,
-        sy * sp,                 cy * sp,                 -cp,
-        sy * cp,                 cy * cp,                  sp,
-    ]
-
-    # When roll != 0, use full matrix. Verify the general form:
-    # Actually for roll=0 this reduces to the verified formula.
-    # For non-zero roll, we need the full Rz(y) @ Rx(p) @ Ry(r):
-    if abs(roll_deg) > 0.01:
-        Rz = [[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]]
-        Rx = [[1, 0, 0], [0, cp, -sp], [0, sp, cp]]
-        Ry = [[cr, 0, sr], [0, 1, 0], [-sr, 0, cr]]
-        # Rz @ Rx @ Ry
-        RxRy = [[sum(Rx[i][k] * Ry[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
-        M = [[sum(Rz[i][k] * RxRy[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
-        R = [M[0][0], M[0][1], M[0][2], M[1][0], M[1][1], M[1][2], M[2][0], M[2][1], M[2][2]]
-
-    return R
-
-
-def get_utm_zone(longitude):
-    """Compute UTM zone and EPSG code from longitude."""
-    zone = int((longitude + 180) / 6) + 1
-    # Assume northern hemisphere for now (latitude > 0)
-    epsg = 32600 + zone
-    return zone, epsg
-
-
-# ─── FILE SCANNING ───────────────────────────────────────────────────────────
-
-def parse_dji_filename(filename):
-    """Parse DJI filename: DJI_YYYYMMDDHHMMSS_NNNN_D_NOV25.EXT"""
-    m = re.match(r"DJI_(\d{14})_(\d{4})_.*\.(\w+)$", filename, re.IGNORECASE)
-    if not m:
-        return None
-    ts_str, seq, ext = m.group(1), m.group(2), m.group(3).upper()
-    dt = datetime.strptime(ts_str, "%Y%m%d%H%M%S")
-    return {"datetime": dt, "sequence": int(seq), "extension": ext, "filename": filename}
+from sentinel_core.metadata import extract_gps_from_exif, extract_xmp_fields, extract_xmp_gimbal, gimbal_to_orientation
+from sentinel_core.geo import get_utm_zone
+from sentinel_core.filename import parse_dji_filename
+from sentinel_core.constants import PHOTO_EXTENSIONS
 
 
 def scan_folder(folder_path):
-    """Scan a DCIM folder and return parsed file info for JPGs only."""
+    """Scan a DCIM folder and return parsed file info for photos.
+
+    Supports both M4E/M3E timestamp format (DJI_YYYYMMDDHHMMSS_NNNN_X.EXT)
+    and Mini 4 Pro sequential format (DJI_NNNN.EXT).
+    """
     files = []
     for fname in sorted(os.listdir(folder_path)):
         fpath = os.path.join(folder_path, fname)
         if not os.path.isfile(fpath):
             continue
+        ext = os.path.splitext(fname)[1].lower()
+        if ext not in PHOTO_EXTENSIONS:
+            continue
         parsed = parse_dji_filename(fname)
-        if parsed and parsed["extension"] == "JPG":
+        if parsed:
             parsed["path"] = os.path.abspath(fpath)
             files.append(parsed)
+        elif fname.upper().startswith("DJI_"):
+            # Mini 4 Pro sequential format — no timestamp to parse
+            files.append({
+                "datetime": None,
+                "sequence": 0,
+                "extension": ext.lstrip(".").upper(),
+                "filename": fname,
+                "path": os.path.abspath(fpath),
+            })
     return files
 
 
 def split_missions(files, gap_minutes=MISSION_GAP_MINUTES):
-    """Split files into missions based on timestamp gaps."""
+    """Split files into missions based on timestamp gaps.
+
+    Files without timestamps (Mini 4 Pro sequential format) are grouped
+    into a single mission keyed by 'unknown'.
+    """
     if not files:
         return {}
-    files = sorted(files, key=lambda f: f["datetime"])
+
+    # Separate timestamped vs non-timestamped files
+    with_ts = [f for f in files if f["datetime"] is not None]
+    without_ts = [f for f in files if f["datetime"] is None]
+
+    missions = {}
+
+    if without_ts:
+        missions["unknown"] = without_ts
+
+    if not with_ts:
+        return missions
+
+    files = sorted(with_ts, key=lambda f: f["datetime"])
     missions = {}
     current = [files[0]]
     for f in files[1:]:
@@ -246,26 +164,103 @@ def split_missions(files, gap_minutes=MISSION_GAP_MINUTES):
 
 # ─── TASK.JSON GENERATION ────────────────────────────────────────────────────
 
-def build_image_meta_data(files):
-    """Build the image_meta_data array from JPG files with EXIF/XMP."""
-    images = []
-    cam = CAMERA_DEFAULTS
-    calib = [cam["fx"], cam["fy"], cam["cx"], cam["cy"], 0, 0, 0, 0, 0, 0]
+def _parse_dewarp_data(dewarp_str):
+    """Parse DJI DewarpData string into calibration values.
 
+    Format: 'date;fx,fy,cx_offset,cy_offset,k1,k2,p1,p2,k3'
+    Returns list of 9 floats, or None.
+    """
+    parts = dewarp_str.split(";")
+    if len(parts) != 2:
+        return None
+    values = [float(v) for v in parts[1].split(",")]
+    if len(values) < 9:
+        return None
+    return values
+
+
+def _detect_camera_from_first_photo(filepath):
+    """Read camera parameters from the first photo in a mission.
+
+    Returns dict with width, height, focal_length_35mm, and calibration params.
+    Falls back to CAMERA_DEFAULTS if metadata is unreadable.
+    """
+    try:
+        from PIL import Image
+        img = Image.open(filepath)
+        w, h = img.size
+        exif = img.getexif()
+        focal_35mm = exif.get(41989, CAMERA_DEFAULTS["focal_length_35mm"]) if exif else CAMERA_DEFAULTS["focal_length_35mm"]
+    except Exception:
+        return CAMERA_DEFAULTS
+
+    xmp = extract_xmp_fields(filepath)
+    dewarp = xmp.get("DewarpData", "") if xmp else ""
+    calib = _parse_dewarp_data(dewarp)
+
+    if calib and len(calib) >= 9:
+        # DewarpData: fx, fy, cx_offset, cy_offset, k1, k2, p1, p2, k3
+        fx, fy = calib[0], calib[1]
+        cx = calib[2] + w / 2.0
+        cy = calib[3] + h / 2.0
+        k1, k2, p1, p2, k3 = calib[4], calib[5], calib[6], calib[7], calib[8]
+        params = [fx, fy, cx, cy, k1, k2, k3, p1, p2, 0]
+    else:
+        # Fallback: estimate from CalibratedFocalLength or hardcoded default
+        cal_fl = float(xmp.get("CalibratedFocalLength", w * 0.7)) if xmp else w * 0.7
+        params = [cal_fl, cal_fl, w / 2.0, h / 2.0, 0, 0, 0, 0, 0, 0]
+
+    return {
+        "width": w,
+        "height": h,
+        "focal_length_35mm": focal_35mm,
+        "fx": params[0],
+        "fy": params[1],
+        "cx": params[2],
+        "cy": params[3],
+        "projection_model": 0,
+        "params": params,
+    }
+
+
+def build_image_meta_data(files):
+    """Build the image_meta_data array from photo files with EXIF/XMP.
+
+    Reads camera calibration from the first photo's metadata (DewarpData,
+    image dimensions, focal length). Uses RTK GPS status for pos_sigma
+    when available.
+    """
+    if not files:
+        return [], None
+
+    # Detect camera from first photo
+    cam = _detect_camera_from_first_photo(files[0]["path"])
+    calib = cam.get("params", [cam["fx"], cam["fy"], cam["cx"], cam["cy"], 0, 0, 0, 0, 0, 0])
+
+    images = []
     for idx, f in enumerate(files, start=1):
         filepath = f["path"]
         gps = extract_gps_from_exif(filepath)
-        xmp = extract_xmp_gimbal(filepath)
+        xmp = extract_xmp_fields(filepath)
 
         if not gps:
             print(f"  WARN: No GPS for {f['filename']}, skipping")
             continue
 
+        # Gimbal orientation
         orientation = [1, 0, 0, 0, 1, 0, 0, 0, 1]  # identity fallback
         rel_alt = 0
         if xmp:
-            orientation = gimbal_to_orientation(xmp["pitch"], xmp["roll"], xmp["yaw"])
-            rel_alt = xmp["relative_altitude"]
+            pitch = float(xmp.get("GimbalPitchDegree", 0))
+            roll = float(xmp.get("GimbalRollDegree", 0))
+            yaw = float(xmp.get("GimbalYawDegree", 0))
+            orientation = gimbal_to_orientation(pitch, roll, yaw)
+            rel_alt = float(xmp.get("RelativeAltitude", 0))
+
+        # RTK GPS gives cm-level accuracy vs standard GPS meter-level
+        gps_status = xmp.get("GpsStatus", "") if xmp else ""
+        is_rtk = gps_status.upper() in ("RTK", "RTKFIXED", "RTK_FIXED")
+        pos_sigma = [0.03, 0.03, 0.06] if is_rtk else [2, 2, 5]
 
         images.append({
             "id": idx,
@@ -275,7 +270,7 @@ def build_image_meta_data(files):
                 "height": cam["height"],
                 "camera_id": 1,
                 "pos": gps,
-                "pos_sigma": [2, 2, 5],
+                "pos_sigma": pos_sigma,
                 "orientation": orientation,
                 "relative_altitude": rel_alt,
                 "focal_length_in_35mm": cam["focal_length_35mm"],
@@ -283,23 +278,22 @@ def build_image_meta_data(files):
             },
         })
 
-    return images
+    return images, cam
 
 
 def build_task_json(mission_name, files, output_dir):
     """Build the complete task.json for a mission."""
-    images = build_image_meta_data(files)
+    images, cam = build_image_meta_data(files)
     if not images:
         return None
 
-    # Determine UTM zone from first image GPS
+    # Determine UTM zone from first image GPS (with hemisphere)
     lon = images[0]["meta_data"]["pos"][0]
     lat = images[0]["meta_data"]["pos"][1]
-    zone, utm_epsg = get_utm_zone(lon)
+    zone, utm_epsg = get_utm_zone(lon, latitude=lat)
     hemisphere = "N" if lat >= 0 else "S"
 
-    cam = CAMERA_DEFAULTS
-    calib = [cam["fx"], cam["fy"], cam["cx"], cam["cy"], 0, 0, 0, 0, 0, 0]
+    calib = cam.get("params", [cam["fx"], cam["fy"], cam["cx"], cam["cy"], 0, 0, 0, 0, 0, 0])
 
     result_dir = os.path.join(output_dir, "result").replace("/", "\\")
 
