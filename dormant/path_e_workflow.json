@@ -1,5 +1,11 @@
 {
+  "updatedAt": "2026-07-27T12:46:34.000Z",
+  "createdAt": "2026-06-10T17:15:50.469Z",
+  "id": "sentinel-path-e-vegetation",
   "name": "Sentinel Path E — Vegetation Analysis",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -12,7 +18,10 @@
       "name": "Trigger — Mission Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "notes": "Entry point. n8n fires this when a mission is created or updated with vegetation_analysis=true. Payload: { mission_id: string }."
     },
     {
@@ -21,15 +30,27 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "select", "value": "id,vegetation_analysis,vegetation_status,package_type,processing_job_id" },
-            { "name": "id", "value": "=eq.{{ $json.body.mission_id }}" }
+            {
+              "name": "select",
+              "value": "id,vegetation_analysis,vegetation_status,package_type,processing_job_id"
+            },
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.body.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            }
           ]
         },
         "options": {}
@@ -38,19 +59,29 @@
       "name": "E0 — Check Mission",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "notes": "Fetch mission record. Verify vegetation_analysis=true and mission exists."
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "cond-veg-true",
               "leftValue": "={{ $json[0].vegetation_analysis }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -61,7 +92,10 @@
       "name": "E0 — vegetation_analysis = true?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -73,7 +107,10 @@
       "name": "Stop — Vegetation Not Enabled",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [680, 460]
+      "position": [
+        680,
+        460
+      ]
     },
     {
       "parameters": {
@@ -81,15 +118,27 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "select", "value": "id,output_path" },
-            { "name": "id", "value": "=eq.{{ $('Trigger — Mission Webhook').item.json.body.mission_id }}" }
+            {
+              "name": "select",
+              "value": "id,output_path"
+            },
+            {
+              "name": "id",
+              "value": "=eq.{{ $('Trigger — Mission Webhook').item.json.body.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            }
           ]
         },
         "options": {}
@@ -98,7 +147,10 @@
       "name": "E0 — Poll Ortho Path",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 300],
+      "position": [
+        900,
+        300
+      ],
       "notes": "Fetch output_path from drone_jobs. The ortho is expected at {output_path}\\mapping\\orthomosaic.tif (Path C output)."
     },
     {
@@ -110,7 +162,10 @@
       "name": "E0 — Wait 60s",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1120, 420],
+      "position": [
+        1120,
+        420
+      ],
       "notes": "Poll every 60 seconds for Path C ortho to appear. Max 30 attempts = 30 minutes timeout."
     },
     {
@@ -121,7 +176,10 @@
       "name": "E0 — Build Ortho Path",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
@@ -131,19 +189,29 @@
       "name": "E0 — Check Ortho Exists",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [1340, 300],
+      "position": [
+        1340,
+        300
+      ],
       "notes": "Windows batch command to check if ortho file exists on disk."
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "cond-ortho-found",
               "leftValue": "={{ $json.stdout.trim() }}",
               "rightValue": "FOUND",
-              "operator": { "type": "string", "operation": "equals" }
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -154,18 +222,28 @@
       "name": "E0 — Ortho Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1560, 300]
+      "position": [
+        1560,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "cond-timeout",
               "leftValue": "={{ $('E0 — Build Ortho Path').item.json.poll_attempt }}",
               "rightValue": 30,
-              "operator": { "type": "number", "operation": "gte" }
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
             }
           ],
           "combinator": "and"
@@ -176,7 +254,10 @@
       "name": "E0 — Max Attempts Reached?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1780, 420]
+      "position": [
+        1780,
+        420
+      ]
     },
     {
       "parameters": {
@@ -185,16 +266,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $('Trigger — Mission Webhook').item.json.body.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $('Trigger — Mission Webhook').item.json.body.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -206,7 +302,10 @@
       "name": "E0 — Set Failed (Timeout)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 540],
+      "position": [
+        2000,
+        540
+      ],
       "notes": "Path C ortho never appeared after 30 minutes. Mark vegetation_status=failed and halt."
     },
     {
@@ -216,16 +315,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $('Trigger — Mission Webhook').item.json.body.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $('Trigger — Mission Webhook').item.json.body.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -237,7 +351,10 @@
       "name": "Set Status — Detecting",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1780, 300],
+      "position": [
+        1780,
+        300
+      ],
       "notes": "Ortho confirmed. Patch vegetation_status='detecting' and insert 4 processing_steps rows."
     },
     {
@@ -247,10 +364,22 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "resolution=merge-duplicates" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
           ]
         },
         "sendBody": true,
@@ -262,18 +391,24 @@
       "name": "Insert Processing Steps",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 300],
+      "position": [
+        2000,
+        300
+      ],
       "notes": "Insert 4 processing_steps rows (all status=waiting) for E1-E4."
     },
     {
       "parameters": {
-        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\canopy_detection.py --mission-id {{ $('Trigger — Mission Webhook').item.json.body.mission_id }} --ortho-path \"{{ $('E0 — Build Ortho Path').item.json.ortho_path }}\" --processing-job-id {{ $('E0 — Check Mission').item.json[0].processing_job_id }}"
+        "command": "=\"{{ $env.VENV_PATH_E_PYTHON }}\" {{ $env.SENTINEL_SCRIPTS }}\\canopy_detection.py --mission-id {{ $('Trigger — Mission Webhook').item.json.body.mission_id }} --ortho-path \"{{ $('E0 — Build Ortho Path').item.json.ortho_path }}\" --processing-job-id {{ $('E0 — Check Mission').item.json[0].processing_job_id }}"
       },
       "id": "node-e1-canopy-detection",
       "name": "E1 — Canopy Detection",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [2220, 300],
+      "position": [
+        2220,
+        300
+      ],
       "notes": "Runs canopy_detection.py. Expects JSON stdout with {canopy_count, geopackage_path, geojson_path, processing_steps}. Exit 0=success, 1=fatal error, 2=partial."
     },
     {
@@ -284,18 +419,28 @@
       "name": "E1 — Parse Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2440, 300]
+      "position": [
+        2440,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "cond-no-canopies",
               "leftValue": "={{ $json.canopy_count }}",
               "rightValue": 0,
-              "operator": { "type": "number", "operation": "equals" }
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -306,7 +451,10 @@
       "name": "E1 — Zero Canopies?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2660, 300],
+      "position": [
+        2660,
+        300
+      ],
       "notes": "If canopy_count=0, skip E2/E3 and go directly to E4 with 'no vegetation detected' note."
     },
     {
@@ -316,16 +464,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $json.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -337,29 +500,38 @@
       "name": "Set Status — Classifying",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2880, 180],
+      "position": [
+        2880,
+        180
+      ],
       "notes": "E1 completed with canopies detected. Advance status to classifying before E2."
     },
     {
       "parameters": {
-        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\species_classification.py --mission-id {{ $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E1 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E1 — Parse Result').item.json.processing_job_id }} --max-canopies 200"
+        "command": "=\"{{ $env.VENV_PATH_E_PYTHON }}\" {{ $env.SENTINEL_SCRIPTS }}\\species_classification.py --mission-id {{ $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E1 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E1 — Parse Result').item.json.processing_job_id }} --max-canopies {{ $('E0 — Get Template Config').first().json[0]?.vegetation_config?.max_canopies || 200 }}{{ $('E0 — Get Template Config').first().json[0]?.vegetation_config?.skip_plantnet ? ' --skip-plantnet' : '' }} --cost-threshold {{ $('E0 — Get Template Config').first().json[0]?.vegetation_config?.cost_threshold_usd || 5.0 }}"
       },
       "id": "node-e2-species-classification",
       "name": "E2 — Species Classification",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [3100, 180],
+      "position": [
+        3100,
+        180
+      ],
       "notes": "Runs species_classification.py. --max-canopies from vegetation_config default (200). Exit 0=success, 1=fatal, 2=partial."
     },
     {
       "parameters": {
-        "jsCode": "// Parse E2 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E2 species_classification.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E2 species_classification.py exited with fatal error. Check logs at C:\\\\Users\\\\redle.SOULAAN\\\\Documents\\\\drone-pipeline\\\\logs\\\\species_classification.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E1 — Parse Result').item.json),\n      e2_result: result,\n      e2_partial: exitCode === 2\n    }\n  }\n];"
+        "jsCode": "// Parse E2 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E2 species_classification.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E2 species_classification.py exited with fatal error. Check logs at E:\\\\Sentinel\\\\logs\\\\species_classification.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E1 — Parse Result').item.json),\n      e2_result: result,\n      e2_partial: exitCode === 2\n    }\n  }\n];"
       },
       "id": "node-e2-parse-result",
       "name": "E2 — Parse Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3320, 180]
+      "position": [
+        3320,
+        180
+      ]
     },
     {
       "parameters": {
@@ -368,16 +540,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $json.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -389,29 +576,38 @@
       "name": "Set Status — Assessing",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3540, 180],
+      "position": [
+        3540,
+        180
+      ],
       "notes": "E2 completed. Advance status to assessing before E3."
     },
     {
       "parameters": {
-        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\health_assessment.py --mission-id {{ $('E2 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E2 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E2 — Parse Result').item.json.processing_job_id }} --vision-sample-pct 0.3"
+        "command": "=\"{{ $env.VENV_PATH_E_PYTHON }}\" {{ $env.SENTINEL_SCRIPTS }}\\health_assessment.py --mission-id {{ $('E2 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E2 — Parse Result').item.json.ortho_path }}\" --processing-job-id {{ $('E2 — Parse Result').item.json.processing_job_id }} --vision-sample-pct {{ $('E0 — Get Template Config').first().json[0]?.vegetation_config?.vision_sample_pct || 0.3 }}{{ $('E0 — Get Template Config').first().json[0]?.vegetation_config?.skip_vision ? ' --skip-vision' : '' }}"
       },
       "id": "node-e3-health-assessment",
       "name": "E3 — Health Assessment",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [3760, 180],
+      "position": [
+        3760,
+        180
+      ],
       "notes": "Runs health_assessment.py. --vision-sample-pct from vegetation_config default (0.3). Exit 0=success, 1=fatal, 2=partial."
     },
     {
       "parameters": {
-        "jsCode": "// Parse E3 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E3 health_assessment.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E3 health_assessment.py exited with fatal error. Check logs at C:\\\\Users\\\\redle.SOULAAN\\\\Documents\\\\drone-pipeline\\\\logs\\\\health_assessment.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E2 — Parse Result').item.json),\n      e3_result: result,\n      e3_partial: exitCode === 2\n    }\n  }\n];"
+        "jsCode": "// Parse E3 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E3 health_assessment.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E3 health_assessment.py exited with fatal error. Check logs at E:\\\\Sentinel\\\\logs\\\\health_assessment.log');\n}\n\nreturn [\n  {\n    json: {\n      ...($('E2 — Parse Result').item.json),\n      e3_result: result,\n      e3_partial: exitCode === 2\n    }\n  }\n];"
       },
       "id": "node-e3-parse-result",
       "name": "E3 — Parse Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3980, 180]
+      "position": [
+        3980,
+        180
+      ]
     },
     {
       "parameters": {
@@ -420,16 +616,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $json.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -441,29 +652,38 @@
       "name": "Set Status — Generating Report",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4200, 240],
+      "position": [
+        4200,
+        240
+      ],
       "notes": "E3 completed (or zero-canopy bypass). Advance status to generating_report before E4."
     },
     {
       "parameters": {
-        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\vegetation_report.py --mission-id {{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E3 — Parse Result').item.json.ortho_path || $('E1 — Parse Result').item.json.ortho_path }}\" --tier standard --output-dir \"E:\\output\\{{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('E3 — Parse Result').item.json.processing_job_id || $('E1 — Parse Result').item.json.processing_job_id }}"
+        "command": "=\"{{ $env.VENV_PATH_E_PYTHON }}\" {{ $env.SENTINEL_SCRIPTS }}\\vegetation_report.py --mission-id {{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }} --ortho-path \"{{ $('E3 — Parse Result').item.json.ortho_path || $('E1 — Parse Result').item.json.ortho_path }}\" --tier {{ $('E0 — Get Template Config').first().json[0]?.vegetation_config?.tier || 'standard' }} --output-dir \"E:\\output\\{{ $('E3 — Parse Result').item.json.mission_id || $('E1 — Parse Result').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('E3 — Parse Result').item.json.processing_job_id || $('E1 — Parse Result').item.json.processing_job_id }}"
       },
       "id": "node-e4-report-generation",
       "name": "E4 — Report Generation",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [4420, 240],
+      "position": [
+        4420,
+        240
+      ],
       "notes": "Runs vegetation_report.py. --tier from mission config (standard/extended/comprehensive). Receives both zero-canopy path (from E1) and normal path (from E3). Exit 0=success, 1=fatal, 2=partial."
     },
     {
       "parameters": {
-        "jsCode": "// Parse E4 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E4 vegetation_report.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E4 vegetation_report.py exited with fatal error. Check logs at C:\\\\Users\\\\redle.SOULAAN\\\\Documents\\\\drone-pipeline\\\\logs\\\\vegetation_report.log');\n}\n\n// Try to get mission_id from multiple upstream nodes (zero-canopy vs normal path)\nconst missionId = result.mission_id\n  || ($('E3 — Parse Result').first()?.json?.mission_id)\n  || ($('E1 — Parse Result').first()?.json?.mission_id)\n  || '';\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      pdf_path: result.pdf_report_path || '',\n      species_map_path: result.species_map_path || '',\n      health_map_path: result.health_map_path || '',\n      geojson_path: result.geojson_path || '',\n      interactive_map_path: result.interactive_map_path || '',\n      e4_result: result,\n      e4_partial: exitCode === 2\n    }\n  }\n];"
+        "jsCode": "// Parse E4 stdout JSON\nconst stdout = $input.item.json.stdout || '{}';\nlet result;\ntry {\n  result = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('E4 vegetation_report.py stdout is not valid JSON: ' + stdout.substring(0, 200));\n}\n\nconst exitCode = $input.item.json.exitCode || 0;\nif (exitCode === 1) {\n  throw new Error('E4 vegetation_report.py exited with fatal error. Check logs at E:\\\\Sentinel\\\\logs\\\\vegetation_report.log');\n}\n\n// Try to get mission_id from multiple upstream nodes (zero-canopy vs normal path)\nconst missionId = result.mission_id\n  || ($('E3 — Parse Result').first()?.json?.mission_id)\n  || ($('E1 — Parse Result').first()?.json?.mission_id)\n  || '';\n\nreturn [\n  {\n    json: {\n      mission_id: missionId,\n      pdf_path: result.pdf_report_path || '',\n      species_map_path: result.species_map_path || '',\n      health_map_path: result.health_map_path || '',\n      geojson_path: result.geojson_path || '',\n      interactive_map_path: result.interactive_map_path || '',\n      e4_result: result,\n      e4_partial: exitCode === 2\n    }\n  }\n];"
       },
       "id": "node-e4-parse-result",
       "name": "E4 — Parse Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4640, 240]
+      "position": [
+        4640,
+        240
+      ]
     },
     {
       "parameters": {
@@ -472,16 +692,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $json.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -493,7 +728,10 @@
       "name": "Set Status — Review",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4860, 240],
+      "position": [
+        4860,
+        240
+      ],
       "notes": "E4 complete. Patch vegetation_status='review' before entering operator review gate."
     },
     {
@@ -509,7 +747,10 @@
       "name": "Review Gate — Webhook Wait",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [5080, 240],
+      "position": [
+        5080,
+        240
+      ],
       "notes": "REVIEW GATE: Workflow pauses here waiting for operator POST to /sentinel-vegetation-resume.\nPayload: { mission_id, decisions: [{ detection_id, action: 'approve'|'exclude'|'flag' }] }\nTimeout: 7 days (configured in n8n webhook settings). After timeout: auto-approve all."
     },
     {
@@ -520,19 +761,29 @@
       "name": "Process Decisions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5300, 240],
+      "position": [
+        5300,
+        240
+      ],
       "notes": "Parse operator review decisions. Separate excluded/flagged/approved detection IDs."
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "cond-has-exclusions",
               "leftValue": "={{ $json.has_exclusions }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -543,7 +794,10 @@
       "name": "Any Exclusions?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [5520, 240],
+      "position": [
+        5520,
+        240
+      ],
       "notes": "If operator excluded any detections, re-run E4 to regenerate report without those canopies."
     },
     {
@@ -553,16 +807,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=in.({{ $json.excluded_ids.join(',') }})" }
+            {
+              "name": "id",
+              "value": "=in.({{ $json.excluded_ids.join(',') }})"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -574,7 +843,10 @@
       "name": "Apply Exclusions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [5740, 180],
+      "position": [
+        5740,
+        180
+      ],
       "notes": "Mark excluded detections in vegetation_detections table before re-running E4."
     },
     {
@@ -584,16 +856,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=in.({{ $json.flagged_ids.join(',') }})" }
+            {
+              "name": "id",
+              "value": "=in.({{ $json.flagged_ids.join(',') }})"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -605,18 +892,24 @@
       "name": "Apply Flags",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [5740, 300],
+      "position": [
+        5740,
+        300
+      ],
       "notes": "Mark flagged detections in vegetation_detections table."
     },
     {
       "parameters": {
-        "command": "=C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\.venv-path-e\\Scripts\\python.exe C:\\Users\\redle.SOULAAN\\Documents\\drone-pipeline\\vegetation_report.py --mission-id {{ $('Process Decisions').item.json.mission_id }} --ortho-path \"{{ $('Process Decisions').item.json.ortho_path }}\" --tier standard --output-dir \"E:\\output\\{{ $('Process Decisions').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('Process Decisions').item.json.processing_job_id }}"
+        "command": "=\"{{ $env.VENV_PATH_E_PYTHON }}\" {{ $env.SENTINEL_SCRIPTS }}\\vegetation_report.py --mission-id {{ $('Process Decisions').item.json.mission_id }} --ortho-path \"{{ $('Process Decisions').item.json.ortho_path }}\" --tier {{ $('Review — Get Template Config').first().json[0]?.vegetation_config?.tier || 'standard' }} --output-dir \"E:\\output\\{{ $('Process Decisions').item.json.mission_id }}\\vegetation\" --processing-job-id {{ $('Process Decisions').item.json.processing_job_id }}"
       },
       "id": "node-e4-regenerate",
       "name": "E4 — Regenerate Report",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [5960, 180],
+      "position": [
+        5960,
+        180
+      ],
       "notes": "Re-run E4 with exclusions applied in DB. vegetation_report.py will filter excluded=true rows when building report."
     },
     {
@@ -626,16 +919,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $('Process Decisions').item.json.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $('Process Decisions').item.json.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -647,7 +955,10 @@
       "name": "Set Status — Complete",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [6180, 240],
+      "position": [
+        6180,
+        240
+      ],
       "notes": "Final step. Patch vegetation_status='complete'. Delivery packaging can now include vegetation subfolder."
     },
     {
@@ -660,7 +971,10 @@
       "name": "Respond to Review Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [6400, 240],
+      "position": [
+        6400,
+        240
+      ],
       "notes": "Send 200 response back to the POST /sentinel-vegetation-resume caller."
     },
     {
@@ -670,16 +984,31 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{ $json.mission_id }}" }
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.mission_id }}"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -691,169 +1020,482 @@
       "name": "Error Handler — Set Failed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3100, 480],
+      "position": [
+        3100,
+        480
+      ],
       "notes": "Global error handler. Any E script exit code 1 routes here. Sets vegetation_status=failed."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_templates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "vegetation_config"
+            },
+            {
+              "name": "path_code",
+              "value": "eq.E"
+            },
+            {
+              "name": "active",
+              "value": "eq.true"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        480
+      ],
+      "id": "e0-get-template-config",
+      "name": "E0 — Get Template Config",
+      "notes": "Fetches vegetation_config from the active Path E processing template. E2/E3/E4 read max_canopies, skip_plantnet, vision_sample_pct, skip_vision, tier from here with hardcoded fallbacks (200 / 0.3 / standard)."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/processing_templates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "vegetation_config"
+            },
+            {
+              "name": "path_code",
+              "value": "eq.E"
+            },
+            {
+              "name": "active",
+              "value": "eq.true"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5300,
+        420
+      ],
+      "id": "review-get-template-config",
+      "name": "Review — Get Template Config",
+      "notes": "Review Gate starts a fresh execution, so the regenerate branch fetches vegetation_config again here. E4 Regenerate reads tier from this node."
     }
   ],
   "connections": {
     "Trigger — Mission Webhook": {
       "main": [
-        [{ "node": "E0 — Check Mission", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E0 — Check Mission",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E0 — Check Mission": {
       "main": [
-        [{ "node": "E0 — vegetation_analysis = true?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E0 — vegetation_analysis = true?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "E0 — Get Template Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E0 — vegetation_analysis = true?": {
       "main": [
-        [{ "node": "E0 — Poll Ortho Path", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "E0 — Poll Ortho Path",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "E0 — Poll Ortho Path": {
       "main": [
-        [{ "node": "E0 — Build Ortho Path", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E0 — Build Ortho Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E0 — Build Ortho Path": {
       "main": [
-        [{ "node": "E0 — Check Ortho Exists", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E0 — Check Ortho Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E0 — Check Ortho Exists": {
       "main": [
-        [{ "node": "E0 — Ortho Found?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E0 — Ortho Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E0 — Ortho Found?": {
       "main": [
-        [{ "node": "Set Status — Detecting", "type": "main", "index": 0 }],
-        [{ "node": "E0 — Max Attempts Reached?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Status — Detecting",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "E0 — Max Attempts Reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E0 — Max Attempts Reached?": {
       "main": [
-        [{ "node": "E0 — Set Failed (Timeout)", "type": "main", "index": 0 }],
-        [{ "node": "E0 — Wait 60s", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E0 — Set Failed (Timeout)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "E0 — Wait 60s",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E0 — Wait 60s": {
       "main": [
-        [{ "node": "E0 — Poll Ortho Path", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E0 — Poll Ortho Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Status — Detecting": {
       "main": [
-        [{ "node": "Insert Processing Steps", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Insert Processing Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Insert Processing Steps": {
       "main": [
-        [{ "node": "E1 — Canopy Detection", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E1 — Canopy Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E1 — Canopy Detection": {
       "main": [
-        [{ "node": "E1 — Parse Result", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E1 — Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E1 — Parse Result": {
       "main": [
-        [{ "node": "E1 — Zero Canopies?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E1 — Zero Canopies?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E1 — Zero Canopies?": {
       "main": [
-        [{ "node": "Set Status — Generating Report", "type": "main", "index": 0 }],
-        [{ "node": "Set Status — Classifying", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Status — Generating Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Status — Classifying",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Status — Classifying": {
       "main": [
-        [{ "node": "E2 — Species Classification", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E2 — Species Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E2 — Species Classification": {
       "main": [
-        [{ "node": "E2 — Parse Result", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E2 — Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E2 — Parse Result": {
       "main": [
-        [{ "node": "Set Status — Assessing", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Status — Assessing",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Status — Assessing": {
       "main": [
-        [{ "node": "E3 — Health Assessment", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E3 — Health Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E3 — Health Assessment": {
       "main": [
-        [{ "node": "E3 — Parse Result", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E3 — Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E3 — Parse Result": {
       "main": [
-        [{ "node": "Set Status — Generating Report", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Status — Generating Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Status — Generating Report": {
       "main": [
-        [{ "node": "E4 — Report Generation", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E4 — Report Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E4 — Report Generation": {
       "main": [
-        [{ "node": "E4 — Parse Result", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E4 — Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E4 — Parse Result": {
       "main": [
-        [{ "node": "Set Status — Review", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Status — Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Status — Review": {
       "main": [
-        [{ "node": "Review Gate — Webhook Wait", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Review Gate — Webhook Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Review Gate — Webhook Wait": {
       "main": [
-        [{ "node": "Process Decisions", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Process Decisions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Review — Get Template Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Process Decisions": {
       "main": [
-        [{ "node": "Any Exclusions?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Any Exclusions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Any Exclusions?": {
       "main": [
-        [{ "node": "Apply Exclusions", "type": "main", "index": 0 }],
-        [{ "node": "Set Status — Complete", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Apply Exclusions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Status — Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Apply Exclusions": {
       "main": [
-        [{ "node": "Apply Flags", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Apply Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Apply Flags": {
       "main": [
-        [{ "node": "E4 — Regenerate Report", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "E4 — Regenerate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "E4 — Regenerate Report": {
       "main": [
-        [{ "node": "Set Status — Complete", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Status — Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Status — Complete": {
       "main": [
-        [{ "node": "Respond to Review Webhook", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Respond to Review Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -865,15 +1507,34 @@
     "timezone": "America/New_York"
   },
   "staticData": null,
-  "tags": ["sentinel", "vegetation", "path-e"],
-  "triggerCount": 0,
-  "updatedAt": "2026-02-25T00:00:00.000Z",
-  "versionId": "1",
-  "_meta": {
-    "description": "Path E Vegetation Analysis workflow for Sentinel Aerial Inspections. Triggers on mission.vegetation_analysis=true, waits for Path C ortho, runs E1→E2→E3→E4 sequence, pauses at operator review gate, applies decisions, and marks mission complete.",
-    "n8n_version_required": "1.x",
-    "env_vars_required": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
-    "webhook_paths": ["sentinel-vegetation-trigger", "sentinel-vegetation-resume"],
-    "node_sequence": "E0 (Check Ortho) → E1 (Canopy Detection) → E2 (Species Classification) → E3 (Health Assessment) → E4 (Report Generation) → Review Gate → Process Decisions → Complete"
+  "meta": null,
+  "pinData": null,
+  "versionId": "dd3a8be5-a82f-44a4-b17d-2c17b63c3a60",
+  "activeVersionId": "dd3a8be5-a82f-44a4-b17d-2c17b63c3a60",
+  "versionCounter": 27,
+  "triggerCount": 2,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-10T17:15:50.469Z",
+      "createdAt": "2026-06-10T17:15:50.469Z",
+      "role": "workflow:owner",
+      "workflowId": "sentinel-path-e-vegetation",
+      "projectId": "bgarJGdaw5Bn9JiH",
+      "project": {
+        "updatedAt": "2026-07-04T17:58:05.195Z",
+        "createdAt": "2026-06-08T21:27:49.477Z",
+        "id": "bgarJGdaw5Bn9JiH",
+        "name": "Adam Pierce <dradamopierce@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "0afc8e97-c789-4a18-9387-be81c4b67d9d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
   }
 }
