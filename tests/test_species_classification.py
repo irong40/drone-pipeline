@@ -489,7 +489,11 @@ def test_plantnet_skip_flag_no_plantnet_calls():
         }
     ]
 
-    with patch.object(sc, "fetch_detections", return_value=detections), \
+    with patch.object(sc, "VISION_BACKEND", "openai"), \
+         patch.object(sc, "OPENAI_API_KEY", "fake-key"), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "_save_paid_calls"), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
          patch.object(sc, "crop_canopy", return_value=MagicMock()), \
          patch.object(sc, "classify_openai", return_value=_fake_openai_result("Oak", "Quercus sp.", 0.7)), \
          patch.object(sc, "classify_plantnet") as mock_plantnet, \
@@ -623,13 +627,8 @@ def test_reconcile_genus_extracted_from_scientific_name():
 
 # ─── COST ESTIMATION TESTS ───────────────────────────────────────────────────
 
-def test_cost_estimation_abort():
-    """run_classification aborts when estimated cost exceeds threshold."""
-    import species_classification as sc
-    mock_log = logging.getLogger("test")
-
-    # 300 canopies * $0.02 = $6.00 > $5.00 threshold
-    detections = [
+def _make_cost_detections(count):
+    return [
         {
             "id": f"det-{i}",
             "detection_index": i,
@@ -637,10 +636,19 @@ def test_cost_estimation_abort():
             "canopy_area_sqm": float(i + 1),
             "species_tag": None,
         }
-        for i in range(50)
+        for i in range(count)
     ]
 
-    with patch.object(sc, "fetch_detections", return_value=detections), \
+
+def test_cost_estimation_abort():
+    """Pre-check aborts when OpenAI is the backend and estimate exceeds threshold."""
+    import species_classification as sc
+    mock_log = logging.getLogger("test")
+
+    detections = _make_cost_detections(50)
+
+    with patch.object(sc, "VISION_BACKEND", "openai"), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
          patch.object(sc, "classify_openai") as mock_openai, \
          patch.object(sc, "rasterio") as mock_rasterio:
         mock_rasterio.open.return_value = _make_mock_dataset()
@@ -662,6 +670,359 @@ def test_cost_estimation_abort():
     mock_openai.assert_not_called()
 
 
+def test_cost_gate_worst_case_when_ollama_unreachable():
+    """Ollama backend + unreachable Ollama gates on worst-case OpenAI cost."""
+    import species_classification as sc
+    mock_log = logging.getLogger("test")
+
+    detections = _make_cost_detections(50)
+
+    with patch.object(sc, "VISION_BACKEND", "ollama"), \
+         patch.object(sc, "_ollama_reachable", return_value=False), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
+         patch.object(sc, "classify_vision") as mock_vision, \
+         patch.object(sc, "rasterio") as mock_rasterio:
+        mock_rasterio.open.return_value = _make_mock_dataset()
+
+        result = sc.run_classification(
+            mission_id="mission-001",
+            ortho_path="fake.tif",
+            max_canopies=200,
+            skip_plantnet=True,
+            cost_threshold=0.50,  # 50 fallback calls * $0.02 = $1.00 > $0.50
+            force=False,
+            completed_keys=set(),
+            mission_dir="/tmp",
+            log=mock_log,
+        )
+
+    assert result.get("error") == "cost_threshold_exceeded"
+    mock_vision.assert_not_called()
+
+
+def test_cost_gate_zero_when_ollama_healthy():
+    """Ollama backend + healthy Ollama estimates $0 and does not abort."""
+    import species_classification as sc
+    mock_log = logging.getLogger("test")
+
+    detections = _make_cost_detections(50)
+    ollama_result = _fake_openai_result("Loblolly Pine", "Pinus taeda", 0.8)
+    ollama_result["vision_backend"] = "ollama"
+
+    with patch.object(sc, "VISION_BACKEND", "ollama"), \
+         patch.object(sc, "_ollama_reachable", return_value=True), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "_save_paid_calls"), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
+         patch.object(sc, "crop_canopy", return_value=MagicMock()), \
+         patch.object(sc, "classify_vision", return_value=ollama_result), \
+         patch.object(sc, "update_classification_batch", return_value=True), \
+         patch.object(sc, "save_checkpoint"), \
+         patch.object(sc, "rasterio") as mock_rasterio, \
+         patch("species_classification.time") as mock_time:
+        mock_rasterio.open.return_value = _make_mock_dataset()
+        mock_time.sleep = MagicMock()
+
+        result = sc.run_classification(
+            mission_id="mission-001",
+            ortho_path="fake.tif",
+            max_canopies=200,
+            skip_plantnet=True,
+            cost_threshold=0.50,
+            force=False,
+            completed_keys=set(),
+            mission_dir="/tmp",
+            log=mock_log,
+        )
+
+    assert result.get("error") is None
+    assert result["classified_count"] == 50
+    # Ollama served every canopy — no paid calls, no cost
+    assert result["api_calls_openai"] == 0
+    assert result["total_api_cost_estimate"] == 0.0
+
+
+def test_cost_runtime_spend_guard_aborts_on_openai_fallback():
+    """Healthy-Ollama run aborts mid-loop when OpenAI fallback spend breaches threshold."""
+    import species_classification as sc
+    mock_log = logging.getLogger("test")
+
+    detections = _make_cost_detections(10)
+    openai_result = _fake_openai_result("Red Maple", "Acer rubrum", 0.7)
+    openai_result["vision_backend"] = "openai"
+    openai_result["openai_requests"] = 1
+
+    with patch.object(sc, "VISION_BACKEND", "ollama"), \
+         patch.object(sc, "_ollama_reachable", return_value=True), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "_save_paid_calls"), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
+         patch.object(sc, "crop_canopy", return_value=MagicMock()), \
+         patch.object(sc, "classify_vision", return_value=openai_result) as mock_vision, \
+         patch.object(sc, "update_classification_batch", return_value=True) as mock_update, \
+         patch.object(sc, "save_checkpoint"), \
+         patch.object(sc, "rasterio") as mock_rasterio, \
+         patch("species_classification.time") as mock_time:
+        mock_rasterio.open.return_value = _make_mock_dataset()
+        mock_time.sleep = MagicMock()
+
+        result = sc.run_classification(
+            mission_id="mission-001",
+            ortho_path="fake.tif",
+            max_canopies=200,
+            skip_plantnet=True,
+            cost_threshold=0.05,  # 3rd fallback call: 3 * $0.02 = $0.06 > $0.05
+            force=False,
+            completed_keys=set(),
+            mission_dir="/tmp",
+            log=mock_log,
+        )
+
+    assert result.get("error") == "cost_threshold_exceeded"
+    # The call that crossed the line is kept; the remaining 7 never ran
+    assert mock_vision.call_count == 3
+    assert result["classified_count"] == 3
+    assert result["api_calls_openai"] == 3
+    assert result["total_api_cost_estimate"] == pytest.approx(0.06)
+    # Partial rows were still batch-updated for checkpoint-resume
+    mock_update.assert_called_once()
+    assert len(mock_update.call_args[0][0]) == 3
+
+
+def test_cost_vision_backend_annotation_real_classify_vision():
+    """REAL classify_vision annotates vision_backend for all three routes.
+
+    Guards the linchpin of the cost fix: if the annotation is dropped, the
+    spend guard silently goes inert (the original bug).
+    """
+    import species_classification as sc
+    mock_log = logging.getLogger("test")
+
+    ollama_hit = _fake_openai_result("Loblolly Pine", "Pinus taeda", 0.8)
+    openai_hit = _fake_openai_result("Red Maple", "Acer rubrum", 0.7)
+    openai_hit["openai_requests"] = 1
+
+    # Route 1: Ollama answers → tagged "ollama"
+    with patch.object(sc, "VISION_BACKEND", "ollama"), \
+         patch.object(sc, "classify_ollama", return_value=dict(ollama_hit)):
+        result = sc.classify_vision(MagicMock(), mock_log)
+    assert result["vision_backend"] == "ollama"
+
+    # Route 2: Ollama fails → OpenAI fallback → tagged "openai"
+    with patch.object(sc, "VISION_BACKEND", "ollama"), \
+         patch.object(sc, "classify_ollama", return_value=None), \
+         patch.object(sc, "OPENAI_API_KEY", "fake-key"), \
+         patch.object(sc, "classify_openai", return_value=dict(openai_hit)):
+        result = sc.classify_vision(MagicMock(), mock_log)
+    assert result["vision_backend"] == "openai"
+
+    # Route 3: Ollama fails, no OpenAI key → tagged "none", zero paid requests
+    with patch.object(sc, "VISION_BACKEND", "ollama"), \
+         patch.object(sc, "classify_ollama", return_value=None), \
+         patch.object(sc, "OPENAI_API_KEY", ""):
+        result = sc.classify_vision(MagicMock(), mock_log)
+    assert result["vision_backend"] == "none"
+    assert result["openai_requests"] == 0
+
+    # Route 4: OpenAI-primary backend → tagged "openai"
+    with patch.object(sc, "VISION_BACKEND", "openai"), \
+         patch.object(sc, "OPENAI_API_KEY", "fake-key"), \
+         patch.object(sc, "classify_openai", return_value=dict(openai_hit)):
+        result = sc.classify_vision(MagicMock(), mock_log)
+    assert result["vision_backend"] == "openai"
+
+
+def _make_fake_openai_module(responses):
+    """Fake `openai` module whose client returns each response text in order."""
+    calls = []
+
+    class _FakeClient:
+        def __init__(self, api_key):
+            class _Completions:
+                def create(_self, **kwargs):
+                    calls.append(1)
+                    text = responses[min(len(calls) - 1, len(responses) - 1)]
+                    msg = types.SimpleNamespace(content=text)
+                    choice = types.SimpleNamespace(message=msg)
+                    return types.SimpleNamespace(choices=[choice])
+
+            self.chat = types.SimpleNamespace(completions=_Completions())
+
+    mod = types.ModuleType("openai")
+    mod.OpenAI = _FakeClient
+    return mod, calls
+
+
+def test_cost_openai_retry_counts_two_billed_requests():
+    """classify_openai reports openai_requests=2 when the parse-failure retry fires."""
+    import species_classification as sc
+
+    fake_mod, calls = _make_fake_openai_module(["not json at all"])
+    with patch.dict(sys.modules, {"openai": fake_mod}):
+        result = sc.classify_openai(MagicMock(), "fake-key")
+
+    assert len(calls) == 2  # retry really made a second billed call
+    assert result["openai_requests"] == 2
+    assert result["species_common"] == "unidentified"
+
+
+def test_cost_openai_clean_parse_counts_one_request():
+    """classify_openai reports openai_requests=1 on a clean first response."""
+    import species_classification as sc
+
+    good = json.dumps({
+        "species_common": "Oak",
+        "species_scientific": "Quercus sp.",
+        "vegetation_type": "tree",
+        "confidence": 0.8,
+    })
+    fake_mod, calls = _make_fake_openai_module([good])
+    with patch.dict(sys.modules, {"openai": fake_mod}):
+        result = sc.classify_openai(MagicMock(), "fake-key")
+
+    assert len(calls) == 1
+    assert result["openai_requests"] == 1
+    assert result["species_common"] == "Oak"
+
+
+def _run_guard_scenario(sc, detections, cost_threshold, prior_paid_calls=0):
+    """Drive run_classification with every canopy falling back to paid OpenAI."""
+    mock_log = logging.getLogger("test")
+    openai_result = _fake_openai_result("Red Maple", "Acer rubrum", 0.7)
+    openai_result["vision_backend"] = "openai"
+    openai_result["openai_requests"] = 1
+
+    with patch.object(sc, "VISION_BACKEND", "ollama"), \
+         patch.object(sc, "_ollama_reachable", return_value=True), \
+         patch.object(sc, "_load_paid_calls", return_value=prior_paid_calls), \
+         patch.object(sc, "_save_paid_calls") as mock_save, \
+         patch.object(sc, "fetch_detections", return_value=detections), \
+         patch.object(sc, "crop_canopy", return_value=MagicMock()), \
+         patch.object(sc, "classify_vision", return_value=openai_result), \
+         patch.object(sc, "update_classification_batch", return_value=True), \
+         patch.object(sc, "save_checkpoint"), \
+         patch.object(sc, "rasterio") as mock_rasterio, \
+         patch("species_classification.time") as mock_time:
+        mock_rasterio.open.return_value = _make_mock_dataset()
+        mock_time.sleep = MagicMock()
+
+        result = sc.run_classification(
+            mission_id="mission-001",
+            ortho_path="fake.tif",
+            max_canopies=500,
+            skip_plantnet=True,
+            cost_threshold=cost_threshold,
+            force=False,
+            completed_keys=set(),
+            mission_dir="/tmp",
+            log=mock_log,
+        )
+    return result, mock_save
+
+
+def test_cost_guard_exact_budget_does_not_abort():
+    """Spend == threshold must NOT abort (strict > semantics)."""
+    import species_classification as sc
+
+    # 2 paid calls * $0.02 = $0.04 == threshold — allowed
+    result, _ = _run_guard_scenario(sc, _make_cost_detections(2), cost_threshold=0.04)
+    assert result.get("error") is None
+    assert result["classified_count"] == 2
+
+
+def test_cost_guard_rounding_at_float_dusty_threshold():
+    """35 * 0.02 = 0.7000000000000001 in raw float math — rounded guard must not trip at $0.70."""
+    import species_classification as sc
+
+    result, _ = _run_guard_scenario(sc, _make_cost_detections(35), cost_threshold=0.70)
+    assert result.get("error") is None
+    assert result["classified_count"] == 35
+
+
+def test_cost_cumulative_ledger_blocks_rerun_overspend():
+    """Prior runs' paid calls count against the threshold — a rerun cannot spend a fresh budget."""
+    import species_classification as sc
+
+    # Prior runs already spent $5.00 (250 calls); first paid call here = $5.02 > $5.00
+    result, mock_save = _run_guard_scenario(
+        sc, _make_cost_detections(10), cost_threshold=5.0, prior_paid_calls=250
+    )
+    assert result.get("error") == "cost_threshold_exceeded"
+    assert result["classified_count"] == 1
+    # Ledger persisted the cumulative count (250 prior + 1 this run)
+    mock_save.assert_called_with("/tmp", 251, logging.getLogger("test"))
+
+
+def test_cost_breach_on_final_canopy_is_not_an_error():
+    """If the threshold-crossing call was the LAST canopy, the run completed — no error."""
+    import species_classification as sc
+
+    # 1 canopy, $0.02 spend > $0.01 threshold, but nothing was left undone
+    result, _ = _run_guard_scenario(sc, _make_cost_detections(1), cost_threshold=0.01)
+    assert result.get("error") is None
+    assert result["classified_count"] == 1
+
+
+def test_cost_precheck_equality_proceeds():
+    """Pre-check estimate == threshold proceeds (250 * $0.02 == $5.00)."""
+    import species_classification as sc
+    mock_log = logging.getLogger("test")
+
+    with patch.object(sc, "VISION_BACKEND", "openai"), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "fetch_detections", return_value=_make_cost_detections(250)), \
+         patch.object(sc, "crop_canopy", return_value=None), \
+         patch.object(sc, "update_classification_batch", return_value=True), \
+         patch.object(sc, "rasterio") as mock_rasterio:
+        mock_rasterio.open.return_value = _make_mock_dataset()
+
+        result = sc.run_classification(
+            mission_id="mission-001",
+            ortho_path="fake.tif",
+            max_canopies=500,
+            skip_plantnet=True,
+            cost_threshold=5.0,
+            force=False,
+            completed_keys=set(),
+            mission_dir="/tmp",
+            log=mock_log,
+        )
+
+    assert result.get("error") is None  # gate did not fire at exact equality
+
+
+def test_cost_estimate_api_cost_three_arg_contract():
+    """estimate_api_cost: $0 only for healthy Ollama; worst case otherwise."""
+    import species_classification as sc
+
+    with patch.object(sc, "VISION_BACKEND", "ollama"):
+        assert sc.estimate_api_cost(100, True, ollama_available=True) == 0.0
+        assert sc.estimate_api_cost(100, True, ollama_available=False) == 2.0
+        assert sc.estimate_api_cost(100, True) == 2.0  # default fails safe
+    with patch.object(sc, "VISION_BACKEND", "openai"):
+        assert sc.estimate_api_cost(100, True, ollama_available=True) == 2.0
+
+
+def test_cost_ollama_reachable_false_on_probe_exception():
+    """_ollama_reachable returns False (never raises) when the probe blows up."""
+    import species_classification as sc
+
+    bad = types.ModuleType("ollama_vision")
+
+    def _boom():
+        raise RuntimeError("probe exploded")
+
+    bad.check_ollama = _boom
+    with patch.dict(sys.modules, {"ollama_vision": bad}):
+        assert sc._ollama_reachable() is False
+
+    good = types.ModuleType("ollama_vision")
+    good.check_ollama = lambda: True
+    with patch.dict(sys.modules, {"ollama_vision": good}):
+        assert sc._ollama_reachable() is True
+
+
 def test_cost_estimation_allows_below_threshold():
     """run_classification proceeds when estimated cost is within threshold."""
     import species_classification as sc
@@ -678,7 +1039,11 @@ def test_cost_estimation_allows_below_threshold():
         }
     ]
 
-    with patch.object(sc, "fetch_detections", return_value=detections), \
+    with patch.object(sc, "VISION_BACKEND", "openai"), \
+         patch.object(sc, "OPENAI_API_KEY", "fake-key"), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "_save_paid_calls"), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
          patch.object(sc, "crop_canopy", return_value=MagicMock()), \
          patch.object(sc, "classify_openai",
                       return_value=_fake_openai_result("Oak", "Quercus sp.", 0.7)), \
@@ -733,7 +1098,10 @@ def test_max_canopies_cap():
     def fake_classify(img, key):
         return _fake_openai_result("Oak", "Quercus sp.", 0.7)
 
-    with patch.object(sc, "fetch_detections", return_value=detections), \
+    with patch.object(sc, "VISION_BACKEND", "openai"), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "_save_paid_calls"), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
          patch.object(sc, "crop_canopy", side_effect=fake_crop), \
          patch.object(sc, "classify_openai", side_effect=fake_classify), \
          patch.object(sc, "classify_plantnet", return_value=None), \
@@ -787,7 +1155,10 @@ def test_checkpoint_resume():
         classified_calls.append(1)
         return _fake_openai_result("Oak", "Quercus sp.", 0.7)
 
-    with patch.object(sc, "fetch_detections", return_value=detections), \
+    with patch.object(sc, "VISION_BACKEND", "openai"), \
+         patch.object(sc, "_load_paid_calls", return_value=0), \
+         patch.object(sc, "_save_paid_calls"), \
+         patch.object(sc, "fetch_detections", return_value=detections), \
          patch.object(sc, "crop_canopy", return_value=MagicMock()), \
          patch.object(sc, "classify_openai", side_effect=fake_classify), \
          patch.object(sc, "classify_plantnet", return_value=None), \

@@ -339,6 +339,10 @@ def classify_openai(image: Any, api_key: str) -> Dict[str, Any]:
         "reasoning": "API response could not be parsed",
         "secondary_candidates": [],
     }
+    # Billed-request counter: incremented BEFORE each attempt so spend
+    # accounting stays conservative when a request errors after being sent.
+    # The parse-failure retry makes a second billed call — it must be counted.
+    requests_made = 0
 
     try:
         from openai import OpenAI
@@ -351,6 +355,8 @@ def classify_openai(image: Any, api_key: str) -> Dict[str, Any]:
         b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
         def _call_api() -> str:
+            nonlocal requests_made
+            requests_made += 1
             response = client.chat.completions.create(
                 model=VISION_MODEL,
                 max_tokens=512,
@@ -404,6 +410,7 @@ def classify_openai(image: Any, api_key: str) -> Dict[str, Any]:
             try:
                 result = _parse_json(raw)
             except (json.JSONDecodeError, ValueError):
+                fallback["openai_requests"] = requests_made
                 return fallback
 
         # Validate and clamp confidence
@@ -416,10 +423,12 @@ def classify_openai(image: Any, api_key: str) -> Dict[str, Any]:
         result.setdefault("vegetation_type", "unknown")
         result.setdefault("reasoning", "")
         result.setdefault("secondary_candidates", [])
+        result["openai_requests"] = requests_made
 
         return result
 
     except Exception:
+        fallback["openai_requests"] = requests_made
         return fallback
 
 
@@ -453,6 +462,7 @@ def classify_vision(image: Any, log: logging.Logger) -> Dict[str, Any]:
         result = classify_ollama(image)
         if result is not None:
             log.info(f"  Ollama: {result['species_common']} ({result['confidence']:.2f} confidence)")
+            result["vision_backend"] = "ollama"
             return result
         # Ollama failed — fall back to OpenAI
         log.warning("Ollama classification failed — falling back to OpenAI")
@@ -460,9 +470,13 @@ def classify_vision(image: Any, log: logging.Logger) -> Dict[str, Any]:
     # OpenAI path (primary when VISION_BACKEND=="openai", fallback when Ollama fails)
     if not OPENAI_API_KEY:
         log.warning("OPENAI_API_KEY not set — cannot fall back to OpenAI")
+        openai_fallback["vision_backend"] = "none"
+        openai_fallback["openai_requests"] = 0
         return openai_fallback
 
-    return classify_openai(image, OPENAI_API_KEY)
+    result = classify_openai(image, OPENAI_API_KEY)
+    result["vision_backend"] = "openai"
+    return result
 
 
 # ─── PLANTNET CLASSIFICATION ──────────────────────────────────────────────────
@@ -647,25 +661,77 @@ def reconcile(
 
 # ─── COST ESTIMATION ─────────────────────────────────────────────────────────
 
-def estimate_api_cost(canopy_count: int, skip_plantnet: bool) -> float:
+def estimate_api_cost(
+    canopy_count: int, skip_plantnet: bool, ollama_available: bool = False
+) -> float:
     """Estimate total API cost for classifying N canopies.
 
-    When VISION_BACKEND is "ollama", vision cost is $0 (local inference).
+    When VISION_BACKEND is "ollama" AND Ollama is actually reachable, vision
+    cost is $0 (local inference); the runtime spend guard in
+    run_classification covers per-canopy OpenAI fallback. When Ollama is
+    selected but unreachable, every canopy will fall back to OpenAI, so the
+    estimate is the full OpenAI worst case.
     PlantNet is free tier — not counted in cost estimate.
 
     Args:
         canopy_count: Number of canopies to classify.
         skip_plantnet: If True, only OpenAI calls counted.
+        ollama_available: Result of a reachability probe; only meaningful
+            when VISION_BACKEND == "ollama".
 
     Returns:
         Estimated cost in USD.
     """
-    if VISION_BACKEND == "ollama":
-        # Ollama is local/free — cost is $0 unless fallback triggers OpenAI
+    if VISION_BACKEND == "ollama" and ollama_available:
         return 0.0
     cost = canopy_count * COST_PER_OPENAI_CALL
     # PlantNet is free tier — not counted in cost estimate
     return round(cost, 4)
+
+
+def _ollama_reachable() -> bool:
+    """Probe Ollama once; False on any failure so cost gating assumes OpenAI."""
+    try:
+        from ollama_vision import check_ollama
+        return check_ollama()
+    except Exception:
+        return False
+
+
+# ─── PER-MISSION SPEND LEDGER ────────────────────────────────────────────────
+# cost_threshold is a per-MISSION budget. Paid OpenAI request counts persist
+# across process runs so a re-trigger after a cost abort cannot spend another
+# full threshold (K reruns x threshold). Cleared by --force with the checkpoint.
+
+def _spend_ledger_path(mission_dir: str) -> str:
+    return os.path.join(mission_dir, f"{SCRIPT_NAME}_spend.json")
+
+
+def _load_paid_calls(mission_dir: str) -> int:
+    """Return billed OpenAI request count from prior runs of this mission."""
+    try:
+        with open(_spend_ledger_path(mission_dir), "r", encoding="utf-8") as f:
+            return int(json.load(f).get("openai_paid_calls", 0))
+    except Exception:
+        return 0
+
+
+def _save_paid_calls(mission_dir: str, paid_calls: int, log: logging.Logger) -> None:
+    try:
+        with open(_spend_ledger_path(mission_dir), "w", encoding="utf-8") as f:
+            json.dump(
+                {"openai_paid_calls": paid_calls, "cost_per_call": COST_PER_OPENAI_CALL},
+                f,
+            )
+    except OSError as exc:
+        log.warning(f"Spend ledger save failed: {exc}")
+
+
+def _clear_paid_calls(mission_dir: str) -> None:
+    try:
+        os.remove(_spend_ledger_path(mission_dir))
+    except OSError:
+        pass
 
 
 # ─── MAIN CLASSIFICATION PIPELINE ────────────────────────────────────────────
@@ -686,7 +752,9 @@ def run_classification(
     Pipeline:
     1. Fetch unclassified canopy detections from Supabase (or all if --force).
     2. Cap at max_canopies (largest by canopy_area_sqm).
-    3. Estimate API cost and check against cost_threshold.
+    3. Estimate API cost and check against cost_threshold (worst-case OpenAI
+       when Ollama is selected but unreachable). A runtime spend guard also
+       aborts mid-run if OpenAI fallback spend breaches the threshold.
     4. For each canopy: crop from ortho, classify via OpenAI Vision + PlantNet.
     5. Reconcile results with confidence adjustment.
     6. Batch update Supabase.
@@ -743,13 +811,30 @@ def run_classification(
         if f"canopy_{d['detection_index']}" not in completed_keys
     ]
 
-    estimated_cost = estimate_api_cost(len(pending), skip_plantnet)
+    ollama_ok = VISION_BACKEND == "ollama" and _ollama_reachable()
+    if VISION_BACKEND == "ollama" and not ollama_ok:
+        log.warning(
+            "Ollama backend selected but unreachable — every canopy would "
+            "fall back to paid OpenAI; gating on worst-case OpenAI cost"
+        )
+    estimated_cost = estimate_api_cost(len(pending), skip_plantnet, ollama_ok)
+
+    # cost_threshold is a per-mission budget: prior runs' paid calls count
+    # against it. A $0-estimate (healthy Ollama) run is never pre-blocked by
+    # prior spend — the runtime guard stops the first paid fallback instead.
+    prior_paid_calls = _load_paid_calls(mission_dir)
+    prior_spend = round(prior_paid_calls * COST_PER_OPENAI_CALL, 4)
+    if prior_paid_calls:
+        log.info(
+            f"Prior OpenAI spend this mission: ${prior_spend:.2f} "
+            f"({prior_paid_calls} paid calls) — counted against cost threshold"
+        )
     log.info(
         f"Estimated API cost: ${estimated_cost:.2f} for {len(pending)} canopies "
         f"({len(detections) - len(pending)} in checkpoint, skipped)"
     )
 
-    if estimated_cost > cost_threshold:
+    if estimated_cost > 0 and round(prior_spend + estimated_cost, 4) > cost_threshold:
         log.error(
             f"Estimated cost ${estimated_cost:.2f} exceeds threshold ${cost_threshold:.2f}. "
             f"Aborting. Use --cost-threshold to raise limit or --max-canopies to reduce count."
@@ -775,9 +860,17 @@ def run_classification(
     plantnet_call_count = 0
     # Track PlantNet quota exhaustion across iterations
     plantnet_quota_exhausted = False
+    # Set when accumulated OpenAI spend (this run + prior runs) breaches
+    # cost_threshold; second flag records whether canopies were left undone
+    cost_aborted = False
+    cost_abort_left_unprocessed = False
 
     with rasterio.open(ortho_path) as dataset:
         for detection in detections:
+            if cost_aborted:
+                cost_abort_left_unprocessed = True
+                break
+
             det_idx = detection["detection_index"]
             det_key = f"canopy_{det_idx}"
 
@@ -807,7 +900,27 @@ def run_classification(
 
             # Vision classification (Ollama primary → OpenAI fallback)
             openai_result = classify_vision(crop, log)
-            openai_call_count += 1
+            if openai_result.get("vision_backend") == "openai":
+                # Count billed requests, not canopies — the parse-failure
+                # retry inside classify_openai makes a second paid call
+                openai_call_count += openai_result.get("openai_requests", 1)
+                _save_paid_calls(mission_dir, prior_paid_calls + openai_call_count, log)
+                # Runtime spend guard: fallback OpenAI calls are paid even when
+                # the pre-check estimated $0 for a healthy Ollama backend. The
+                # canopy that crossed the line is kept; the loop stops after it.
+                # Rounded to match the pre-check so exact-budget runs don't
+                # trip on float dust (35 * 0.02 > 0.70 in raw float math).
+                openai_spend = round(
+                    (prior_paid_calls + openai_call_count) * COST_PER_OPENAI_CALL, 4
+                )
+                if openai_spend > cost_threshold:
+                    log.error(
+                        f"Cumulative OpenAI spend ${openai_spend:.2f} exceeds threshold "
+                        f"${cost_threshold:.2f} ({prior_paid_calls} paid calls from prior "
+                        f"runs + {openai_call_count} this run) — aborting remaining "
+                        f"canopies (classified rows are kept)"
+                    )
+                    cost_aborted = True
 
             # PlantNet cross-validation (optional)
             # Skip if: explicitly disabled, no key, or quota exhausted this run
@@ -880,7 +993,8 @@ def run_classification(
     # ── Supabase batch update ────────────────────────────────────────────────
     update_classification_batch(update_rows, log)
 
-    actual_cost = estimate_api_cost(classified_count, skip_plantnet)
+    # Actual spend: only OpenAI calls cost money (Ollama and PlantNet are free)
+    actual_cost = round(openai_call_count * COST_PER_OPENAI_CALL, 4)
 
     # Compute summary stats over classified canopies
     cross_validated_count = sum(
@@ -889,7 +1003,7 @@ def run_classification(
     confidences = [row["species_confidence"] for row in update_rows if update_rows]
     avg_confidence = round(sum(confidences) / len(confidences), 3) if confidences else 0.0
 
-    return {
+    summary = {
         "classified_count": classified_count,
         "skipped_count": skipped_count,
         "cross_validated_count": cross_validated_count,
@@ -901,6 +1015,14 @@ def run_classification(
         "api_cost_estimate": actual_cost,
         "plantnet_used": not skip_plantnet and bool(PLANTNET_API_KEY),
     }
+    if cost_aborted and cost_abort_left_unprocessed:
+        # Mid-run abort with work left undone: rows classified before the
+        # breach were updated and checkpointed above, so a rerun with a
+        # higher threshold resumes. If the breaching call was the LAST
+        # canopy, the run completed its work — no error, spend is in the
+        # ledger and the next run's gate enforces the exhausted budget.
+        summary["error"] = "cost_threshold_exceeded"
+    return summary
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
@@ -998,7 +1120,8 @@ Examples:
     mission_dir = os.path.dirname(os.path.abspath(args.ortho_path))
     if args.force:
         clear_checkpoint(mission_dir, SCRIPT_NAME)
-        log.info("--force: checkpoint cleared, reclassifying all canopies")
+        _clear_paid_calls(mission_dir)
+        log.info("--force: checkpoint and spend ledger cleared, reclassifying all canopies")
 
     completed_keys = load_checkpoint(mission_dir, SCRIPT_NAME)
     if completed_keys:
@@ -1033,14 +1156,17 @@ Examples:
     elapsed = time.time() - start_time
     log.info(f"Classification complete in {elapsed:.1f}s — {summary['classified_count']} canopies classified")
 
+    # ── JSON stdout (parseable by n8n) ────────────────────────────────────────
+    # Printed BEFORE the cost-abort exit so the caller still receives spend
+    # and progress telemetry (classified_count, api_calls_openai, actual cost)
+    # when a mid-run abort wrote partial rows
+    summary["processing_time_seconds"] = round(elapsed, 1)
+    print(json.dumps(summary))
+
     # Check for cost threshold exceeded error
     if summary.get("error") == "cost_threshold_exceeded":
         reporter.fail("cost_threshold_exceeded")
         sys.exit(1)
-
-    # ── JSON stdout (parseable by n8n) ────────────────────────────────────────
-    summary["processing_time_seconds"] = round(elapsed, 1)
-    print(json.dumps(summary))
 
     # ── Reporter + exit code ──────────────────────────────────────────────────
     classified = summary["classified_count"]
