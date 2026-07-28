@@ -291,48 +291,65 @@ HEALTH_VISION_PROMPT = (
 )
 
 
-def assess_via_vision(image_bytes: bytes, log: logging.Logger) -> Optional[Dict[str, Any]]:
+def assess_via_vision(image_bytes: bytes, log: logging.Logger) -> Dict[str, Any]:
     """Send a canopy crop to OpenAI Vision API for health assessment.
+
+    Always returns a dict annotated with ``vision_backend`` and
+    ``openai_requests`` (billed request count) so the caller's spend guard can
+    account for paid calls even when the response failed to parse — the request
+    was still billed. ``health_score`` is None when no usable assessment was
+    produced, signalling the caller to fall back to index-only scoring for that
+    canopy.
 
     Args:
         image_bytes: JPEG bytes of the canopy crop.
         log: Logger instance.
 
     Returns:
-        Dict with health_score and other fields, or None on failure.
+        Dict with at least vision_backend, openai_requests, health_score.
     """
+    # Billed-request counter: incremented BEFORE the call is dispatched so spend
+    # accounting stays conservative when a request errors after being sent.
+    requests_made = 0
+
     if not OPENAI_API_KEY:
         log.warning("OPENAI_API_KEY not set — skipping vision assessment")
-        return None
+        return {"vision_backend": "none", "openai_requests": 0, "health_score": None}
+
     try:
         from openai import OpenAI
 
         client = OpenAI(api_key=OPENAI_API_KEY)
-
         b64 = base64.b64encode(image_bytes).decode("utf-8")
-        response = client.chat.completions.create(
-            model=VISION_MODEL,
-            max_tokens=256,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{b64}",
-                                "detail": "low",  # cost control
+
+        def _call_api() -> str:
+            nonlocal requests_made
+            requests_made += 1
+            response = client.chat.completions.create(
+                model=VISION_MODEL,
+                max_tokens=256,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64}",
+                                    "detail": "low",  # cost control
+                                },
                             },
-                        },
-                        {
-                            "type": "text",
-                            "text": HEALTH_VISION_PROMPT,
-                        },
-                    ],
-                }
-            ],
-        )
-        raw = response.choices[0].message.content.strip()
+                            {
+                                "type": "text",
+                                "text": HEALTH_VISION_PROMPT,
+                            },
+                        ],
+                    }
+                ],
+            )
+            return response.choices[0].message.content.strip()
+
+        raw = _call_api()
         # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -343,10 +360,16 @@ def assess_via_vision(image_bytes: bytes, log: logging.Logger) -> Optional[Dict[
         # Validate health_score is numeric in [0, 1]
         score = float(result.get("health_score", 0.5))
         result["health_score"] = round(max(0.0, min(1.0, score)), 3)
+        result["vision_backend"] = "openai"
+        result["openai_requests"] = requests_made
         return result
     except Exception as exc:
         log.warning(f"Vision API call failed: {exc}")
-        return None
+        return {
+            "vision_backend": "openai",
+            "openai_requests": requests_made,
+            "health_score": None,
+        }
 
 
 def assess_via_vision_router(image_bytes: bytes, log: logging.Logger) -> Optional[Dict[str, Any]]:
@@ -365,6 +388,8 @@ def assess_via_vision_router(image_bytes: bytes, log: logging.Logger) -> Optiona
     if VISION_BACKEND == "ollama":
         result = assess_via_ollama(image_bytes, log)
         if result is not None:
+            # Free local inference — annotate so the spend guard skips it
+            result["vision_backend"] = "ollama"
             return result
         log.warning("Ollama health assessment failed — falling back to OpenAI")
 
@@ -372,14 +397,71 @@ def assess_via_vision_router(image_bytes: bytes, log: logging.Logger) -> Optiona
     return assess_via_vision(image_bytes, log)
 
 
-def estimate_vision_cost(sample_count: int) -> float:
-    """Estimate API cost for vision sample calls.
+def estimate_vision_cost(sample_count: int, ollama_available: bool = False) -> float:
+    """Estimate worst-case paid API cost for N vision sample calls.
 
-    When VISION_BACKEND is "ollama", cost is $0 (local inference).
+    When VISION_BACKEND is "ollama" AND Ollama is actually reachable, vision
+    cost is $0 (local inference); the runtime spend guard in
+    run_health_assessment covers any per-canopy OpenAI fallback. When Ollama is
+    selected but unreachable, every sampled canopy will fall back to paid
+    OpenAI, so the estimate is the full OpenAI worst case.
+
+    Args:
+        sample_count: Number of canopies queued for vision assessment.
+        ollama_available: Result of a reachability probe; only meaningful
+            when VISION_BACKEND == "ollama".
+
+    Returns:
+        Estimated cost in USD.
     """
-    if VISION_BACKEND == "ollama":
+    if VISION_BACKEND == "ollama" and ollama_available:
         return 0.0
     return round(sample_count * COST_PER_VISION_CALL, 4)
+
+
+def _ollama_reachable() -> bool:
+    """Probe Ollama once; False on any failure so cost gating assumes OpenAI."""
+    try:
+        from ollama_vision import check_ollama
+        return check_ollama()
+    except Exception:
+        return False
+
+
+# ─── PER-MISSION SPEND LEDGER ────────────────────────────────────────────────
+# cost_threshold is a per-MISSION budget. Paid OpenAI request counts persist
+# across process runs so a re-trigger after a cost abort cannot spend another
+# full threshold (K reruns x threshold). Cleared by --force with the checkpoint.
+
+def _spend_ledger_path(mission_dir: str) -> str:
+    return os.path.join(mission_dir, f"{SCRIPT_NAME}_spend.json")
+
+
+def _load_paid_calls(mission_dir: str) -> int:
+    """Return billed OpenAI request count from prior runs of this mission."""
+    try:
+        with open(_spend_ledger_path(mission_dir), "r", encoding="utf-8") as f:
+            return int(json.load(f).get("openai_paid_calls", 0))
+    except Exception:
+        return 0
+
+
+def _save_paid_calls(mission_dir: str, paid_calls: int, log: logging.Logger) -> None:
+    try:
+        with open(_spend_ledger_path(mission_dir), "w", encoding="utf-8") as f:
+            json.dump(
+                {"openai_paid_calls": paid_calls, "cost_per_call": COST_PER_VISION_CALL},
+                f,
+            )
+    except OSError as exc:
+        log.warning(f"Spend ledger save failed: {exc}")
+
+
+def _clear_paid_calls(mission_dir: str) -> None:
+    try:
+        os.remove(_spend_ledger_path(mission_dir))
+    except OSError:
+        pass
 
 
 # ─── SUPABASE ────────────────────────────────────────────────────────────────
@@ -536,6 +618,7 @@ def run_health_assessment(
             "severe_decline": 0,
             "dead": 0,
             "vision_samples": 0,
+            "api_calls_openai": 0,
             "api_cost_estimate": 0.0,
         }
 
@@ -601,6 +684,7 @@ def run_health_assessment(
             "assessed_count": len(detections),
             **status_counts,
             "vision_samples": 0,
+            "api_calls_openai": 0,
             "api_cost_estimate": 0.0,
         }
 
@@ -609,6 +693,14 @@ def run_health_assessment(
     # ── Phase 2: Vision sampling (bottom vision_sample_pct) ──────────────────
     vision_samples = 0
     api_cost_estimate = 0.0
+    # Billed OpenAI requests this run (Ollama is free). Drives the actual-cost
+    # report and, with the ledger, the runtime spend guard.
+    openai_call_count = 0
+    # Set when accumulated OpenAI spend (this run + prior runs) breaches
+    # cost_threshold; the second flag records whether vision samples were left
+    # undone so the summary can flag a partial run for n8n.
+    cost_aborted = False
+    cost_abort_left_unprocessed = False
 
     vision_available = VISION_BACKEND == "ollama" or bool(OPENAI_API_KEY)
     if not skip_vision and vision_available:
@@ -618,41 +710,104 @@ def run_health_assessment(
         sample_n = max(1, int(len(canopy_results) * vision_sample_pct))
         vision_candidates = canopy_results[:sample_n]
 
-        estimated_cost = estimate_vision_cost(len(vision_candidates))
+        # cost_threshold is a per-mission budget: prior runs' paid calls count
+        # against it so a re-trigger after a cost abort cannot burn a fresh
+        # threshold each time.
+        prior_paid_calls = _load_paid_calls(mission_dir)
+        prior_spend = round(prior_paid_calls * COST_PER_VISION_CALL, 4)
+
+        # Worst-case pre-check: when Ollama is the backend but unreachable, every
+        # sampled canopy falls back to paid OpenAI — gate on that worst case. A
+        # $0 estimate (healthy Ollama) is never pre-blocked; the runtime guard
+        # stops the first paid fallback instead.
+        ollama_ok = VISION_BACKEND == "ollama" and _ollama_reachable()
+        if VISION_BACKEND == "ollama" and not ollama_ok:
+            log.warning(
+                "Ollama backend selected but unreachable — every vision sample "
+                "would fall back to paid OpenAI; gating on worst-case OpenAI cost"
+            )
+        estimated_cost = estimate_vision_cost(len(vision_candidates), ollama_ok)
+
+        if prior_paid_calls:
+            log.info(
+                f"Prior OpenAI spend this mission: ${prior_spend:.2f} "
+                f"({prior_paid_calls} paid calls) — counted against cost threshold"
+            )
         log.info(
             f"Phase 2: Vision sampling — {len(vision_candidates)} canopies selected "
             f"({vision_sample_pct*100:.0f}% of {len(canopy_results)}), "
             f"estimated cost ${estimated_cost:.2f}"
         )
 
-        if estimated_cost > cost_threshold:
-            log.warning(
-                f"Estimated vision cost ${estimated_cost:.2f} exceeds threshold ${cost_threshold:.2f}. "
-                f"Skipping vision calls. Use --cost-threshold to raise limit."
+        if estimated_cost > 0 and round(prior_spend + estimated_cost, 4) > cost_threshold:
+            log.error(
+                f"Estimated vision cost ${estimated_cost:.2f} (plus ${prior_spend:.2f} "
+                f"prior) exceeds threshold ${cost_threshold:.2f}. Aborting before any "
+                f"paid vision call. Use --skip-vision for free index-only scoring or "
+                f"--cost-threshold to raise the limit."
             )
-        else:
-            with rasterio.open(ortho_path) as dataset:
-                for canopy in vision_candidates:
-                    det_idx = canopy["detection_index"]
-                    log.info(f"  Vision: canopy {det_idx} (index_score={canopy['index_score']:.3f})")
+            return {
+                "assessed_count": 0,
+                "healthy": 0,
+                "moderate_stress": 0,
+                "stressed": 0,
+                "severe_decline": 0,
+                "dead": 0,
+                "vision_samples": 0,
+                "api_calls_openai": 0,
+                "api_cost_estimate": estimated_cost,
+                "error": "cost_threshold_exceeded",
+            }
 
-                    image_bytes = crop_canopy_image(dataset, canopy["geometry_wkt"])
-                    if image_bytes is None:
-                        log.warning(f"  Could not crop canopy {det_idx} — skipping vision")
-                        continue
+        with rasterio.open(ortho_path) as dataset:
+            for canopy in vision_candidates:
+                if cost_aborted:
+                    cost_abort_left_unprocessed = True
+                    break
 
-                    vision_result = assess_via_vision_router(image_bytes, log)
-                    if vision_result is not None:
-                        canopy["vision_score"] = vision_result.get("health_score")
-                        canopy["vision_result"] = vision_result
-                        vision_samples += 1
-                        log.info(
-                            f"  Canopy {det_idx}: vision_score={canopy['vision_score']:.3f}, "
-                            f"action={vision_result.get('recommended_action', 'unknown')}"
+                det_idx = canopy["detection_index"]
+                log.info(f"  Vision: canopy {det_idx} (index_score={canopy['index_score']:.3f})")
+
+                image_bytes = crop_canopy_image(dataset, canopy["geometry_wkt"])
+                if image_bytes is None:
+                    log.warning(f"  Could not crop canopy {det_idx} — skipping vision")
+                    continue
+
+                vision_result = assess_via_vision_router(image_bytes, log)
+
+                # Runtime spend guard: fallback OpenAI calls are paid even when
+                # the pre-check estimated $0 for a healthy Ollama backend. Count
+                # billed requests, persist to the ledger, and stop after the
+                # canopy that crossed the line (its result is kept). Rounded to
+                # match the pre-check so exact-budget runs don't trip on float
+                # dust (35 * 0.02 > 0.70 in raw float math).
+                if vision_result.get("vision_backend") == "openai":
+                    openai_call_count += vision_result.get("openai_requests", 1)
+                    _save_paid_calls(mission_dir, prior_paid_calls + openai_call_count, log)
+                    openai_spend = round(
+                        (prior_paid_calls + openai_call_count) * COST_PER_VISION_CALL, 4
+                    )
+                    if openai_spend > cost_threshold:
+                        log.error(
+                            f"Cumulative OpenAI spend ${openai_spend:.2f} exceeds threshold "
+                            f"${cost_threshold:.2f} ({prior_paid_calls} paid calls from prior "
+                            f"runs + {openai_call_count} this run) — aborting remaining "
+                            f"vision samples (scored rows are kept)"
                         )
+                        cost_aborted = True
 
-            api_cost_estimate = estimate_vision_cost(vision_samples)
-            log.info(f"Phase 2 complete: {vision_samples} vision assessments, actual cost est. ${api_cost_estimate:.2f}")
+                if vision_result.get("health_score") is not None:
+                    canopy["vision_score"] = vision_result.get("health_score")
+                    canopy["vision_result"] = vision_result
+                    vision_samples += 1
+                    log.info(
+                        f"  Canopy {det_idx}: vision_score={canopy['vision_score']:.3f}, "
+                        f"action={vision_result.get('recommended_action', 'unknown')}"
+                    )
+
+        # Actual spend: only billed OpenAI calls cost money (Ollama is free)
+        api_cost_estimate = round(openai_call_count * COST_PER_VISION_CALL, 4)
+        log.info(f"Phase 2 complete: {vision_samples} vision assessments, actual cost ${api_cost_estimate:.2f}")
     else:
         if skip_vision:
             log.info("Phase 2: Vision sampling skipped (--skip-vision)")
@@ -703,12 +858,22 @@ def run_health_assessment(
     # Build total assessed count including previously completed canopies
     total_assessed = len(update_rows) + len(completed_keys) - len(canopy_results)
 
-    return {
+    summary = {
         "assessed_count": len(update_rows),
         **status_counts,
         "vision_samples": vision_samples,
+        "api_calls_openai": openai_call_count,
         "api_cost_estimate": api_cost_estimate,
     }
+    if cost_aborted and cost_abort_left_unprocessed:
+        # Mid-run abort with vision samples left undone: every indexed canopy was
+        # still scored (vision where obtained before the breach, index-only
+        # otherwise), batch-updated and checkpointed above. main() prints this
+        # summary before exiting 1 so n8n receives spend/progress telemetry. If
+        # the breaching call was the LAST vision candidate, nothing was left
+        # undone — no error; the ledger enforces the exhausted budget next run.
+        summary["error"] = "cost_threshold_exceeded"
+    return summary
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
@@ -723,7 +888,8 @@ and optional OpenAI Vision qualitative assessment for stressed canopies.
 
 Exit codes:
   0 — Success: all canopies assessed, Supabase updated
-  1 — Fatal error: ortho not found, Supabase fetch failed
+  1 — Fatal error: ortho not found, Supabase fetch failed, or cost threshold
+      exceeded (pre-check abort or runtime OpenAI spend guard)
   2 — Partial success: some canopies failed, remaining assessed
 
 Examples:
@@ -808,7 +974,8 @@ Examples:
     mission_dir = os.path.dirname(os.path.abspath(args.ortho_path))
     if args.force:
         clear_checkpoint(mission_dir, SCRIPT_NAME)
-        log.info("--force: checkpoint cleared, reprocessing all canopies")
+        _clear_paid_calls(mission_dir)
+        log.info("--force: checkpoint and spend ledger cleared, reprocessing all canopies")
 
     completed_keys = load_checkpoint(mission_dir, SCRIPT_NAME)
     if completed_keys:
@@ -843,7 +1010,14 @@ Examples:
     log.info(f"Assessment complete in {elapsed:.1f}s — {summary['assessed_count']} canopies")
 
     # ── JSON stdout (parseable by n8n) ────────────────────────────────────────
+    # Printed BEFORE any cost-abort exit so the caller still receives spend and
+    # progress telemetry (assessed_count, api_calls_openai, cost) on partial runs.
     print(json.dumps(summary))
+
+    # Check for cost threshold exceeded (pre-check abort or runtime spend guard)
+    if summary.get("error") == "cost_threshold_exceeded":
+        reporter.fail("cost_threshold_exceeded")
+        sys.exit(1)
 
     # ── Reporter + exit code ──────────────────────────────────────────────────
     assessed = summary["assessed_count"]
